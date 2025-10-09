@@ -1,0 +1,17 @@
+python-dotenv
+fastapi[all]
+uvicorn
+websockets==13.1
+pipecat-ai[daily,aws,silero,elevenlabs]==0.0.78
+pipecat-ai[whisper]
+pipecat-ai-whisker==0.0.6
+pipecat-ai[soundfile]
+google.genai
+pipecat-ai-small-webrtc-prebuilt
+pipecat-ai[webrtc]
+pipecat-ai-tail
+browser-use
+playwright
+langchain>=0.1.20
+langchain-anthropic>=0.1.11
+langchain-openai>=0.1.6

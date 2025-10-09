@@ -18,7 +18,6 @@ from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, Ice
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.aws.stt import AWSTranscribeSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService  
 from pipecat.services.openai.tts import OpenAITTSService
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
@@ -34,8 +33,7 @@ aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
 aws_region = os.getenv("AWS_REGION")
 openai_api_key = os.getenv("OPENAI_API_KEY") 
-elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+
 
 # Google Sheets URL - Change this to your sheet URL
 GOOGLE_SHEETS_URL = os.getenv("GOOGLE_SHEETS_URL", "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit")
@@ -75,22 +73,6 @@ async def run_bot(webrtc_connection, ws_connections):
         model="gpt-4o-mini-tts" 
     )
     
-    # ElevenLabs TTS service 
-    # tts = ElevenLabsTTSService(
-    #     api_key=os.getenv("ELEVENLABS_API_KEY"),
-    #     voice_id=os.getenv("ELEVENLABS_VOICE_ID"),
-    #     model="eleven_flash_v2_5",  
-    #     params=ElevenLabsTTSService.InputParams(
-    #         language=Language.VI,
-    #         stability=0.8,
-    #         similarity_boost=0,
-    #         style=0,
-    #         use_speaker_boost=False,
-    #         speed=1,
-    #         auto_mode=False,  
-    #         optimize_streaming_latency=3  
-    #     )
-    # )
 
     # Xử lý lịch sử cuộc trò chuyện
     transcript = TranscriptProcessor()
@@ -159,7 +141,7 @@ async def run_bot(webrtc_connection, ws_connections):
     context = OpenAILLMContext()
     context_aggregator = llm.create_context_aggregator(context)
 
-    # Pipeline xử lý chính - tạm thời không có flow_manager.processor()
+    # Pipeline xử lý chính (without flow_manager first)
     pipeline = Pipeline([
         transport.input(),
         stt,
@@ -188,7 +170,7 @@ async def run_bot(webrtc_connection, ws_connections):
         ),
     )
 
-    # Tạo FlowManager để quản lý luồng hội thoại (cho sheet filling)
+    # Tạo FlowManager với task đã có giá trị
     flow_manager = FlowManager(
         task=task,
         llm=llm,
@@ -201,13 +183,9 @@ async def run_bot(webrtc_connection, ws_connections):
     await flow_manager.initialize()
     await flow_manager.set_node("initial_node", create_sheet_filling_node())
 
-    # Initialize browser
-    try:
-        await browser_agent.start()
-        await browser_agent.navigate_to_sheet(GOOGLE_SHEETS_URL)
-        logger.info(f"🌐 Browser agent ready at: {GOOGLE_SHEETS_URL}")
-    except Exception as e:
-        logger.error(f"Failed to initialize browser agent: {e}")
+    # Browser will be initialized lazily when first needed
+    # No eager initialization - saves resources
+    logger.info("🌐 Browser agent ready (lazy init - will start on first use)")
 
     # Use PipelineRunner to run the task
     runner = PipelineRunner()
@@ -219,9 +197,11 @@ async def run_bot(webrtc_connection, ws_connections):
         json.dump(transcript_data, f, ensure_ascii=False, indent=2)
     logger.info(f"💾 Transcript saved to {transcript_file}")
 
-    # Cleanup browser
+    # Cleanup browser if it was initialized
     try:
-        await browser_agent.close()
+        if browser_agent._initialized:
+            await browser_agent.close()
+            logger.info("🔒 Browser closed successfully")
     except Exception as e:
         logger.error(f"Failed to close browser agent: {e}")
 

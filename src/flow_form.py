@@ -1,8 +1,9 @@
-# flow_form.py - Simplified flow for Google Sheets filling
+# flow_form.py - Simplified flow for Google Sheets filling with action queue
 
 import sys
 import json
-from typing import Optional
+import asyncio
+from typing import Optional, List, Dict, Any
 from loguru import logger
 from pipecat_flows import FlowArgs, FlowResult, FlowsFunctionSchema, NodeConfig, FlowManager
 from prompt_form import SYSTEM_PROMPT, TASK_PROMPT, WELCOME_MESSAGE
@@ -13,10 +14,42 @@ logger.add(sys.stderr, level="DEBUG")
 # Sheet data storage
 sheet_data = {}
 
+# Action queue - stores actions to execute
+action_queue: List[Dict[str, Any]] = []
+
+def add_to_action_queue(action_type: str, data: Dict[str, Any]):
+    """
+    Add an action to the queue.
+
+    Args:
+        action_type: Type of action ('add_data', 'fill_sheet', etc.)
+        data: Action data/parameters
+    """
+    action = {
+        "type": action_type,
+        "data": data,
+        "timestamp": asyncio.get_event_loop().time()
+    }
+    action_queue.append(action)
+    logger.info(f"📋 Added action to queue: {action_type}")
+    logger.info(f"📊 Queue size: {len(action_queue)}")
+    logger.info(f"📜 Current queue: {[a['type'] for a in action_queue]}")
+    return action
+
+def get_action_queue_status() -> Dict[str, Any]:
+    """Get current status of action queue"""
+    return {
+        "total_actions": len(action_queue),
+        "actions": [{"type": a["type"], "timestamp": a["timestamp"]} for a in action_queue],
+        "data_count": len([a for a in action_queue if a["type"] == "add_data"]),
+        "fill_count": len([a for a in action_queue if a["type"] == "fill_sheet"])
+    }
+
 async def add_sheet_data(args: FlowArgs, flow_manager: FlowManager) -> dict:
     """
     Extract data fields from user speech and store them.
     This function is called by the LLM when user provides data to add to the sheet.
+    Actions are queued for later execution.
     """
     field_name = args.get("field_name", "")
     field_value = args.get("field_value", "")
@@ -29,6 +62,12 @@ async def add_sheet_data(args: FlowArgs, flow_manager: FlowManager) -> dict:
             "success": False,
             "message": "Dạ em chưa hiểu rõ thông tin. Anh/chị vui lòng nói lại ạ."
         }
+
+    # Queue the action
+    add_to_action_queue("add_data", {
+        "field_name": field_name,
+        "field_value": field_value
+    })
 
     # Store sheet data
     sheet_data[field_name] = field_value
@@ -43,7 +82,7 @@ async def add_sheet_data(args: FlowArgs, flow_manager: FlowManager) -> dict:
 
     # Count how many fields we have
     total_fields = len(sheet_data)
-    
+
     # Suggest filling sheet if user has provided several fields
     if total_fields >= 3:  # If user has provided 3+ fields
         message = f"Dạ em đã lưu {field_name}: {field_value}. Hiện tại em đã có {total_fields} thông tin. Anh/chị có muốn em thêm tất cả vào Google Sheets không ạ?"
@@ -55,17 +94,116 @@ async def add_sheet_data(args: FlowArgs, flow_manager: FlowManager) -> dict:
         "field_name": field_name,
         "field_value": field_value,
         "total_fields": total_fields,
+        "queued_actions": len(action_queue),
         "message": message
     }
+
+async def execute_action_queue(google_sheets_url: str = None) -> dict:
+    """
+    Execute all queued actions sequentially using ONE browser session.
+    This is called when user wants to execute all pending actions.
+
+    Args:
+        google_sheets_url: Optional Google Sheets URL to navigate to
+
+    Returns:
+        dict with execution results
+    """
+    global action_queue
+
+    if not action_queue:
+        logger.warning("⚠️ No actions in queue to execute")
+        return {
+            "success": False,
+            "message": "Dạ chưa có hành động nào để thực hiện ạ."
+        }
+
+    logger.info(f"🚀 Executing {len(action_queue)} actions from queue")
+    logger.info(f"📜 Queue before execution: {get_action_queue_status()}")
+
+    from browser_agent import browser_agent
+
+    executed_actions = []
+    failed_actions = []
+
+    try:
+        # Ensure browser is initialized ONCE - reuse same session for all actions
+        await browser_agent.ensure_initialized()
+        logger.info("✅ Browser session ready - will reuse for all queued actions")
+
+        # Navigate to Google Sheets if URL provided (only once)
+        if google_sheets_url:
+            await browser_agent.navigate_to_sheet(google_sheets_url)
+            logger.info(f"✅ Navigated to Google Sheets - ready to execute {len(action_queue)} actions")
+
+        # Process each action in queue using the SAME browser session
+        for i, action in enumerate(action_queue):
+            action_type = action["type"]
+            action_data = action["data"]
+
+            logger.info(f"⚙️ [{i + 1}/{len(action_queue)}] Executing: {action_type}")
+            logger.info(f"📄 Action data: {action_data}")
+
+            try:
+                if action_type == "add_data":
+                    # Already stored in sheet_data, just log
+                    logger.info(f"✅ Data already stored: {action_data}")
+                    executed_actions.append(action)
+
+                elif action_type == "fill_sheet":
+                    # Execute browser automation to fill sheet (reusing same browser session)
+                    logger.info(f"🌐 Filling sheet using existing browser session")
+                    result = await browser_agent.fill_sheet_row(action_data)
+                    if result["success"]:
+                        executed_actions.append(action)
+                        logger.info(f"✅ Successfully filled sheet with {len(action_data)} fields")
+                    else:
+                        failed_actions.append({"action": action, "error": result.get("error")})
+                        logger.error(f"❌ Failed to fill sheet: {result.get('error')}")
+
+                else:
+                    logger.warning(f"⚠️ Unknown action type: {action_type}")
+
+            except Exception as e:
+                logger.error(f"❌ Error executing action {i + 1}: {e}")
+                failed_actions.append({"action": action, "error": str(e)})
+
+        # Clear queue after execution
+        logger.info(f"📜 Queue after execution - clearing {len(action_queue)} actions")
+        action_queue = []
+        logger.info("🗑️ Action queue cleared - browser session remains active for future use")
+
+        # Return results
+        if failed_actions:
+            return {
+                "success": False,
+                "executed": len(executed_actions),
+                "failed": len(failed_actions),
+                "failed_actions": failed_actions,
+                "message": f"Dạ em đã thực hiện {len(executed_actions)} hành động, nhưng có {len(failed_actions)} lỗi ạ."
+            }
+        else:
+            return {
+                "success": True,
+                "executed": len(executed_actions),
+                "message": f"Dạ em đã thực hiện thành công {len(executed_actions)} hành động ạ!"
+            }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to execute action queue: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Dạ em gặp lỗi khi thực hiện các hành động: {str(e)}"
+        }
 
 async def fill_google_sheet(args: FlowArgs, flow_manager: FlowManager) -> dict:
     """
     Fill Google Sheets with the collected data using browser-use Agent.
-    This function is called when user wants to save all data to sheet.
+    This function queues the fill action and executes the entire queue.
     """
     try:
         logger.info(f"🔥 fill_google_sheet called!")
-        from browser_agent import browser_agent
 
         # Get all stored sheet data
         data_to_fill = sheet_data.copy()
@@ -78,28 +216,36 @@ async def fill_google_sheet(args: FlowArgs, flow_manager: FlowManager) -> dict:
                 "message": "Dạ chưa có dữ liệu nào để thêm vào sheet. Anh/chị vui lòng cung cấp thông tin trước ạ."
             }
 
-        logger.info(f"🚀 Starting browser-use Agent to fill sheet with data: {data_to_fill}")
+        # Queue the fill_sheet action
+        add_to_action_queue("fill_sheet", data_to_fill)
 
-        # Fill the sheet row with collected data using browser-use Agent
-        result = await browser_agent.fill_sheet_row(data_to_fill)
+        # Get Google Sheets URL from environment or args
+        import os
+        google_sheets_url = os.getenv("GOOGLE_SHEETS_URL")
+
+        logger.info(f"🚀 Executing action queue to fill Google Sheets")
+
+        # Execute the entire action queue (including all add_data + fill_sheet)
+        result = await execute_action_queue(google_sheets_url)
 
         if result["success"]:
-            # Clear data after successful filling
+            # Clear data after successful execution
             clear_sheet_data()
 
-            logger.info("✅ Successfully filled Google Sheets with browser-use Agent")
+            logger.info("✅ Successfully executed all queued actions and filled Google Sheets")
 
             return {
                 "success": True,
                 "filled_data": data_to_fill,
+                "executed_actions": result.get("executed", 0),
                 "message": f"Dạ em đã thêm thành công {len(data_to_fill)} thông tin vào Google Sheets. Anh/chị có muốn thêm dữ liệu mới không ạ?"
             }
         else:
-            logger.error(f"❌ Browser-use Agent failed: {result.get('error', 'Unknown error')}")
+            logger.error(f"❌ Queue execution failed: {result.get('error', 'Unknown error')}")
             return {
                 "success": False,
                 "error": result.get("error"),
-                "message": "Dạ em gặp lỗi khi thêm vào Google Sheets. Anh/chị thử lại được không ạ?"
+                "message": result.get("message", "Dạ em gặp lỗi khi thêm vào Google Sheets. Anh/chị thử lại được không ạ?")
             }
 
     except Exception as e:
@@ -159,10 +305,6 @@ def create_sheet_filling_node() -> NodeConfig:
         ],
         "functions": functions
     }
-
-def get_stored_sheet_data() -> dict:
-    """Get all stored sheet data"""
-    return sheet_data.copy()
 
 def clear_sheet_data():
     """Clear all stored sheet data"""

@@ -346,3 +346,4 @@ convert_waiting_sound.py
 # Playwright browsers
 .playwright/
 playwright/.cache/
+CLAUDE.md

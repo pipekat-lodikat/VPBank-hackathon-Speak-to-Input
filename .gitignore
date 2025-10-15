@@ -347,3 +347,5 @@ convert_waiting_sound.py
 .playwright/
 playwright/.cache/
 CLAUDE.md
+AGENTS.md
+DOCKER_WEBRTC.md

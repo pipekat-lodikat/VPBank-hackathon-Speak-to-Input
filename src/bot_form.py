@@ -44,21 +44,15 @@ routes = RouteTableDef()
 ws_connections = set()
 
 # ICE servers for NAT traversal
-# Add TURN server for Docker/container environments to avoid random UDP ports
+# Using free TURN server to avoid random UDP ports in Docker
 ice_servers = [
     IceServer(urls="stun:stun.l.google.com:19302"),
-    # Option 1: Use free TURN server (limited, for testing only)
-    # IceServer(
-    #     urls="turn:openrelay.metered.ca:80",
-    #     username="openrelayproject",
-    #     credential="openrelayproject"
-    # ),
-    # Option 2: Use your own TURN server (recommended for production)
-    # IceServer(
-    #     urls="turn:your-turn-server.com:3478",
-    #     username=os.getenv("TURN_USERNAME"),
-    #     credential=os.getenv("TURN_PASSWORD")
-    # ),
+    # Free TURN server - works with only port 7860 exposed in Docker
+    IceServer(
+        urls="turn:openrelay.metered.ca:80",
+        username="openrelayproject",
+        credential="openrelayproject"
+    ),
 ]
 
 async def run_bot(webrtc_connection, ws_connections):

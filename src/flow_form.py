@@ -201,6 +201,8 @@ async def fill_google_sheet(args: FlowArgs, flow_manager: FlowManager) -> dict:
     """
     Fill Google Sheets with the collected data using browser-use Agent.
     This function queues the fill action and executes the entire queue.
+
+    IMPORTANT: This function checks if data exists. If not, returns error message.
     """
     try:
         logger.info(f"🔥 fill_google_sheet called!")
@@ -211,9 +213,11 @@ async def fill_google_sheet(args: FlowArgs, flow_manager: FlowManager) -> dict:
 
         if not data_to_fill:
             logger.warning("⚠️ No data to fill - sheet_data is empty")
+
+            # Return helpful message asking user to provide data first
             return {
                 "success": False,
-                "message": "Dạ chưa có dữ liệu nào để thêm vào sheet. Anh/chị vui lòng cung cấp thông tin trước ạ."
+                "message": "Dạ em chưa có dữ liệu nào để thêm vào sheet. Anh/chị vui lòng cho em biết thông tin như tên, email, số điện thoại trước. Sau đó em sẽ mở Google Sheets và điền thông tin ạ."
             }
 
         # Queue the fill_sheet action
@@ -277,8 +281,8 @@ def create_sheet_filling_node() -> NodeConfig:
             handler=add_sheet_data
         ),
         FlowsFunctionSchema(
-            name="fill_google_sheet", 
-            description="Execute browser automation to fill Google Sheets with all collected data. Call this when user wants to save/submit data to spreadsheet with phrases like 'thêm vào sheet', 'lưu vào bảng tính', 'save', 'submit', 'hoàn thành', 'điền vào sheet'.",
+            name="fill_google_sheet",
+            description="CRITICAL: Execute browser automation to OPEN Google Sheets and FILL with all collected data. MUST call when user says: 'bật google sheet', 'mở sheet', 'vào sheet', 'mở google sheet', 'thêm vào sheet', 'lưu vào bảng tính', 'save', 'submit', 'hoàn thành', 'điền vào sheet', 'điền sheet', OR any phrase indicating they want to open/access/fill the spreadsheet NOW.",
             properties={},
             required=[],
             handler=fill_google_sheet

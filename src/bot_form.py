@@ -44,8 +44,21 @@ routes = RouteTableDef()
 ws_connections = set()
 
 # ICE servers for NAT traversal
+# Add TURN server for Docker/container environments to avoid random UDP ports
 ice_servers = [
     IceServer(urls="stun:stun.l.google.com:19302"),
+    # Option 1: Use free TURN server (limited, for testing only)
+    # IceServer(
+    #     urls="turn:openrelay.metered.ca:80",
+    #     username="openrelayproject",
+    #     credential="openrelayproject"
+    # ),
+    # Option 2: Use your own TURN server (recommended for production)
+    # IceServer(
+    #     urls="turn:your-turn-server.com:3478",
+    #     username=os.getenv("TURN_USERNAME"),
+    #     credential=os.getenv("TURN_PASSWORD")
+    # ),
 ]
 
 async def run_bot(webrtc_connection, ws_connections):
@@ -62,7 +75,7 @@ async def run_bot(webrtc_connection, ws_connections):
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
         aws_region=aws_region,
-        model="apac.anthropic.claude-3-5-sonnet-20240620-v1:0" 
+        model=os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
     )
 
     # Sử dụng Text-to-Speech của OpenAI thay vì ElevenLabs để debugging chi phí tiết kiệm  ~10 lần

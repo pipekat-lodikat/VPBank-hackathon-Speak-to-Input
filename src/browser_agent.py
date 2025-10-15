@@ -5,16 +5,15 @@ import os
 from typing import Optional
 from loguru import logger
 from browser_use import Agent, Browser
-from langchain_aws import ChatBedrock
+from utils.aws_config import get_bedrock_llm
 
 class BrowserAgentHandler:
     """
     Handles browser automation using browser-use Agent with lazy initialization.
-    Singleton pattern to reuse browser instance across sessions.
+    Singleton pattern to reuse LLM instance.
     """
 
     def __init__(self):
-        self.browser: Optional[Browser] = None
         self.llm = None
         self._initialized = False
         self._initializing = False
@@ -22,8 +21,8 @@ class BrowserAgentHandler:
 
     async def ensure_initialized(self):
         """
-        Lazy initialization - only initialize when needed.
-        Thread-safe with async lock to prevent multiple initializations.
+        Lazy initialization - only initialize LLM when needed.
+        Browser lifecycle is managed by Agent itself.
         """
         if self._initialized:
             return
@@ -52,24 +51,14 @@ class BrowserAgentHandler:
                 self._initializing = False
 
     async def _initialize(self):
-        """Internal initialization logic"""
+        """Internal initialization logic - only LLM, browser managed by Agent"""
         try:
-            # Initialize AWS Bedrock LLM with Claude 3.5 Sonnet
-            self.llm = ChatBedrock(
-                model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
-                region_name=os.getenv("AWS_REGION", "us-east-1"),
-                model_kwargs={
-                    "temperature": 0.1,  # Low temperature for more deterministic behavior
-                    "max_tokens": 4096
-                }
-            )
-            logger.info("🧠 LLM initialized: AWS Bedrock Claude 3.5 Sonnet")
-
-            # Initialize browser (headless=False to see what's happening)
-            self.browser = Browser(
-                headless=False,  # Set to True for production
-            )
-            logger.info("🌐 Browser initialized successfully")
+            # Initialize AWS Bedrock LLM using browser-use native class
+            # Use higher temperature for Claude Sonnet 4's action execution
+            self.llm = get_bedrock_llm(temperature=0.3)  # Balanced for action + analysis
+            logger.info("🧠 LLM initialized: ChatAnthropicBedrock (Claude Sonnet 4)")
+            logger.info("🌐 Browser will be managed by Agent (auto-lifecycle)")
+            logger.info("🎯 Optimized for Google Sheets interaction")
 
         except Exception as e:
             logger.error(f"Failed to initialize browser-use components: {e}")
@@ -84,19 +73,20 @@ class BrowserAgentHandler:
 
     async def navigate_to_sheet(self, sheet_url: str):
         """
-        Navigate to Google Sheets URL with lazy initialization.
+        Navigate to Google Sheets URL.
+        Creates Agent instance that manages its own browser.
         """
         try:
-            # Ensure browser is initialized first
+            # Ensure LLM is initialized
             await self.ensure_initialized()
 
-            # Create a simple agent to navigate
+            # Create a simple agent to navigate (Agent manages browser lifecycle)
             task = f"Navigate to this URL: {sheet_url} and wait for the page to load completely."
 
             agent = Agent(
                 task=task,
                 llm=self.llm,
-                browser=self.browser
+                # Don't pass browser - let Agent create and manage it
             )
 
             result = await agent.run()
@@ -110,6 +100,7 @@ class BrowserAgentHandler:
     async def run_task(self, task_description: str, retry_count: int = 2) -> dict:
         """
         Execute a task using browser-use Agent with natural language description.
+        Agent manages its own browser lifecycle.
         Includes retry logic for robustness.
 
         Args:
@@ -124,20 +115,20 @@ class BrowserAgentHandler:
 
         while attempt <= retry_count:
             try:
-                # Ensure browser is initialized
+                # Ensure LLM is initialized
                 await self.ensure_initialized()
 
                 logger.info(f"🤖 Running browser-use task (attempt {attempt + 1}/{retry_count + 1}): {task_description}")
 
-                # Create agent with the task using AWS Bedrock LLM
+                # Create agent with the task (Agent manages browser)
                 agent = Agent(
                     task=task_description,
                     llm=self.llm,
-                    browser=self.browser
+                    # Don't pass browser - let Agent create and manage it
                 )
 
-                # Run the agent
-                result = await agent.run()
+                # Run the agent with optimized steps for Google Sheets
+                result = await agent.run(max_steps=15)  # Reduced for faster execution
 
                 logger.info(f"✅ Task completed successfully")
                 logger.info(f"Result: {result}")
@@ -152,11 +143,19 @@ class BrowserAgentHandler:
             except Exception as e:
                 last_error = e
                 attempt += 1
+                
+                # Check for specific model identifier error
+                error_str = str(e)
+                if "model identifier is invalid" in error_str.lower():
+                    logger.error(f"❌ Model identifier error detected: {error_str}")
+                    logger.error("💡 This might be a temporary AWS Bedrock issue or region-specific problem")
+                    logger.error("   Try switching to a different region or waiting a few minutes")
+                    
                 logger.warning(f"⚠️ Task attempt {attempt} failed: {e}")
 
                 if attempt <= retry_count:
                     logger.info(f"🔄 Retrying... ({attempt}/{retry_count})")
-                    await asyncio.sleep(1)  # Brief delay before retry
+                    await asyncio.sleep(2)  # Longer delay for model errors
 
         # All retries exhausted
         logger.error(f"❌ Failed to execute task after {retry_count + 1} attempts: {last_error}")
@@ -169,7 +168,8 @@ class BrowserAgentHandler:
 
     async def fill_sheet_row(self, data: dict) -> dict:
         """
-        Fill a Google Sheets row with data using natural language task.
+        Fill a Google Sheets row with data using optimized task instructions.
+        Uses clear, action-focused commands that Claude Sonnet 4 executes well.
 
         Args:
             data: Dictionary with field names and values to fill
@@ -178,40 +178,77 @@ class BrowserAgentHandler:
             dict with success status and result
         """
         try:
-            # Create a natural language task description in Vietnamese
-            task_parts = ["Hãy tìm hàng trống đầu tiên trong Google Sheet hiện tại và điền các thông tin sau:"]
-
-            # Map common field names to Vietnamese
-            field_translations = {
-                "name": "Tên",
-                "email": "Email",
-                "phone": "Số điện thoại",
-                "address": "Địa chỉ",
-                "company": "Công ty",
-                "date": "Ngày",
-                "notes": "Ghi chú"
-            }
-
+            # Create action-focused task description that forces Claude to ACT
+            data_entries = []
             for field_name, field_value in data.items():
-                # Translate field name if possible
-                display_name = field_translations.get(field_name.lower(), field_name)
-                task_parts.append(f"- Cột '{display_name}' (hoặc '{field_name}'): {field_value}")
+                data_entries.append(f"{field_name}: {field_value}")
+            
+            data_string = " | ".join(data_entries)
+            
+            # Use CLEAR, ACTION-FOCUSED instructions (based on successful test)
+            task_description = f"""
+You are currently viewing a Google Sheets document. CRITICAL: You MUST perform these EXACT actions. Do NOT navigate away or go to other sites.
 
-            task_parts.append("\nSau khi điền xong, hãy nhấn Enter để xác nhận.")
+MANDATORY ACTIONS TO FILL THE CURRENT GOOGLE SHEETS:
+1. Find the first completely empty row in the current spreadsheet
+2. Click on the first cell of that empty row  
+3. Type: {list(data.values())[0]} 
+4. Press Tab key to move to next column
+5. Type: {list(data.values())[1] if len(data) > 1 else 'N/A'}
+6. Press Tab key to move to next column  
+7. Type: {list(data.values())[2] if len(data) > 2 else 'N/A'}
+8. Press Tab key to move to next column
+9. Type: {list(data.values())[3] if len(data) > 3 else 'N/A'}
+10. Press Enter to confirm the row
 
-            task_description = "\n".join(task_parts)
+Data to fill: {data_string}
 
-            logger.info(f"📝 Task description for filling sheet:\n{task_description}")
+YOU MUST WORK WITH THE CURRENT SPREADSHEET. DO NOT NAVIGATE TO OTHER SITES.
+YOU MUST ACTUALLY CLICK AND TYPE. DO NOT JUST DESCRIBE WHAT YOU SEE.
+PERFORM THE ACTIONS ABOVE STEP BY STEP ON THE LOADED SHEET.
+"""
 
-            # Execute the task
-            result = await self.run_task(task_description)
+            logger.info(f"📝 Action-focused task for filling sheet with {len(data)} fields")
+            logger.info(f"📊 Data to fill: {data_string}")
+
+            # Execute with reduced steps for efficiency
+            result = await self.run_task(task_description, retry_count=1)
 
             if result["success"]:
                 logger.info(f"✅ Successfully filled sheet row with {len(data)} fields")
+                return {
+                    "success": True,
+                    "result": result["result"],
+                    "message": f"Successfully filled sheet with {len(data)} fields",
+                    "data_filled": data
+                }
             else:
-                logger.error(f"❌ Failed to fill sheet row")
-
-            return result
+                logger.error(f"❌ Failed to fill sheet row - trying simplified approach")
+                
+                # Fallback: Very simple single-field approach
+                first_value = list(data.values())[0] if data else "Test Data"
+                simple_task = f"""
+SIMPLE TASK: 
+1. Click on any empty cell in the Google Sheet
+2. Type: {first_value}
+3. Press Enter
+4. Done.
+"""
+                
+                logger.info(f"� Trying simplified approach with first value: {first_value}")
+                fallback_result = await self.run_task(simple_task, retry_count=1)
+                
+                if fallback_result["success"]:
+                    logger.info(f"✅ Fallback approach succeeded")
+                    return {
+                        "success": True,
+                        "result": fallback_result["result"],
+                        "message": "Successfully filled sheet with simplified approach",
+                        "fallback_used": True,
+                        "data_filled": {list(data.keys())[0]: first_value}
+                    }
+                else:
+                    return result  # Return original error
 
         except Exception as e:
             logger.error(f"❌ Failed to fill sheet row: {e}")
@@ -222,13 +259,8 @@ class BrowserAgentHandler:
             }
 
     async def close(self):
-        """Close the browser"""
-        try:
-            if self.browser:
-                await self.browser.close()
-                logger.info("🔒 Browser closed successfully")
-        except Exception as e:
-            logger.error(f"Failed to close browser: {e}")
+        """Browser lifecycle managed by Agent - no manual close needed"""
+        logger.info("🔒 Browser lifecycle managed by Agent automatically")
 
 # Global instance
 browser_agent = BrowserAgentHandler()

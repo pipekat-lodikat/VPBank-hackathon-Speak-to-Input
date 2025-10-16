@@ -6,6 +6,7 @@ pipecat-ai[daily,aws,silero,elevenlabs]==0.0.78
 pipecat-ai[whisper]
 pipecat-ai-whisker==0.0.6
 pipecat-ai[soundfile]
+pipecat-ai-flows
 google.genai
 pipecat-ai-small-webrtc-prebuilt
 pipecat-ai[webrtc]

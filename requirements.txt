@@ -1,10 +1,10 @@
 python-dotenv
 fastapi[all]
 uvicorn
-websockets==13.1
-pipecat-ai[daily,aws,silero,elevenlabs]==0.0.78
+websockets>=13.1
+pipecat-ai[daily,aws,silero,elevenlabs]>=0.0.78
 pipecat-ai[whisper]
-pipecat-ai-whisker==0.0.6
+pipecat-ai-whisker>=0.0.6
 pipecat-ai[soundfile]
 pipecat-ai-flows
 google.genai

@@ -213,6 +213,163 @@ sequenceDiagram
 - **Node.js**: 18.x trở lên
 - **Git**: Để clone repository
 
+### 0. Thiết lập AWS IAM và OpenAI API Keys (Bắt buộc)
+
+Trước khi cài đặt project, bạn cần chuẩn bị credentials cho AWS và OpenAI.
+
+#### 0.1. AWS IAM User Setup
+
+**Bước 1: Tạo IAM User**
+
+1. Đăng nhập vào [AWS Console](https://console.aws.amazon.com/)
+2. Vào **IAM** → **Users** → **Create user**
+3. Đặt tên user (ví dụ: `vpbank-voice-agent`)
+4. Chọn **Attach policies directly**
+5. Attach các policies sau:
+
+**Required Policies:**
+```
+- AmazonTranscribeFullAccess       (cho Speech-to-Text)
+- AmazonBedrockFullAccess          (cho Claude LLM)
+```
+
+**Tùy chọn 1: Sử dụng AWS Managed Policies (Khuyến nghị cho development)**
+- Tìm và attach 2 policies trên từ danh sách
+
+**Tùy chọn 2: Tạo Custom Policy (Khuyến nghị cho production - Least Privilege)**
+
+Vào **IAM** → **Policies** → **Create policy** → Tab **JSON**, paste:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TranscribeAccess",
+      "Effect": "Allow",
+      "Action": [
+        "transcribe:StartStreamTranscription",
+        "transcribe:StartStreamTranscriptionWebSocket"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockAccess",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude*"
+      ]
+    }
+  ]
+}
+```
+
+Đặt tên policy: `VPBankVoiceAgentPolicy` → **Create policy** → Attach vào user
+
+**Bước 2: Tạo Access Keys**
+
+1. Vào **IAM** → **Users** → Chọn user vừa tạo
+2. Tab **Security credentials** → **Create access key**
+3. Chọn use case: **Application running outside AWS**
+4. Nhấn **Next** → (Optional) Thêm description tag → **Create access key**
+5. **Quan trọng**: Lưu lại ngay:
+   - **Access key ID**: `AKIAXXXXXXXXXXXXXXXX`
+   - **Secret access key**: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+   
+   ⚠️ **Cảnh báo**: Secret key chỉ hiển thị 1 lần duy nhất! Download `.csv` file để backup.
+
+**Bước 3: Kích hoạt AWS Bedrock (Nếu chưa có)**
+
+1. Vào [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
+2. Chọn region **US East (N. Virginia) - us-east-1**
+3. Vào **Model access** (menu bên trái)
+4. Nhấn **Manage model access** hoặc **Enable specific models**
+5. Chọn các models:
+   - ✅ **Anthropic Claude 3.5 Sonnet**
+   - ✅ **Anthropic Claude Sonnet 4** (us.anthropic.claude-sonnet-4-20250514-v1:0)
+6. Nhấn **Request model access** → Đợi vài phút để AWS approve (thường instant)
+7. Kiểm tra status: **Access granted** (màu xanh)
+
+**Lưu ý quan trọng:**
+- Bedrock chỉ available ở một số regions: `us-east-1`, `us-west-2`, `ap-southeast-2`
+- Project này dùng `us-east-1` (mặc định trong `.env`)
+- Nếu chọn region khác, nhớ update `AWS_REGION` trong file `.env`
+
+#### 0.2. OpenAI API Key Setup
+
+**Bước 1: Tạo OpenAI Account**
+
+1. Truy cập [OpenAI Platform](https://platform.openai.com/)
+2. Sign up nếu chưa có account (hỗ trợ login bằng Google/Microsoft)
+3. Verify email
+
+**Bước 2: Nạp credits (Bắt buộc)**
+
+1. Vào [Billing Settings](https://platform.openai.com/account/billing/overview)
+2. Nhấn **Add payment method** → Thêm thẻ tín dụng/debit card
+3. Chọn **Add to credit balance** → Nạp tối thiểu **$5 USD**
+   - Khuyến nghị: Nạp $20-50 cho development/testing
+   - Giá TTS: ~$15/1M characters (rất rẻ)
+   - Giá Browser-Use (dùng GPT-4): ~$0.01-0.03 per task
+
+**Bước 3: Tạo API Key**
+
+1. Vào [API Keys](https://platform.openai.com/api-keys)
+2. Nhấn **Create new secret key**
+3. Đặt tên: `VPBank Voice Agent` (để dễ quản lý)
+4. Chọn permissions:
+   - **Restricted** (khuyến nghị): Chỉ enable **Model capabilities**
+   - Hoặc **All** (cho đơn giản, nhưng ít secure hơn)
+5. Nhấn **Create secret key**
+6. **Copy ngay key**: `sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+   
+   ⚠️ **Cảnh báo**: API key chỉ hiển thị 1 lần duy nhất!
+
+**Bước 4: Set Usage Limits (Khuyến nghị)**
+
+1. Vào [Usage Limits](https://platform.openai.com/account/limits)
+2. Set **Monthly budget** để tránh vượt chi phí:
+   - Development: $10-20/month
+   - Production: Tùy nhu cầu
+3. Enable **Email notifications** khi đạt 75%, 90%, 100% budget
+
+**Chi phí ước tính cho project:**
+- **TTS (Text-to-Speech)**: $15/1M characters
+  - 1 cuộc hội thoại ~500 characters → $0.0075
+  - 100 cuộc hội thoại/ngày → $0.75/ngày = $22.5/tháng
+- **Browser-Use Agent**: $0.01-0.03/task
+  - 100 tasks/ngày → $1-3/ngày = $30-90/tháng
+- **Tổng ước tính**: ~$50-120/tháng cho moderate usage
+
+#### 0.3. Lưu Credentials an toàn
+
+**Tuyệt đối KHÔNG:**
+- ❌ Commit file `.env` lên Git/GitHub
+- ❌ Share credentials qua email/chat
+- ❌ Screenshot có chứa keys
+- ❌ Hard-code keys vào source code
+
+**Khuyến nghị:**
+- ✅ Lưu keys trong password manager (1Password, Bitwarden)
+- ✅ Sử dụng file `.env` (đã có trong `.gitignore`)
+- ✅ Rotate keys định kỳ (3-6 tháng)
+- ✅ Xóa keys cũ sau khi tạo keys mới
+- ✅ Enable MFA cho AWS và OpenAI accounts
+
+**Kiểm tra file `.gitignore` có chứa:**
+```gitignore
+.env
+.env.local
+.env.*.local
+```
+
+---
+
 ### 1. Cài đặt WSL2 (Chỉ dành cho Windows)
 
 **Lý do**: Pipecat AI framework và các dependencies không hỗ trợ Windows native. Bắt buộc phải dùng WSL2.

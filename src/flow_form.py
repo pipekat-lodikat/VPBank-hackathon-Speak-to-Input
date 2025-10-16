@@ -197,6 +197,63 @@ async def execute_action_queue(google_sheets_url: str = None) -> dict:
             "message": f"Dạ em gặp lỗi khi thực hiện các hành động: {str(e)}"
         }
 
+async def fill_web_form(args: FlowArgs, flow_manager: FlowManager) -> dict:
+    """
+    Fill web form with the collected data using browser-use Agent.
+    This function is called when user wants to fill VP Bank form.
+    """
+    try:
+        logger.info(f"🔥 fill_web_form called!")
+
+        # Get all stored sheet data
+        data_to_fill = sheet_data.copy()
+        logger.info(f"📊 Data to fill: {data_to_fill}")
+
+        if not data_to_fill:
+            logger.warning("⚠️ No data to fill - sheet_data is empty")
+            return {
+                "success": False,
+                "message": "Dạ em chưa có dữ liệu nào để điền form. Anh/chị vui lòng cho em biết họ tên, số CMND/CCCD, và số điện thoại trước ạ."
+            }
+
+        # Get form URL from environment
+        import os
+        form_url = os.getenv("VP_FORM_URL", os.getenv("GOOGLE_SHEETS_URL"))
+
+        logger.info(f"🚀 Filling web form at {form_url}")
+
+        from browser_agent import browser_agent
+
+        # Execute form filling
+        result = await browser_agent.fill_form(form_url, data_to_fill)
+
+        if result["success"]:
+            # Clear data after successful execution
+            clear_sheet_data()
+
+            logger.info("✅ Successfully filled and submitted form")
+
+            return {
+                "success": True,
+                "filled_data": data_to_fill,
+                "message": f"Dạ em đã điền thành công {len(data_to_fill)} thông tin vào form và bấm nút Gửi thông tin rồi ạ!"
+            }
+        else:
+            logger.error(f"❌ Form filling failed: {result.get('error', 'Unknown error')}")
+            return {
+                "success": False,
+                "error": result.get("error"),
+                "message": result.get("message", "Dạ em gặp lỗi khi điền form. Anh/chị thử lại được không ạ?")
+            }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to fill form: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Dạ em gặp lỗi khi điền form. Anh/chị thử lại được không ạ?"
+        }
+
 async def fill_google_sheet(args: FlowArgs, flow_manager: FlowManager) -> dict:
     """
     Fill Google Sheets with the collected data using browser-use Agent.
@@ -266,11 +323,11 @@ def create_sheet_filling_node() -> NodeConfig:
     functions = [
         FlowsFunctionSchema(
             name="add_sheet_data",
-            description="MANDATORY: Extract and store data fields from user's voice input. MUST be called IMMEDIATELY when user provides ANY information like name, email, phone, address, company, etc. Examples: 'tên hiếu nghị' -> call add_sheet_data('name', 'Hiếu Nghị'), 'email abc@gmail.com' -> call add_sheet_data('email', 'abc@gmail.com')",
+            description="MANDATORY: Extract and store data fields from user's voice input. MUST be called IMMEDIATELY when user provides ANY information like name, email, phone, ID number, address, company, etc. Examples: 'tên nguyễn văn a' -> call add_sheet_data('name', 'Nguyễn Văn A'), 'cmnd 001234567890' -> call add_sheet_data('id', '001234567890'), 'số điện thoại 0123456789' -> call add_sheet_data('phone', '0123456789')",
             properties={
                 "field_name": {
                     "type": "string",
-                    "description": "The name/type of the data field: 'name' for tên, 'email' for email, 'phone' for số điện thoại, 'address' for địa chỉ, 'company' for công ty, etc."
+                    "description": "The name/type of the data field: 'name' for họ tên, 'id' for CMND/CCCD/Hộ chiếu, 'phone' for số điện thoại, 'email' for email, 'address' for địa chỉ, 'company' for công ty, etc."
                 },
                 "field_value": {
                     "type": "string", 
@@ -281,8 +338,15 @@ def create_sheet_filling_node() -> NodeConfig:
             handler=add_sheet_data
         ),
         FlowsFunctionSchema(
+            name="fill_web_form",
+            description="CRITICAL: Execute browser automation to FILL the VP Bank web form and CLICK the 'Gửi thông tin' submit button. MUST call when user says: 'bật form', 'mở form', 'điền form', 'gửi form', 'submit form', 'gửi thông tin', OR any phrase indicating they want to fill and submit the web form NOW.",
+            properties={},
+            required=[],
+            handler=fill_web_form
+        ),
+        FlowsFunctionSchema(
             name="fill_google_sheet",
-            description="CRITICAL: Execute browser automation to OPEN Google Sheets and FILL with all collected data. MUST call when user says: 'bật google sheet', 'mở sheet', 'vào sheet', 'mở google sheet', 'thêm vào sheet', 'lưu vào bảng tính', 'save', 'submit', 'hoàn thành', 'điền vào sheet', 'điền sheet', OR any phrase indicating they want to open/access/fill the spreadsheet NOW.",
+            description="Execute browser automation to OPEN Google Sheets and FILL with all collected data. MUST call when user says: 'bật google sheet', 'mở sheet', 'vào sheet', 'mở google sheet', 'thêm vào sheet', 'lưu vào bảng tính', 'điền vào sheet', 'điền sheet', OR any phrase indicating they want to open/access/fill the spreadsheet.",
             properties={},
             required=[],
             handler=fill_google_sheet

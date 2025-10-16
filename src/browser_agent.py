@@ -166,6 +166,100 @@ class BrowserAgentHandler:
             "attempts": retry_count + 1
         }
 
+    async def fill_form(self, form_url: str, data: dict) -> dict:
+        """
+        Fill a web form with data using browser-use Agent.
+        Specialized for VP Bank form with fields: Họ và tên, CMND/CCCD/Hộ chiếu, Số điện thoại.
+
+        Args:
+            form_url: URL of the form to fill
+            data: Dictionary with field names and values to fill
+
+        Returns:
+            dict with success status and result
+        """
+        try:
+            # Map common field names to Vietnamese form fields
+            field_mapping = {
+                "name": "Họ và tên",
+                "họ và tên": "Họ và tên",
+                "full_name": "Họ và tên",
+                "id": "CMND/CCCD/Hộ chiếu",
+                "id_number": "CMND/CCCD/Hộ chiếu",
+                "cmnd": "CMND/CCCD/Hộ chiếu",
+                "cccd": "CMND/CCCD/Hộ chiếu",
+                "phone": "Số điện thoại",
+                "phone_number": "Số điện thoại",
+                "số điện thoại": "Số điện thoại"
+            }
+
+            # Build task with mapped field names
+            form_data_list = []
+            for key, value in data.items():
+                mapped_key = field_mapping.get(key.lower(), key)
+                form_data_list.append(f"  - {mapped_key}: {value}")
+            
+            form_data_string = "\n".join(form_data_list)
+
+            task_description = f"""
+CRITICAL TASK: Fill out the VP Bank form at {form_url}
+
+The form has these fields:
+1. "Họ và tên" (Full name) - text input with placeholder "Nhập họ và tên đầy đủ"
+2. "CMND/CCCD/Hộ chiếu" (ID number) - text input with placeholder "Nhập số CMND/CCCD/Hộ chiếu đã đăng ký với ngân hàng"
+3. "Số điện thoại" (Phone number) - text input with placeholder "Nhập số điện thoại"
+
+DATA TO FILL:
+{form_data_string}
+
+STEP-BY-STEP INSTRUCTIONS:
+1. Navigate to {form_url}
+2. Wait for the form to load completely (look for "Thu thập thông tin chứng" heading)
+3. Find the input field for "Họ và tên" (it has placeholder text "Nhập họ và tên đầy đủ")
+4. Click on the "Họ và tên" input field
+5. Type the full name value from the data
+6. Find the input field for "CMND/CCCD/Hộ chiếu" (placeholder: "Nhập số CMND/CCCD/Hộ chiếu đã đăng ký với ngân hàng")
+7. Click on the ID number input field
+8. Type the ID number value from the data
+9. Find the input field for "Số điện thoại" (placeholder: "Nhập số điện thoại")
+10. Click on the phone number input field
+11. Type the phone number value from the data
+12. Find the blue button with text "Gửi thông tin" (it's the submit button)
+13. Click the "Gửi thông tin" button to submit the form
+
+IMPORTANT NOTES:
+- Do NOT click the "Hủy" (Cancel) button
+- Make sure to click the BLUE "Gửi thông tin" button at the bottom
+- Wait for each field to be filled before moving to the next
+- The form should show "Thu thập thông tin chứng" as the title
+"""
+
+            logger.info(f"📋 Filling VP Bank form with {len(data)} fields")
+            logger.info(f"🌐 Form URL: {form_url}")
+            logger.info(f"📊 Data to fill:\n{form_data_string}")
+
+            result = await self.run_task(task_description, retry_count=2)
+
+            if result["success"]:
+                logger.info(f"✅ Successfully filled and submitted form")
+                return {
+                    "success": True,
+                    "result": result["result"],
+                    "message": f"Successfully filled form with {len(data)} fields and clicked submit",
+                    "data_filled": data
+                }
+            else:
+                logger.error(f"❌ Failed to fill form: {result.get('error')}")
+                return result
+
+        except Exception as e:
+            logger.error(f"❌ Failed to fill form: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to fill form: {str(e)}"
+            }
+
     async def fill_sheet_row(self, data: dict) -> dict:
         """
         Fill a Google Sheets row with data using optimized task instructions.

@@ -403,7 +403,7 @@ function MainApp() {
             <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 bg-clip-text text-transparent">
               VP Bank Hackathon Voice Agent
             </h1>
-            <p className="text-xl text-gray-600">Powered by FirstCloudJourney</p>
+            <p className="text-xl text-gray-600"></p>
           </div>
 
           {/* Main Content Grid */}

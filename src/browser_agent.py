@@ -127,8 +127,8 @@ class BrowserAgentHandler:
                     # Don't pass browser - let Agent create and manage it
                 )
 
-                # Run the agent with optimized steps for Google Sheets
-                result = await agent.run(max_steps=15)  # Reduced for faster execution
+                # Run the agent with minimal steps for quick execution
+                result = await agent.run(max_steps=8)  # Reduced: navigate + 3 fills + submit = ~6 steps
 
                 logger.info(f"✅ Task completed successfully")
                 logger.info(f"Result: {result}")
@@ -201,37 +201,24 @@ class BrowserAgentHandler:
             
             form_data_string = "\n".join(form_data_list)
 
+            # Extract values for direct use
+            name_value = data.get("name") or data.get("họ và tên") or data.get("full_name") or ""
+            id_value = data.get("id") or data.get("cmnd") or data.get("cccd") or data.get("id_number") or ""
+            phone_value = data.get("phone") or data.get("số điện thoại") or data.get("phone_number") or ""
+
             task_description = f"""
-CRITICAL TASK: Fill out the VP Bank form at {form_url}
+Go to {form_url} and fill the form. DO NOT THINK. JUST ACT.
 
-The form has these fields:
-1. "Họ và tên" (Full name) - text input with placeholder "Nhập họ và tên đầy đủ"
-2. "CMND/CCCD/Hộ chiếu" (ID number) - text input with placeholder "Nhập số CMND/CCCD/Hộ chiếu đã đăng ký với ngân hàng"
-3. "Số điện thoại" (Phone number) - text input with placeholder "Nhập số điện thoại"
+ACTIONS TO EXECUTE IMMEDIATELY:
+1. Go to {form_url}
+2. Click input field with placeholder "Nhap ho va ten" and type: {name_value}
+3. Click input field with placeholder "Nhap so CMND" and type: {id_value}
+4. Click input field with placeholder "Nhap so dien thoai" and type: {phone_value}
+5. Click the BLUE button "Gui thong tin"
+6. Done
 
-DATA TO FILL:
-{form_data_string}
-
-STEP-BY-STEP INSTRUCTIONS:
-1. Navigate to {form_url}
-2. Wait for the form to load completely (look for "Thu thập thông tin chứng" heading)
-3. Find the input field for "Họ và tên" (it has placeholder text "Nhập họ và tên đầy đủ")
-4. Click on the "Họ và tên" input field
-5. Type the full name value from the data
-6. Find the input field for "CMND/CCCD/Hộ chiếu" (placeholder: "Nhập số CMND/CCCD/Hộ chiếu đã đăng ký với ngân hàng")
-7. Click on the ID number input field
-8. Type the ID number value from the data
-9. Find the input field for "Số điện thoại" (placeholder: "Nhập số điện thoại")
-10. Click on the phone number input field
-11. Type the phone number value from the data
-12. Find the blue button with text "Gửi thông tin" (it's the submit button)
-13. Click the "Gửi thông tin" button to submit the form
-
-IMPORTANT NOTES:
-- Do NOT click the "Hủy" (Cancel) button
-- Make sure to click the BLUE "Gửi thông tin" button at the bottom
-- Wait for each field to be filled before moving to the next
-- The form should show "Thu thập thông tin chứng" as the title
+DO NOT CREATE FILES. DO NOT PLAN. JUST FILL THE FORM.
+FOCUS ON CLICKING AND TYPING ONLY.
 """
 
             logger.info(f"📋 Filling VP Bank form with {len(data)} fields")

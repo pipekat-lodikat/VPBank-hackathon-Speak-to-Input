@@ -168,10 +168,17 @@ async def run_bot(webrtc_connection, ws_connections):
                         logger.warning(f"Failed to send transcript: {e}")
                         ws_connections.discard(ws)
                 
-                # Push task to queue thay vì execute trực tiếp
-                if message.role == "user":
-                    task_id = await push_task_to_queue(message.content, session_id)
-                    logger.info(f"📬 Task {task_id} pushed to queue")
+                # Push task to queue CHỈ KHI user đã CONFIRM
+                # Detect confirmation keyword từ assistant message
+                if message.role == "assistant" and "[CONFIRM_AND_EXECUTE]" in message.content:
+                    # Lấy message trước đó của user để extract thông tin
+                    user_messages = [m for m in transcript_data["messages"] if m["role"] == "user"]
+                    if user_messages:
+                        # Combine all user messages for context
+                        combined_message = " | ".join([m["content"] for m in user_messages[-5:]])  # Last 5 messages
+                        
+                        task_id = await push_task_to_queue(combined_message, session_id)
+                        logger.info(f"✅ User CONFIRMED! Task {task_id} pushed to queue")
                     
                 logger.info(f"📝 [{message.role}]: {message.content}")
         except Exception as e:
@@ -221,22 +228,47 @@ async def run_bot(webrtc_connection, ws_connections):
    - Từ khóa: "giao dịch", "transaction", "đối soát", "kiểm tra"
    - Thông tin cần: Mã GD, ngày GD, tên KH, số tiền, loại GD, người thụ hưởng
 
-📝 NHIỆM VỤ CỦA BẠN:
-1. Xác định user muốn điền form loại nào
-2. Thu thập TOÀN BỘ thông tin cần thiết qua hội thoại
-3. Xác nhận lại với user trước khi xử lý
-4. Thông báo rằng hệ thống sẽ tự động điền form
+📝 QUY TRÌNH BẮT BUỘC (3 BƯỚC):
 
-💬 PHONG CÁCH GIAO TIẾP:
-- Thân thiện, chuyên nghiệp
-- Hỏi từng thông tin nếu thiếu
-- Xác nhận lại thông tin quan trọng (số tiền, CCCD, SĐT)
-- Giải thích rõ ràng các bước
+BƯỚC 1: Thu thập thông tin
+- Hỏi từng thông tin cần thiết
+- Ghi nhận đầy đủ
 
-🚫 KHÔNG:
-- Tự điền thông tin không có
-- Bịa đặt dữ liệu
-- Điền form mà chưa hỏi đủ thông tin
+BƯỚC 2: XÁC NHẬN LẠI (BẮT BUỘC!)
+- Đọc lại TẤT CẢ thông tin đã thu thập
+- Hỏi: "Anh/chị xác nhận thông tin trên ĐÚNG không?"
+- Chờ user trả lời: "Đúng", "OK", "Xác nhận", "Được"
+
+BƯỚC 3: Thực thi
+- Chỉ khi user XÁC NHẬN → Nói: "Tôi sẽ thực hiện điền form ngay."
+- KẾT THÚC câu bằng từ khóa: **"[CONFIRM_AND_EXECUTE]"**
+
+⚠️ QUAN TRỌNG:
+- KHÔNG BAO GIỜ thực thi mà chưa xác nhận!
+- Phải ĐỌC LẠI tất cả thông tin trước khi hỏi xác nhận
+- Chỉ thêm [CONFIRM_AND_EXECUTE] khi user đã nói: "Đúng/OK/Xác nhận"
+
+VÍ DỤ CHUẨN:
+
+User: "Tôi muốn vay 500 triệu"
+Bot: "Dạ, để tôi hỗ trợ anh. Cho tôi biết:
+      - Họ tên đầy đủ?
+      - Số CCCD?"
+      
+User: "Tên Nguyễn Văn An, CCCD 001234567890"
+Bot: "Dạ, để tôi xác nhận lại:
+      - Họ tên: Nguyễn Văn An
+      - CCCD: 001234567890
+      - Số tiền vay: 500 triệu VNĐ
+      Anh xác nhận thông tin trên ĐÚNG không?"
+      
+User: "Đúng rồi"
+Bot: "Dạ, tôi sẽ thực hiện điền form đơn vay ngay. [CONFIRM_AND_EXECUTE]"
+
+🚫 TUYỆT ĐỐI KHÔNG:
+- Thực thi ngay mà chưa xác nhận
+- Thêm [CONFIRM_AND_EXECUTE] trước khi user confirm
+- Bỏ qua bước đọc lại thông tin
 
 Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
     

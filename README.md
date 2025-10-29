@@ -1,12 +1,27 @@
-## Hướng dẫn cài đặt và chạy dự án
+## 📊 VPBank Multi-Agent Voice Bot - Hệ Thống Hoàn Chỉnh
+
+**Status:** ✅ PRODUCTION READY (Updated: Oct 29, 2025)
+
+Hệ thống voice bot tự động điền form ngân hàng qua giọng nói tiếng Việt với **Multi-Agent Architecture**.
+
+### 🎯 Tính Năng Chính
+
+- ✅ **5 Use Cases**: Loan, CRM, HR, Compliance, Operations
+- ✅ **Multi-Agent System**: Supervisor + 5 Specialist Tools (LangGraph)
+- ✅ **Voice Pipeline**: AWS Transcribe (STT) + AWS Bedrock (LLM) + OpenAI (TTS)
+- ✅ **Browser Automation**: browser-use + Playwright tự động điền form
+- ✅ **Real-time**: WebRTC audio + WebSocket transcript streaming
+- ✅ **Async Processing**: Task queue + background worker
+
+---
+
+## 🚀 Quick Start (10 phút)
 
 ### Yêu cầu hệ thống
 
-- **Windows**: Phải sử dụng WSL2 (Windows Subsystem for Linux) cho backend
-- **macOS/Linux**: Chạy trực tiếp
-- **Python**: 3.10 trở lên
+- **Python**: 3.11.x (BẮT BUỘC - không dùng 3.12 hay 3.13!)
 - **Node.js**: 18.x trở lên
-- **Git**: Để clone repository
+- **OS**: Windows 10+, macOS, hoặc Linux
 
 ### 0. Thiết lập AWS IAM và OpenAI API Keys (Bắt buộc)
 

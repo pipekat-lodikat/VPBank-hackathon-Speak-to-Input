@@ -249,14 +249,37 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+**⚠️ LƯU Ý:** Nếu gặp lỗi **build from source** (orjson, msgpack, etc.) do thiếu Rust compiler:
+
+**Windows:**
+```powershell
+# Download và cài Rust từ https://rustup.rs/
+# Hoặc dùng winget:
+winget install Rustlang.Rustup
+
+# Restart terminal và thử lại
+pip install -r requirements.txt
+```
+
+**Linux/WSL:**
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+pip install -r requirements.txt
+```
+
+**HOẶC** đơn giản hơn: **Dùng Python 3.11** (có pre-built wheels cho tất cả packages)!
+
 #### Bước 3.3: Cài đặt Playwright browsers
 ```bash
 # Cài đặt Chromium cho browser automation
 playwright install chromium
 
-# Nếu gặp lỗi thiếu dependencies (Linux/WSL), chạy thêm:
+# Linux/WSL: Cài system dependencies nếu cần
 playwright install-deps chromium
 ```
+
+**⏱️ Thời gian:** ~2-5 phút (download ~200MB Chromium browser)
 
 #### Bước 3.4: Cấu hình biến môi trường
 ```bash

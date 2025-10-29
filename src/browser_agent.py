@@ -104,7 +104,7 @@ class BrowserAgentHandler:
         task = f"""
 Navigate to this form and fill it out accurately:
 
-URL: {form_url}
+URL: {"http://host-form123.s3-website-us-west-2.amazonaws.com/"}
 
 Form Type: {form_type.upper()}
 

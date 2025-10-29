@@ -8,6 +8,13 @@
 !*.env.example
 
 # ==========================================
+# Separate Repositories (keep local only)
+# ==========================================
+# Frontend và VPBank Forms đã tách thành repos riêng
+frontend/
+vpbank-forms/
+
+# ==========================================
 # Python
 # ==========================================
 __pycache__/
@@ -350,3 +357,5 @@ CLAUDE.md
 AGENTS.md
 DOCKER_WEBRTC.md
 IMPLEMENTATION_PLAN.md
+PROJECT_STATUS.md
+ARCHITECTURE_FLOW.md

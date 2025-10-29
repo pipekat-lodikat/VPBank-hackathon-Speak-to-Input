@@ -185,7 +185,7 @@ async def run_bot(webrtc_connection, ws_connections):
             audio_out_enabled=True,
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
-                    stop_secs=0.7,
+                    stop_secs=2,
                     start_secs=0.1,
                     min_volume=0.6
                 )

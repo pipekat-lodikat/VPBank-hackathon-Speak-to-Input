@@ -432,7 +432,7 @@ def build_supervisor_workflow(llm):
         fill_operations_form
     ]
     
-    supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Không chat với user, CHỈ GỌI TOOLS!
+    supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL khi ĐỦ ĐIỀU KIỆN!
 
 BẠN CÓ 5 TOOLS:
 1. fill_loan_form - Đơn vay vốn & KYC
@@ -441,13 +441,16 @@ BẠN CÓ 5 TOOLS:
 4. fill_compliance_form - Báo cáo tuân thủ
 5. fill_operations_form - Kiểm tra giao dịch
 
-⚠️ QUAN TRỌNG - BẠN ĐANG CHẠY BACKGROUND, KHÔNG THỂ HỎI USER!
+⚠️ QUAN TRỌNG:
+- Bạn nhận TOÀN BỘ conversation history (multiple user messages)
+- User đã XÁC NHẬN thông tin qua Voice Agent
+- Message cuối cùng chứa "[CONFIRM_AND_EXECUTE]" = User đã đồng ý
 
 NHIỆM VỤ:
-1. Phân tích message của user
-2. Trích xuất thông tin có sẵn
-3. GỌI TOOL NGAY LẬP TỨC với thông tin đó
-4. Dùng PLACEHOLDER/DEFAULT cho thông tin thiếu
+1. Phân tích TOÀN BỘ conversation history
+2. Trích xuất thông tin từ TẤT CẢ user messages
+3. GỌI TOOL phù hợp với thông tin đã extract
+4. Dùng PLACEHOLDER cho fields vẫn còn thiếu
 
 PLACEHOLDER CHO FIELDS THIẾU:
 - customer_name: "Khách hàng" (nếu không có)
@@ -459,31 +462,37 @@ PLACEHOLDER CHO FIELDS THIẾU:
 - employment_status: "employed"
 - company_name: "Chưa cập nhật"
 - gender: "male"
+- monthly_income: 0
 
-VÍ DỤ:
-User: "Tôi muốn vay 500 triệu"
-→ GỌI NGAY: fill_loan_form(
-    customer_name="Khách hàng",
-    customer_id="000000000000",
+VÍ DỤ EXTRACTION:
+
+Message: "Vay 500 triệu | Tên Nguyễn Văn An | CCCD 001234567890 | SĐT 0901234567"
+→ Extract:
+  - customer_name: "Nguyễn Văn An"
+  - customer_id: "001234567890"
+  - phone_number: "0901234567"
+  - loan_amount: 500000000
+  - Missing → use placeholders
+
+→ GỌI: fill_loan_form(
+    customer_name="Nguyễn Văn An",
+    customer_id="001234567890",
+    phone_number="0901234567",
+    email="temp@vpbank.com",  # Placeholder
     loan_amount=500000000,
     loan_term=24,  # Default
     ...
 )
 
-User: "Vay 200 triệu cho Nguyễn Văn An"
-→ GỌI NGAY: fill_loan_form(
-    customer_name="Nguyễn Văn An",
-    customer_id="000000000000",  # Placeholder
-    loan_amount=200000000,
-    ...
-)
+🔍 EXTRACTION RULES:
+- "500 triệu" = 500000000
+- "24 tháng" = 24
+- "Nguyễn Văn An" = customer_name
+- "001234567890" (12 digits) = customer_id
+- "0901234567" (10 digits) = phone_number
+- Date format: YYYY-MM-DD
 
-🚫 TUYỆT ĐỐI KHÔNG:
-- Chat với user
-- Hỏi thêm thông tin
-- Giải thích gì cả
-
-✅ CHỈ GỌI TOOL NGAY LẬP TỨC!
+✅ LUÔN GỌI TOOL! Không chat, không hỏi!
 """
     
     # Create supervisor agent with react pattern

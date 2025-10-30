@@ -466,21 +466,34 @@ PLACEHOLDER CHO FIELDS THIẾU:
 
 VÍ DỤ EXTRACTION:
 
-Message: "Vay 500 triệu | Tên Nguyễn Văn An | CCCD 001234567890 | SĐT 0901234567"
-→ Extract:
-  - customer_name: "Nguyễn Văn An"
-  - customer_id: "001234567890"
-  - phone_number: "0901234567"
-  - loan_amount: 500000000
-  - Missing → use placeholders
+Input conversation history:
+```
+user: Tôi muốn vay 50 triệu
+assistant: Cho tôi biết họ tên và CCCD?
+user: Tên Hiếu Nghị, CCCD 123456789012
+assistant: Số điện thoại và email?
+user: SĐT 0963023600, email abc@gmail.com
+assistant: Xác nhận: Hiếu Nghị, 50 triệu, 24 tháng. Đúng không?
+user: Đúng
+assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
+```
+
+→ Extract từ TOÀN BỘ conversation:
+  - customer_name: "Hiếu Nghị" (từ message thứ 3)
+  - customer_id: "123456789012" (từ message thứ 3)
+  - phone_number: "0963023600" (từ message thứ 5)
+  - email: "abc@gmail.com" (từ message thứ 5)
+  - loan_amount: 50000000 (từ message thứ 1)
+  - loan_term: 24 (từ assistant confirmation)
 
 → GỌI: fill_loan_form(
-    customer_name="Nguyễn Văn An",
-    customer_id="001234567890",
-    phone_number="0901234567",
-    email="temp@vpbank.com",  # Placeholder
-    loan_amount=500000000,
-    loan_term=24,  # Default
+    customer_name="Hiếu Nghị",
+    customer_id="123456789012",
+    phone_number="0963023600",
+    email="abc@gmail.com",
+    loan_amount=50000000,
+    loan_term=24,
+    address="Chưa cập nhật",  # Placeholder
     ...
 )
 

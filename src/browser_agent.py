@@ -33,7 +33,7 @@ class BrowserAgentHandler:
                 region_name=os.getenv("AWS_REGION", "us-east-1"),
                 aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
                 aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-                temperature=0.7,
+                temperature=0.1,
                 max_tokens=4096
             )
             logger.info(f"✅ LLM initialized for browser agent (model: {model_id})")
@@ -62,7 +62,15 @@ class BrowserAgentHandler:
             llm = self._get_llm()
             agent = Agent(
                 task=task,
-                llm=llm
+                llm=llm,
+                use_vision=True,  # Use vision model để "nhìn" page tốt hơn
+                max_failures=5,  # Retry nhiều hơn cho form phức tạp
+                max_actions_per_step=15,  # Nhiều actions hơn per step
+                include_attributes=[  # Attributes để extract elements
+                    'title', 'type', 'name', 'id', 'role', 'aria-label', 
+                    'placeholder', 'value', 'alt', 'data-date-format',
+                    'required', 'class'
+                ]
             )
             
             # Execute task
@@ -104,27 +112,80 @@ class BrowserAgentHandler:
         task = f"""
 Navigate to this form and fill it out accurately:
 
-URL: {"http://host-form123.s3-website-us-west-2.amazonaws.com/"}
+URL: {form_url}
 
 Form Type: {form_type.upper()}
 
 Data to fill:
 {data_text}
 
-Instructions:
-1. Go to the URL
-2. Wait for the page to load completely
-3. Find and fill each form field with the corresponding data
-4. For date fields, use format dd/mm/yyyy
-5. For number fields, enter numbers without commas
-6. After filling all fields, click the Submit button
-7. Wait for confirmation and report success
+CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
+
+1. Navigate to URL and wait 3 seconds for page load
+
+2. For SELECT DROPDOWN fields (gender, loanTerm, loanPurpose, employmentStatus, collateralType):
+   STEP 1: Find the <select> element by name attribute
+   STEP 2: Click on it to open dropdown
+   STEP 3: Wait 1 second
+   STEP 4: Find the <option> element with matching value
+   STEP 5: Click on that option
+   STEP 6: Verify it's selected
+   
+   Example for gender="male":
+   - Find: select[name="gender"]
+   - Click to open
+   - Find: option[value="male"]
+   - Click on it
+
+3. For DATE field (dateOfBirth, applicationDate):
+   ⭐ BEST METHOD - Direct value set (bypasses calendar):
+   
+   Step 1: Identify the date input field
+   - Look for: <input type="date" name="dateOfBirth">
+   
+   Step 2: Set value directly using these actions in order:
+   a) Click on the date field once
+   b) Clear any existing value
+   c) Type the date in format: YYYY-MM-DD (e.g., "2005-03-15")
+   d) Press Tab or click outside to trigger change event
+   
+   Example: If dateOfBirth="2005-03-15"
+   - Find input with name="dateOfBirth"
+   - Click it
+   - Type exactly: 2005-03-15
+   - Tab away
+   
+   ⚠️ DO NOT try to open calendar picker! Just type the date directly.
+
+4. For TEXT INPUT fields (name, id, phone, email, address):
+   - Click on field
+   - Clear any existing value
+   - Type the new value
+
+5. For NUMBER INPUT fields (loanAmount, monthlyIncome, collateralValue):
+   - Enter numbers WITHOUT commas
+   - Example: 50000000 (not 50,000,000)
+
+6. For TEXTAREA fields (address, workAddress, notes):
+   - Click and type directly
+
+7. SUBMIT:
+   - Scroll to bottom
+   - Find button with text "Gửi Đơn" or type="submit"
+   - Click it
+   - Wait 3 seconds for success message
+
+TROUBLESHOOTING:
+- If dropdown doesn't open: Click on the select element itself, not the label
+- If date not working: Use JavaScript method (more reliable)
+- If option not found: Check value matches exactly (case-sensitive)
+- If field not found: Try similar names or check HTML structure
 
 IMPORTANT: 
-- Fill ALL fields that have data provided
-- Do not skip any fields
-- Make sure the submit button is clicked
-- Verify the form was submitted successfully
+- Use JavaScript for date fields to avoid calendar struggles
+- Wait 1-2 seconds between dropdown actions
+- Verify each field is filled before moving to next
+- Do NOT skip any fields with data
 """
         
         return task

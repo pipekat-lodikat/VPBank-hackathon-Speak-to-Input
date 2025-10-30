@@ -171,14 +171,20 @@ async def run_bot(webrtc_connection, ws_connections):
                 # Push task to queue CHỈ KHI user đã CONFIRM
                 # Detect confirmation keyword từ assistant message
                 if message.role == "assistant" and "[CONFIRM_AND_EXECUTE]" in message.content:
-                    # Lấy message trước đó của user để extract thông tin
-                    user_messages = [m for m in transcript_data["messages"] if m["role"] == "user"]
-                    if user_messages:
-                        # Combine all user messages for context
-                        combined_message = " | ".join([m["content"] for m in user_messages[-5:]])  # Last 5 messages
-                        
-                        task_id = await push_task_to_queue(combined_message, session_id)
-                        logger.info(f"✅ User CONFIRMED! Task {task_id} pushed to queue")
+                    # Lấy TOÀN BỘ conversation history để extract thông tin
+                    all_messages = transcript_data["messages"]
+                    
+                    # Format: "role: content" for each message
+                    conversation_history = []
+                    for m in all_messages:
+                        conversation_history.append(f"{m['role']}: {m['content']}")
+                    
+                    # Join tất cả messages
+                    full_context = "\n".join(conversation_history)
+                    
+                    task_id = await push_task_to_queue(full_context, session_id)
+                    logger.info(f"✅ User CONFIRMED! Task {task_id} pushed to queue")
+                    logger.debug(f"   Full context ({len(all_messages)} messages) sent to workflow")
                     
                 logger.info(f"📝 [{message.role}]: {message.content}")
         except Exception as e:
@@ -320,7 +326,7 @@ Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
     logger.info(f"💾 Session completed. Transcript saved to {transcript_file}")
 
 
-# Routes (giữ nguyên từ bot_form.py)
+
 @routes.post("/offer")
 async def handle_offer(request):
     """Handle WebRTC offer"""

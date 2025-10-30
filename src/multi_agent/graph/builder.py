@@ -497,15 +497,49 @@ assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
     ...
 )
 
-🔍 EXTRACTION RULES:
-- "500 triệu" = 500000000
-- "24 tháng" = 24
-- "Nguyễn Văn An" = customer_name
-- "001234567890" (12 digits) = customer_id
-- "0901234567" (10 digits) = phone_number
-- Date format: YYYY-MM-DD
+🔍 EXTRACTION RULES (CRITICAL - Phân Biệt Rõ Ràng):
 
-✅ LUÔN GỌI TOOL! Không chat, không hỏi!
+**Số Tiền Vay (loan_amount, monthlyIncome):**
+- Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương"
+- "50 triệu" → 50000000 (nhân 1,000,000)
+- "500 triệu" → 500000000
+- "1 tỷ" → 1000000000
+- "25 triệu/tháng" → monthly_income = 25000000
+
+**Số Điện Thoại (phone_number):**
+- Tìm từ khóa: "điện thoại", "SĐT", "phone", "gọi"
+- LUÔN 10 chữ số
+- LUÔN BẮT ĐẦU bằng 0
+- Ví dụ: "0963023600", "0901234567"
+- KHÔNG phải số tiền!
+
+**Số CCCD (customer_id):**
+- Tìm từ khóa: "CCCD", "CMND", "chứng minh"
+- LUÔN 12 chữ số
+- Ví dụ: "123456789012"
+- KHÔNG bắt đầu bằng 0
+
+**Ngày Sinh (date_of_birth):**
+- Tìm từ khóa: "sinh", "ngày sinh", "date of birth"
+- Format input: "15 tháng 3 năm 2005" hoặc "15/03/2005"
+- Convert to: "2005-03-15" (YYYY-MM-DD)
+
+**Kỳ Hạn (loan_term):**
+- Tìm từ khóa: "kỳ hạn", "thời hạn", "tháng"
+- "24 tháng" → 24
+- Allowed values: 6, 12, 18, 24, 36, 48, 60
+
+**Họ Tên (customer_name):**
+- Tìm từ khóa: "tên", "họ tên", "tên là"
+- Ví dụ: "Nguyễn Văn An", "Hiếu Nghị"
+
+⚠️ ĐẶC BIỆT LƯU Ý:
+- PHÂN BIỆT RÕ: Số điện thoại (10 số, bắt đầu 0) ≠ Số tiền (lớn hơn nhiều)
+- "0963023600" = phone_number (10 digits, starts with 0)
+- "50000000" = loan_amount (8 digits, no leading 0)
+- KHÔNG NHẦM LẪN giữa 2 loại số này!
+
+✅ LUÔN GỌI TOOL với thông tin đã extract!
 """
     
     # Create supervisor agent with react pattern

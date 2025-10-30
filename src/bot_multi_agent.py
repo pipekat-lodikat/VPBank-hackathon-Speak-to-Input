@@ -29,6 +29,7 @@ from pipecat.processors.transcript_processor import TranscriptProcessor
 # Import task queue and worker
 from .task_queue import task_queue, Task, TaskType
 from .workflow_worker import workflow_worker, create_worker_task
+from .text_filter_processor import TextFilterProcessor
 
 load_dotenv(override=True)
 
@@ -157,12 +158,16 @@ async def run_bot(webrtc_connection, ws_connections):
                 with open(transcript_file, 'w', encoding='utf-8') as f:
                     json.dump(transcript_data, f, ensure_ascii=False, indent=2)
                 
-                # Send to WebSocket clients
+                # Send to WebSocket clients (filter out internal markers)
                 for ws in list(ws_connections):
                     try:
+                        # Remove [CONFIRM_AND_EXECUTE] marker before sending to frontend
+                        display_content = msg_dict["content"].replace("[CONFIRM_AND_EXECUTE]", "").strip()
+                        display_msg = {**msg_dict, "content": display_content}
+                        
                         await ws.send_json({
                             "type": "transcript",
-                            "message": msg_dict
+                            "message": display_msg
                         })
                     except Exception as e:
                         logger.warning(f"Failed to send transcript: {e}")
@@ -241,18 +246,42 @@ BƯỚC 1: Thu thập thông tin
 - Ghi nhận đầy đủ
 
 BƯỚC 2: XÁC NHẬN LẠI (BẮT BUỘC!)
-- Đọc lại TẤT CẢ thông tin đã thu thập
-- Hỏi: "Anh/chị xác nhận thông tin trên ĐÚNG không?"
-- Chờ user trả lời: "Đúng", "OK", "Xác nhận", "Được"
+- Đọc lại TẤT CẢ thông tin đã thu thập theo format chuẩn:
 
-BƯỚC 3: Thực thi
-- Chỉ khi user XÁC NHẬN → Nói: "Tôi sẽ thực hiện điền form ngay."
-- KẾT THÚC câu bằng từ khóa: **"[CONFIRM_AND_EXECUTE]"**
+**Format xác nhận:**
+```
+Để tôi xác nhận lại:
+- Họ tên: [Tên đầy đủ]
+- Số CCCD: [12 chữ số] (ví dụ: 123456789012)
+- Ngày sinh: [dd/mm/yyyy] (ví dụ: 15/03/2005)
+- Số điện thoại: [10 chữ số bắt đầu bằng 0] (ví dụ: 0963023600)
+- Email: [địa chỉ email]
+- Địa chỉ: [địa chỉ đầy đủ]
+- Số tiền vay: [X triệu VNĐ] (ví dụ: 50 triệu VNĐ)
+- Kỳ hạn: [X tháng] (ví dụ: 24 tháng)
+- Công việc: [nghề nghiệp]
+- Thu nhập: [X triệu VNĐ/tháng]
+
+Anh/chị xác nhận thông tin trên ĐÚNG không?
+```
+
+⚠️ RÀNG BUỘC FORMAT (QUAN TRỌNG):
+- **Số điện thoại:** LUÔN 10 chữ số, BẮT ĐẦU bằng 0 (ví dụ: 0963023600)
+- **Số CCCD:** LUÔN 12 chữ số (ví dụ: 123456789012)
+- **Số tiền:** Ghi rõ "triệu VNĐ" (ví dụ: "50 triệu VNĐ" không phải "50000000")
+- **Ngày sinh:** Format dd/mm/yyyy (ví dụ: 15/03/2005)
+
+BƯỚC 3: Thực thi (SILENT EXECUTION)
+- Chỉ khi user XÁC NHẬN (nói "Đúng"/"OK"/"Xác nhận") 
+- Nói: "Dạ, tôi sẽ thực hiện điền form ngay cho anh/chị."
+- **KHÔNG nói ra** từ [CONFIRM_AND_EXECUTE]
+- Nhưng **THÊM VÀO CUỐI** response (sau dấu chấm): [CONFIRM_AND_EXECUTE]
+- User sẽ KHÔNG NGHE từ này (chỉ dùng làm marker cho hệ thống)
 
 ⚠️ QUAN TRỌNG:
 - KHÔNG BAO GIỜ thực thi mà chưa xác nhận!
-- Phải ĐỌC LẠI tất cả thông tin trước khi hỏi xác nhận
-- Chỉ thêm [CONFIRM_AND_EXECUTE] khi user đã nói: "Đúng/OK/Xác nhận"
+- Phải ĐỌC LẠI đúng format với số điện thoại và số tiền phân biệt rõ ràng
+- [CONFIRM_AND_EXECUTE] chỉ là marker, KHÔNG đọc ra cho user nghe
 
 VÍ DỤ CHUẨN:
 
@@ -285,13 +314,17 @@ Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
     
     context_aggregator = llm.create_context_aggregator(context)
 
-    # Pipeline (giữ nguyên cấu trúc cũ để tương thích)
+    # Text filter to remove internal markers before TTS
+    text_filter = TextFilterProcessor()
+    
+    # Pipeline (thêm text_filter sau LLM, trước TTS)
     pipeline = Pipeline([
         transport.input(),
         stt,
         transcript.user(),
         context_aggregator.user(),
         llm,
+        text_filter,  # ⭐ Filter [CONFIRM_AND_EXECUTE] trước khi TTS đọc
         tts,
         transport.output(),
         transcript.assistant(),

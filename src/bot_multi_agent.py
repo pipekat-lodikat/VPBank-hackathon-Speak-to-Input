@@ -29,7 +29,6 @@ from pipecat.processors.transcript_processor import TranscriptProcessor
 # Import task queue and worker
 from .task_queue import task_queue, Task, TaskType
 from .workflow_worker import workflow_worker, create_worker_task
-from .text_filter_processor import TextFilterProcessor
 
 load_dotenv(override=True)
 
@@ -158,24 +157,20 @@ async def run_bot(webrtc_connection, ws_connections):
                 with open(transcript_file, 'w', encoding='utf-8') as f:
                     json.dump(transcript_data, f, ensure_ascii=False, indent=2)
                 
-                # Send to WebSocket clients (filter out internal markers)
+                # Send to WebSocket clients
                 for ws in list(ws_connections):
                     try:
-                        # Remove [CONFIRM_AND_EXECUTE] marker before sending to frontend
-                        display_content = msg_dict["content"].replace("[CONFIRM_AND_EXECUTE]", "").strip()
-                        display_msg = {**msg_dict, "content": display_content}
-                        
                         await ws.send_json({
                             "type": "transcript",
-                            "message": display_msg
+                            "message": msg_dict
                         })
                     except Exception as e:
                         logger.warning(f"Failed to send transcript: {e}")
                         ws_connections.discard(ws)
                 
                 # Push task to queue CHỈ KHI user đã CONFIRM
-                # Detect confirmation keyword từ assistant message
-                if message.role == "assistant" and "[CONFIRM_AND_EXECUTE]" in message.content:
+                # Detect confirmation từ cụm từ trigger
+                if message.role == "assistant" and "BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" in message.content:
                     # Lấy TOÀN BỘ conversation history để extract thông tin
                     all_messages = transcript_data["messages"]
                     
@@ -271,17 +266,19 @@ Anh/chị xác nhận thông tin trên ĐÚNG không?
 - **Số tiền:** Ghi rõ "triệu VNĐ" (ví dụ: "50 triệu VNĐ" không phải "50000000")
 - **Ngày sinh:** Format dd/mm/yyyy (ví dụ: 15/03/2005)
 
-BƯỚC 3: Thực thi (SILENT EXECUTION)
-- Chỉ khi user XÁC NHẬN (nói "Đúng"/"OK"/"Xác nhận") 
-- Nói: "Dạ, tôi sẽ thực hiện điền form ngay cho anh/chị."
-- **KHÔNG nói ra** từ [CONFIRM_AND_EXECUTE]
-- Nhưng **THÊM VÀO CUỐI** response (sau dấu chấm): [CONFIRM_AND_EXECUTE]
-- User sẽ KHÔNG NGHE từ này (chỉ dùng làm marker cho hệ thống)
+BƯỚC 3: Thực thi
+- Chỉ khi user XÁC NHẬN (nói "Đúng" hoặc "OK" hoặc "Xác nhận" hoặc "Chính xác") 
+- Nói: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+  
+⚠️ QUAN TRỌNG - CỤM TỪ TRIGGER:
+- Phải nói CHÍNH XÁC: "tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" (viết hoa)
+- Đây là trigger để hệ thống thực thi
+- Không thay đổi cụm từ này!
 
-⚠️ QUAN TRỌNG:
-- KHÔNG BAO GIỜ thực thi mà chưa xác nhận!
-- Phải ĐỌC LẠI đúng format với số điện thoại và số tiền phân biệt rõ ràng
-- [CONFIRM_AND_EXECUTE] chỉ là marker, KHÔNG đọc ra cho user nghe
+⚠️ CẤM:
+- KHÔNG thực thi mà chưa xác nhận!
+- KHÔNG thay đổi cụm từ trigger
+- Phải đọc lại đúng format: số điện thoại vs số tiền phân biệt rõ
 
 VÍ DỤ CHUẨN:
 
@@ -298,12 +295,13 @@ Bot: "Dạ, để tôi xác nhận lại:
       Anh xác nhận thông tin trên ĐÚNG không?"
       
 User: "Đúng rồi"
-Bot: "Dạ, tôi sẽ thực hiện điền form đơn vay ngay. [CONFIRM_AND_EXECUTE]"
+Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
 🚫 TUYỆT ĐỐI KHÔNG:
 - Thực thi ngay mà chưa xác nhận
-- Thêm [CONFIRM_AND_EXECUTE] trước khi user confirm
+- Nói cụm trigger trước khi user confirm
 - Bỏ qua bước đọc lại thông tin
+- Thay đổi cụm trigger thành câu khác
 
 Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
     
@@ -314,17 +312,13 @@ Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
     
     context_aggregator = llm.create_context_aggregator(context)
 
-    # Text filter to remove internal markers before TTS
-    text_filter = TextFilterProcessor()
-    
-    # Pipeline (thêm text_filter sau LLM, trước TTS)
+    # Pipeline (standard pipeline without filter)
     pipeline = Pipeline([
         transport.input(),
         stt,
         transcript.user(),
         context_aggregator.user(),
         llm,
-        text_filter,  # ⭐ Filter [CONFIRM_AND_EXECUTE] trước khi TTS đọc
         tts,
         transport.output(),
         transcript.assistant(),

@@ -88,8 +88,7 @@ def fill_loan_form(
         import os
         
         # Get form URL from environment
-        base_url = os.getenv("FORM_BASE_URL", "http://localhost:5173/vpbank-forms")
-        form_url = f"{base_url}/use-case-1-loan-origination/index.html"
+        form_url = os.getenv("LOAN_FORM_URL", "http://host-form123.s3-website-us-west-2.amazonaws.com/")
         
         # Use asyncio.run() safely
         try:
@@ -161,8 +160,7 @@ def fill_crm_form(
         import os
         
         # Get form URL from environment
-        base_url = os.getenv("FORM_BASE_URL", "http://localhost:5173/vpbank-forms")
-        form_url = f"{base_url}/use-case-2-crm-update/index.html"
+        form_url = os.getenv("CRM_FORM_URL", "http://hostform-2.s3-website-us-west-2.amazonaws.com/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -229,8 +227,7 @@ def fill_hr_form(
         import os
         
         # Get form URL from environment
-        base_url = os.getenv("FORM_BASE_URL", "http://localhost:5173/vpbank-forms")
-        form_url = f"{base_url}/use-case-3-hr-workflow/index.html"
+        form_url = os.getenv("HR_FORM_URL", "http://hostform-3.s3-website-us-west-2.amazonaws.com/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -297,8 +294,7 @@ def fill_compliance_form(
         import os
         
         # Get form URL from environment
-        base_url = os.getenv("FORM_BASE_URL", "http://localhost:5173/vpbank-forms")
-        form_url = f"{base_url}/use-case-4-compliance-reporting/index.html"
+        form_url = os.getenv("COMPLIANCE_FORM_URL", "http://hostform-4.s3-website-us-west-2.amazonaws.com/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -374,8 +370,7 @@ def fill_operations_form(
         import os
         
         # Get form URL from environment
-        base_url = os.getenv("FORM_BASE_URL", "http://localhost:5173/vpbank-forms")
-        form_url = f"{base_url}/use-case-5-operations-validation/index.html"
+        form_url = os.getenv("OPERATIONS_FORM_URL", "http://hostform-5.s3-website-us-west-2.amazonaws.com/")
         
         try:
             loop = asyncio.get_running_loop()

@@ -45,7 +45,7 @@ Anh xác nhận ĐÚNG không?"
 
 **User says (1 sentence with ALL details):**
 ```
-"Tạo đơn vay cho Hiếu Nghị CCCD 123456789123 sinh ngày 3 tháng 3 năm 2005 địa chỉ 828 đường Sư Vạn Hạnh Phường 12 số điện thoại 0963023600 email hieunghiwork123@gmail.com giới tính nam vay 460 nghìn đồng kinh doanh kỳ hạn 48 tháng ngày đăng ký 12 tháng 12 năm 2012 đang làm việc tại Renova Cloud Company Limited thu nhập 122 đồng địa chỉ làm việc asdasdad tài sản đảm bảo bất động sản giá trị 456 nghìn mô tả siêu xe nhân viên quan hệ Nguyễn Văn X ghi chú thêm không có gì đặc biệt"
+"Tạo đơn vay cho Hiếu Nghị căn cướn công dân 123456789123 sinh ngày 3 tháng 3 năm 2005 địa chỉ 828 đường Sư Vạn Hạnh Phường 12 số điện thoại 0963023600 email hieunghiwork123@gmail.com giới tính nam vay 3 tỷ kinh doanh kỳ hạn 48 tháng ngày đăng ký 12 tháng 12 năm 2012 đang làm việc tại Renova Cloud Company Limited thu nhập 122 đồng địa chỉ làm việc Bitexco quận 1 tài sản đảm bảo bất động sản quận 2 giá trị  5 tỷ mô tả: căn hộ dịch vụ nhân viên quan hệ Nguyễn Văn X ghi chú thêm đã từng khách hàng vip"
 ```
 
 **Bot confirms:**

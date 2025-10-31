@@ -125,6 +125,10 @@ class WorkflowWorker:
             logger.info(f"✅ Task {task.task_id} completed successfully")
             logger.info(f"   Result: {final_message[:200]}...")
             
+            # TODO: Notify voice agent about completion
+            # For now, result is stored in task_queue.get_task(task_id).result
+            # Voice agent can poll this to speak the result
+            
         except Exception as e:
             error_msg = f"Error processing task: {str(e)}"
             logger.error(f"❌ Task {task.task_id} failed: {error_msg}", exc_info=True)

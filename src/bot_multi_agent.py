@@ -54,6 +54,70 @@ ice_servers = [
 ]
 
 
+async def poll_and_notify_task_completion(task_id: str, ws_connections: set, session_id: str):
+    """
+    Poll task status và notify khi hoàn thành
+    
+    Args:
+        task_id: Task ID to monitor
+        ws_connections: WebSocket connections to notify
+        session_id: Current session ID
+    """
+    max_wait = 120  # Wait max 2 minutes
+    poll_interval = 2  # Check every 2 seconds
+    elapsed = 0
+    
+    while elapsed < max_wait:
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+        
+        # Get task status
+        task = task_queue.get_task(task_id)
+        
+        if task and task.status == TaskStatus.COMPLETED:
+            # Task completed! Notify via WebSocket
+            logger.info(f"🎉 Task {task_id} COMPLETED! Notifying user...")
+            
+            notification = {
+                "type": "task_completed",
+                "task_id": task_id,
+                "result": task.result,
+                "message": "✅ Form đã được điền và submit thành công!"
+            }
+            
+            # Send to all WebSocket connections
+            for ws in list(ws_connections):
+                try:
+                    await ws.send_json(notification)
+                    logger.info(f"📢 Sent completion notification to frontend")
+                except Exception as e:
+                    logger.warning(f"Failed to send notification: {e}")
+            
+            break
+        
+        elif task and task.status == TaskStatus.FAILED:
+            # Task failed
+            logger.error(f"❌ Task {task_id} FAILED: {task.error}")
+            
+            notification = {
+                "type": "task_failed",
+                "task_id": task_id,
+                "error": task.error,
+                "message": f"❌ Lỗi khi xử lý: {task.error}"
+            }
+            
+            for ws in list(ws_connections):
+                try:
+                    await ws.send_json(notification)
+                except:
+                    pass
+            
+            break
+    
+    if elapsed >= max_wait:
+        logger.warning(f"⏱️ Task {task_id} polling timeout after {max_wait}s")
+
+
 async def push_task_to_queue(user_message: str, session_id: str) -> str:
     """
     Push task to queue for background processing
@@ -98,6 +162,9 @@ async def run_bot(webrtc_connection, ws_connections):
     Run bot with multi-agent workflow
     """
     logger.info("🚀 Starting bot with multi-agent system...")
+    
+    # Store session-specific task IDs để track kết quả
+    session_tasks = []
     
     # Initialize services
     stt = AWSTranscribeSTTService(
@@ -185,6 +252,14 @@ async def run_bot(webrtc_connection, ws_connections):
                     task_id = await push_task_to_queue(full_context, session_id)
                     logger.info(f"✅ User CONFIRMED! Task {task_id} pushed to queue")
                     logger.debug(f"   Full context ({len(all_messages)} messages) sent to workflow")
+                    
+                    # Track task ID for this session
+                    session_tasks.append(task_id)
+                    
+                    # Start polling task status để notify user khi xong
+                    asyncio.create_task(poll_and_notify_task_completion(
+                        task_id, ws_connections, session_id
+                    ))
                     
                 logger.info(f"📝 [{message.role}]: {message.content}")
         except Exception as e:

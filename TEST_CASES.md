@@ -1,39 +1,65 @@
-# 🧪 TEST CASES - VPBANK MULTI-AGENT VOICE BOT
+# 🧪 TEST CASES - VPBANK VOICE BOT (CONVERSATION FLOW)
 
-Các test cases để kiểm tra 5 use cases của hệ thống multi-agent.  
-Mỗi test case là một **lệnh voice duy nhất** chứa đủ thông tin để điền form.
+**Updated:** October 31, 2025  
+**Format:** Interactive conversation với xác nhận 2 bước
+
+**Lưu ý:** Test cases này match với SYSTEM PROMPT thực tế - Voice Agent sẽ hỏi từng bước!
 
 ---
 
-## 📋 USE CASE 1: LOAN ORIGINATION & KYC
+## 🔵 USE CASE 1: LOAN (FULL MODE - 10-13 Fields)
 
-### Test Case 1.1: Đơn vay mua nhà (Đầy đủ thông tin)
+### Test Case 1.1: Đơn vay mua nhà
 
-**Voice Command:**
-```
-Tạo đơn vay cho khách hàng Nguyễn Văn An, số CCCD 012345678901, 
-sinh ngày 15 tháng 3 năm 1985, địa chỉ số 123 đường Lê Lợi, Quận 1, TP.HCM, 
-số điện thoại 0901234567, email nguyenvanan@gmail.com. 
-Khách muốn vay 500 triệu đồng để mua nhà, kỳ hạn 24 tháng. 
-Nghề nghiệp là kỹ sư phần mềm, làm việc tại công ty FPT Software, 
-thu nhập hàng tháng 30 triệu đồng.
-```
+**CONVERSATION FLOW:**
 
-**Expected Fields:**
-- Customer Name: Nguyễn Văn An
-- ID Number: 012345678901
-- Date of Birth: 15/03/1985
-- Address: 123 đường Lê Lợi, Quận 1, TP.HCM
-- Phone: 0901234567
+**User:** "Tôi muốn vay tiền mua nhà"
+
+**Bot:** "Dạ, để tôi hỗ trợ anh/chị. Cho tôi biết:
+- Họ tên đầy đủ?
+- Số CCCD?"
+
+**User:** "Tên Nguyễn Văn An, CCCD 012345678901"
+
+**Bot:** "Ngày sinh và địa chỉ của anh?"
+
+**User:** "Sinh ngày 15 tháng 3 năm 1985, địa chỉ số 123 đường Lê Lợi, Quận 1, TP.HCM"
+
+**Bot:** "Số điện thoại và email?"
+
+**User:** "SĐT 0901234567, email nguyenvanan@gmail.com"
+
+**Bot:** "Số tiền muốn vay và kỳ hạn?"
+
+**User:** "Vay 500 triệu, kỳ hạn 24 tháng"
+
+**Bot:** "Công việc hiện tại và thu nhập?"
+
+**User:** "Kỹ sư phần mềm tại FPT Software, thu nhập 30 triệu/tháng"
+
+**Bot:** "Dạ, để tôi xác nhận lại:
+- Họ tên: Nguyễn Văn An
+- Số CCCD: 012345678901 (12 chữ số)
+- Ngày sinh: 15/03/1985
+- Địa chỉ: 123 đường Lê Lợi, Quận 1, TP.HCM
+- Số điện thoại: 0901234567 (10 chữ số)
 - Email: nguyenvanan@gmail.com
-- Loan Amount: 500,000,000 VNĐ
-- Loan Purpose: Mua nhà
-- Loan Term: 24 tháng
-- Occupation: Kỹ sư phần mềm
-- Workplace: FPT Software
-- Monthly Income: 30,000,000 VNĐ
+- Số tiền vay: 500 triệu VNĐ
+- Kỳ hạn: 24 tháng
+- Công việc: Kỹ sư phần mềm tại FPT Software
+- Thu nhập: 30 triệu VNĐ/tháng
 
-**Expected Result:** ✅ Form được điền đầy đủ và submit thành công
+Anh xác nhận thông tin trên ĐÚNG không?"
+
+**User:** "Đúng"
+
+**Bot:** "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**Expected Result:** 
+- ✅ Task pushed to queue với full conversation
+- ✅ Supervisor extracts all info correctly
+- ✅ Browser fills form at use-case-1-loan-origination.s3...
+- ✅ Form submitted successfully
 
 ---
 

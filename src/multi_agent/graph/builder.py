@@ -37,7 +37,12 @@ def fill_loan_form(
     employment_status: str,
     company_name: str,
     monthly_income: int,
-    gender: str = "male"
+    gender: str = "male",
+    application_date: str = None,
+    work_address: str = "",
+    collateral_type: str = "none",
+    collateral_value: int = 0,
+    collateral_description: str = ""
 ) -> str:
     """
     Điền form đơn vay vốn & KYC (Use Case 1).
@@ -62,6 +67,10 @@ def fill_loan_form(
     """
     logger.info(f"🏦 Filling LOAN form for: {customer_name}")
     
+    # Auto-fill application date if not provided
+    if not application_date:
+        application_date = datetime.now().strftime("%Y-%m-%d")
+    
     # Map field names to match HTML form
     form_data = {
         "customerName": customer_name,
@@ -74,11 +83,14 @@ def fill_loan_form(
         "loanAmount": str(loan_amount),
         "loanPurpose": loan_purpose,
         "loanTerm": str(loan_term),
-        "applicationDate": datetime.now().strftime("%Y-%m-%d"),
+        "applicationDate": application_date,
         "employmentStatus": employment_status,
         "companyName": company_name,
         "monthlyIncome": str(monthly_income),
-        "collateralType": "none"  # Default value
+        "workAddress": work_address,
+        "collateralType": collateral_type,
+        "collateralValue": str(collateral_value),
+        "collateralDescription": collateral_description
     }
     
     try:
@@ -648,12 +660,42 @@ assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
 
 🔍 EXTRACTION RULES (CRITICAL - Phân Biệt Rõ Ràng):
 
-**Số Tiền Vay (loan_amount, monthlyIncome):**
-- Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương"
+**Số Tiền Vay (loan_amount, monthlyIncome, collateralValue):**
+- Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương", "tài sản"
 - "50 triệu" → 50000000 (nhân 1,000,000)
 - "500 triệu" → 500000000
 - "1 tỷ" → 1000000000
 - "25 triệu/tháng" → monthly_income = 25000000
+- "460 nghìn" hoặc "460000" → 460000 (giữ nguyên nếu đã là số)
+
+**VALUE MAPPING (Vietnamese → English):**
+
+**loan_purpose:**
+- "mua nhà" / "nhà" → "home"
+- "kinh doanh" → "business"
+- "học tập" / "du học" → "education"
+- "mua xe" / "xe" → "vehicle"
+- "sửa nhà" → "renovation"
+- "tiêu dùng" / "cá nhân" → "personal"
+- Khác → "other"
+
+**gender:**
+- "nam" → "male"
+- "nữ" → "female"
+- "khác" → "other"
+
+**employment_status:**
+- "đang làm việc" / "có việc" → "employed"
+- "tự kinh doanh" / "chủ doanh nghiệp" → "self-employed"
+- "chưa có việc" / "thất nghiệp" → "unemployed"
+- "nghỉ hưu" → "retired"
+
+**collateral_type:**
+- "bất động sản" / "nhà đất" → "real-estate"
+- "xe" / "ô tô" / "xe máy" → "vehicle"
+- "chứng khoán" / "cổ phiếu" → "securities"
+- "tiền gửi" / "tiết kiệm" → "deposit"
+- "không có" / "không" → "none"
 
 **Số Điện Thoại (phone_number):**
 - Tìm từ khóa: "điện thoại", "SĐT", "phone", "gọi"

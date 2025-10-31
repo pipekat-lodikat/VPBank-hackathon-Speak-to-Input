@@ -119,39 +119,76 @@ def fill_crm_form(
     customer_name: str,
     customer_id: str,
     interaction_type: str,
-    interaction_date: str,
     issue_description: str,
-    resolution: str,
     agent_name: str,
-    satisfaction_rating: int
+    phone_number: str = "0000000000",
+    email: str = "temp@vpbank.com",
+    address: str = "Chưa cập nhật",
+    interaction_date: str = None,
+    interaction_time: str = "09:00",
+    duration: int = 10,
+    issue_category: str = "other",
+    resolution_status: str = "resolved",
+    resolution_details: str = "Đã xử lý",
+    satisfaction_rating: str = "good",
+    follow_up_required: str = "no",
+    follow_up_date: str = None,
+    notes: str = "Cập nhật qua voice bot",
+    tags: str = ""
 ) -> str:
-        """
-        Cập nhật thông tin CRM (Use Case 2).
-        
-        Args:
-            customer_name: Tên khách hàng
-            customer_id: Mã khách hàng
-            interaction_type: Loại tương tác (Call/Email/Visit)
-            interaction_date: Ngày tương tác
-            issue_description: Mô tả vấn đề
-            resolution: Cách giải quyết
-            agent_name: Tên nhân viên xử lý
-            satisfaction_rating: Đánh giá hài lòng (1-5)
-            
-        Returns:
-            Kết quả cập nhật CRM
-        """
+    """
+    Cập nhật thông tin CRM (Use Case 2) - FULL MODE.
+    
+    Chỉ cần 4-5 fields chính từ user:
+    - customer_name, customer_id
+    - interaction_type (call/email/visit)
+    - issue_description
+    - agent_name
+    
+    Các fields khác có defaults!
+    """
+    from datetime import datetime
+    
     logger.info(f"📞 Filling CRM form for: {customer_name}")
     
+    # Auto-fill dates
+    if not interaction_date:
+        interaction_date = datetime.now().strftime("%Y-%m-%d")
+    if not follow_up_date:
+        follow_up_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-2-crm-update)
     form_data = {
+        # Customer info
         "customerName": customer_name,
         "customerId": customer_id,
+        "phoneNumber": phone_number,
+        "email": email,
+        "address": address,
+        
+        # Interaction details
         "interactionType": interaction_type,
         "interactionDate": interaction_date,
-        "issueDescription": issue_description,
-        "resolution": resolution,
+        "interactionTime": interaction_time,
+        "duration": str(duration),
         "agentName": agent_name,
-        "satisfactionRating": satisfaction_rating
+        
+        # Issue
+        "issueCategory": issue_category,
+        "issueDescription": issue_description,
+        
+        # Resolution
+        "resolutionStatus": resolution_status,
+        "resolutionDetails": resolution_details,
+        
+        # Feedback
+        "satisfactionRating": satisfaction_rating,
+        "followUpRequired": follow_up_required,
+        "followUpDate": follow_up_date,
+        
+        # Notes
+        "notes": notes,
+        "tags": tags
     }
     
     try:
@@ -190,35 +227,67 @@ def fill_hr_form(
     end_date: str,
     reason: str,
     manager_name: str,
-    department: str
+    department: str = "Operations",
+    position: str = "Nhân viên",
+    email: str = "employee@vpbank.com",
+    phone_number: str = "0000000000",
+    leave_type: str = "annual",
+    duration: int = 1,
+    manager_email: str = "manager@vpbank.com",
+    approval_status: str = "pending",
+    rejection_reason: str = "",
+    submission_date: str = None,
+    contact_during_absence: str = "",
+    work_handover: str = "",
+    notes: str = "Đơn tạo qua voice bot"
 ) -> str:
     """
-    Điền form HR workflow (Use Case 3).
+    Điền form HR workflow (Use Case 3) - MEDIUM MODE.
     
-    Args:
-        employee_name: Tên nhân viên
-        employee_id: Mã nhân viên
-        request_type: Loại yêu cầu (Leave/Training/Other)
-        start_date: Ngày bắt đầu
-        end_date: Ngày kết thúc
-        reason: Lý do
-        manager_name: Tên quản lý
-        department: Phòng ban
-        
-    Returns:
-        Kết quả điền form HR
+    Chỉ cần 6-7 fields chính từ user:
+    - employee_name, employee_id
+    - request_type, start_date, end_date
+    - reason, manager_name
+    
+    Các fields khác có defaults!
     """
+    from datetime import datetime
+    
     logger.info(f"👤 Filling HR form for: {employee_name}")
     
+    # Auto-fill submission date
+    if not submission_date:
+        submission_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-3-hr-workflow)
     form_data = {
+        # Employee info
         "employeeName": employee_name,
         "employeeId": employee_id,
+        "department": department,
+        "position": position,
+        "email": email,
+        "phoneNumber": phone_number,
+        
+        # Request details
         "requestType": request_type,
+        "leaveType": leave_type,
         "startDate": start_date,
         "endDate": end_date,
+        "duration": str(duration),
         "reason": reason,
+        
+        # Approval
         "managerName": manager_name,
-        "department": department
+        "managerEmail": manager_email,
+        "approvalStatus": approval_status,
+        "rejectionReason": rejection_reason,
+        
+        # Additional
+        "submissionDate": submission_date,
+        "contactDuringAbsence": contact_during_absence,
+        "workHandover": work_handover,
+        "notes": notes
     }
     
     try:

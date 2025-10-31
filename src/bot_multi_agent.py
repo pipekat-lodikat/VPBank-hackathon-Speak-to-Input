@@ -54,7 +54,7 @@ ice_servers = [
 ]
 
 
-async def poll_and_notify_task_completion(task_id: str, ws_connections: set, session_id: str):
+async def poll_and_notify_task_completion(task_id: str, ws_connections: set, session_id: str, processing_flag: dict):
     """
     Poll task status và notify khi hoàn thành
     
@@ -62,6 +62,7 @@ async def poll_and_notify_task_completion(task_id: str, ws_connections: set, ses
         task_id: Task ID to monitor
         ws_connections: WebSocket connections to notify
         session_id: Current session ID
+        processing_flag: Dict để track processing state
     """
     max_wait = 120  # Wait max 2 minutes
     poll_interval = 2  # Check every 2 seconds
@@ -92,6 +93,11 @@ async def poll_and_notify_task_completion(task_id: str, ws_connections: set, ses
                     logger.info(f"📢 Sent completion notification to frontend")
                 except Exception as e:
                     logger.warning(f"Failed to send notification: {e}")
+            
+            # Clear processing flag
+            processing_flag["active"] = False
+            processing_flag["task_id"] = None
+            logger.info(f"🔓 Voice input RESUMED - task completed")
             
             break
         
@@ -165,6 +171,9 @@ async def run_bot(webrtc_connection, ws_connections):
     
     # Store session-specific task IDs để track kết quả
     session_tasks = []
+    
+    # Flag để track khi có task đang process
+    processing_task = {"active": False, "task_id": None}
     
     # Initialize services
     stt = AWSTranscribeSTTService(
@@ -256,9 +265,14 @@ async def run_bot(webrtc_connection, ws_connections):
                     # Track task ID for this session
                     session_tasks.append(task_id)
                     
+                    # Set processing flag
+                    processing_task["active"] = True
+                    processing_task["task_id"] = task_id
+                    logger.info(f"🔒 Voice input PAUSED while task {task_id} processing...")
+                    
                     # Start polling task status để notify user khi xong
                     asyncio.create_task(poll_and_notify_task_completion(
-                        task_id, ws_connections, session_id
+                        task_id, ws_connections, session_id, processing_task
                     ))
                     
                 logger.info(f"📝 [{message.role}]: {message.content}")
@@ -460,13 +474,19 @@ Bot: "Dạ, để tôi xác nhận lại:
             Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
             (Các fields khác như ngày GD, người kiểm tra sẽ auto-fill)
 
-            🚫 TUYỆT ĐỐI KHÔNG:
-            - Thực thi ngay mà chưa xác nhận
-            - Nói cụm trigger trước khi user confirm
-            - Bỏ qua bước đọc lại thông tin
-            - Thay đổi cụm trigger thành câu khác
+🚫 TUYỆT ĐỐI KHÔNG:
+- Thực thi ngay mà chưa xác nhận
+- Nói cụm trigger trước khi user confirm
+- Bỏ qua bước đọc lại thông tin
+- Thay đổi cụm trigger thành câu khác
 
-            Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
+⏳ KHI ĐANG XỬ LÝ FORM (sau khi nói "BẮT ĐẦU XỬ LÝ"):
+- Nếu user nói bất cứ gì → Trả lời: "Dạ, hệ thống đang xử lý form, vui lòng đợi trong giây lát. Anh/chị sẽ nhận được thông báo khi hoàn tất."
+- KHÔNG bắt đầu conversation mới
+- KHÔNG hỏi thêm thông tin
+- CHỈ nói đang xử lý và yêu cầu đợi
+
+Hãy bắt đầu bằng cách chào hỏi và hỏi user cần làm gì!"""
     
     context.add_message({
         "role": "system",

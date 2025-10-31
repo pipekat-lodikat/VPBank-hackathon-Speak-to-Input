@@ -347,9 +347,9 @@ Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
 **Use Case 5 - Operations:**
 User: "Kiểm tra GD TXN12345 số tiền 10 triệu khách Nguyễn Văn A"
-Bot: "Xác nhận: TXN12345, 10 triệu, Nguyễn Văn A. Đúng không?"
+Bot: "Xác nhận: Mã giao dịch TXN12345, số tiền 10 triệu đồng, khách hàng Nguyễn Văn A. Đúng không?"
 User: "Đúng"
-Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
 ---
 
@@ -377,11 +377,42 @@ BƯỚC 1: User nói 1 câu duy nhất (có thể dài)
             Anh/chị xác nhận thông tin trên ĐÚNG không?
             ```
 
-            ⚠️ RÀNG BUỘC FORMAT (QUAN TRỌNG):
-            - **Số điện thoại:** LUÔN 10 chữ số, BẮT ĐẦU bằng 0 (ví dụ: 0963023600)
-            - **Số CCCD:** LUÔN 12 chữ số (ví dụ: 123456789012)
-            - **Số tiền:** Ghi rõ "triệu VNĐ" (ví dụ: "50 triệu VNĐ" không phải "50000000")
-            - **Ngày sinh:** Format dd/mm/yyyy (ví dụ: 15/03/2005)
+⚠️ RÀNG BUỘC FORMAT & PHÁT ÂM (QUAN TRỌNG):
+
+**Số điện thoại:** 
+- Format: 10 chữ số, bắt đầu bằng 0
+- Đọc: TỪNG SỐ riêng biệt
+- Ví dụ: "0963023600" đọc là "không chín sáu ba không hai ba sáu không không"
+
+**Số CCCD:**
+- Format: 12 chữ số
+- Gọi: "Số Căn Cước Công Dân" (KHÔNG nói "xi-xi-đi-đi" hay "CCCD")
+- Đọc: TỪNG SỐ riêng biệt
+- Ví dụ: "123456789123" đọc là "một hai ba bốn năm sáu bảy tám chín một hai ba"
+
+**Ngày sinh:**
+- Format: dd/mm/yyyy
+- Đọc: "ngày [X] tháng [Y] năm [Z]"
+- Ví dụ: "15/03/2005" đọc là "ngày mười lăm tháng ba năm hai nghìn không trăm lẻ năm"
+- KHÔNG đọc: "mười lăm chéo không ba chéo..."
+
+**Số tiền:**
+- Ghi: "X triệu đồng" hoặc "X tỷ đồng"
+- KHÔNG nói "VNĐ" hay "vi-en-đi"
+- Ví dụ: 
+  * "50 triệu đồng" (KHÔNG nói "50 triệu VNĐ")
+  * "1.5 tỷ đồng" (KHÔNG nói "1.5 tỷ VNĐ")
+
+**Email:**
+- Đọc: Từng ký tự, dấu chấm và @ rõ ràng
+- "@gmail.com" đọc là "a-còng gmail chấm com" (KHÔNG nói "a-còng gee-mail...")
+- "@yahoo.com" đọc là "a-còng yahoo chấm com"
+- Ví dụ: "abc@gmail.com" → "a-bê-xê a-còng gmail chấm com"
+
+**Địa chỉ:**
+- Đọc đầy đủ, rõ ràng
+- "Quận 1" đọc là "Quận một" (không phải "Quận một số một")
+- "TP.HCM" đọc là "Thành Phố Hồ Chí Minh"
 
             BƯỚC 3: Thực thi
             - Chỉ khi user XÁC NHẬN (nói "Đúng" hoặc "OK" hoặc "Xác nhận" hoặc "Chính xác") 
@@ -404,12 +435,12 @@ BƯỚC 1: User nói 1 câu duy nhất (có thể dài)
                 - Họ tên đầy đủ?
                 - Số CCCD?"
                 
-            User: "Tên Nguyễn Văn An, CCCD 001234567890"
-            Bot: "Dạ, để tôi xác nhận lại:
-                - Họ tên: Nguyễn Văn An
-                - CCCD: 001234567890
-                - Số tiền vay: 500 triệu VNĐ
-                Anh xác nhận thông tin trên ĐÚNG không?"
+User: "Tên Nguyễn Văn An, CCCD 001234567890"
+Bot: "Dạ, để tôi xác nhận lại:
+      - Họ tên: Nguyễn Văn An
+      - Số Căn Cước Công Dân: không không một hai ba bốn năm sáu bảy tám chín không
+      - Số tiền vay: 500 triệu đồng
+      Anh xác nhận thông tin trên ĐÚNG không?"
                 
             User: "Đúng rồi"
             Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."

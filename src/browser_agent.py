@@ -115,17 +115,28 @@ class BrowserAgentHandler:
         
         data_text = "\n".join(data_lines)
         
+        # Form-specific submit button hints
+        submit_hints = {
+            "loan": "Submit button: 'Gửi Đơn'",
+            "crm": "Submit button: 'Cập Nhật CRM'",
+            "hr": "Submit button: 'Gửi Đơn'",
+            "compliance": "Submit button: 'Gửi Báo Cáo'",
+            "operations": "Submit button: 'Xác Nhận Kiểm Tra'"
+        }
+        submit_hint = submit_hints.get(form_type, "Submit button: Look for type='submit'")
+        
         task = f"""
-            Navigate to this form and fill it out accurately:
+Navigate to this form and fill it out accurately:
 
-            URL: {form_url}
+URL: {form_url}
 
-            Form Type: {form_type.upper()}
+Form Type: {form_type.upper()}
+{submit_hint}
 
-            Data to fill:
-            {data_text}
+Data to fill:
+{data_text}
 
-            CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
+CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
 
             1. Navigate to URL and wait 3 seconds for page load
 
@@ -175,34 +186,34 @@ class BrowserAgentHandler:
             6. For TEXTAREA fields (address, workAddress, notes):
             - Click and type directly
 
-7. SUBMIT (CRITICAL - Must verify success!):
-   STEP 1: Find submit button (multiple possible names):
-   - "Gửi Đơn" (Loan form)
-   - "Cập Nhật CRM" (CRM form)
-   - "Gửi Báo Cáo" (Compliance form)
-   - "Xác Nhận Kiểm Tra" (Operations form)
-   - OR button with type="submit"
-   - Scroll to button if needed
-   
-   STEP 2: Click the submit button
-   - Click once only
-   - Wait 2 seconds
-   
-   STEP 3: Handle confirmation modal (IMPORTANT!):
-   - A modal will appear with "Xác Nhận" button
-   - Find button with text "Xác Nhận" or class "btn-confirm"
-   - Click the "Xác Nhận" button in modal
-   - Wait 3 seconds for submission to complete
-   
-   STEP 4: Verify success:
-   - Look for success message or alert
-   - Confirm form has been submitted
-   - Report completion
+            7. SUBMIT (CRITICAL - Must verify success!):
+            STEP 1: Find submit button (multiple possible names):
+            - "Gửi Đơn" (Loan form)
+            - "Cập Nhật CRM" (CRM form)
+            - "Gửi Báo Cáo" (Compliance form)
+            - "Xác Nhận Kiểm Tra" (Operations form)
+            - OR button with type="submit"
+            - Scroll to button if needed
+            
+            STEP 2: Click the submit button
+            - Click once only
+            - Wait 2 seconds
+            
+            STEP 3: Handle confirmation modal (IMPORTANT!):
+            - A modal will appear with "Xác Nhận" button
+            - Find button with text "Xác Nhận" or class "btn-confirm"
+            - Click the "Xác Nhận" button in modal
+            - Wait 3 seconds for submission to complete
+            
+            STEP 4: Verify success:
+            - Look for success message or alert
+            - Confirm form has been submitted
+            - Report completion
 
-⚠️ DO NOT report success until:
-- Submit button clicked
-- Confirmation modal handled
-- Success message appears
+            ⚠️ DO NOT report success until:
+            - Submit button clicked
+            - Confirmation modal handled
+            - Success message appears
 
             TROUBLESHOOTING:
             - If dropdown doesn't open: Click on the select element itself, not the label

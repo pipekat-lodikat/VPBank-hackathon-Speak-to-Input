@@ -41,11 +41,67 @@ Anh xác nhận ĐÚNG không?"
 
 ---
 
-### Scenario 1.2: Vay kinh doanh
+### Scenario 1.2: Vay kinh doanh với tài sản đảm bảo (FULL - 18 FIELDS)
+
+**User says (1 sentence with ALL details):**
+```
+"Tạo đơn vay cho Hiếu Nghị CCCD 123456789123 sinh ngày 3 tháng 3 năm 2005 địa chỉ 828 đường Sư Vạn Hạnh Phường 12 số điện thoại 0963023600 email hieunghiwork123@gmail.com vay 460 nghìn đồng kinh doanh kỳ hạn 48 tháng ngày đăng ký 12 tháng 12 năm 2012 nam đang làm việc tại Renova Cloud Company Limited thu nhập 122 đồng địa chỉ làm việc asdasdad tài sản đảm bảo bất động sản giá trị 456 nghìn mô tả siêu xe"
+```
+
+**Bot confirms:**
+```
+"Để tôi xác nhận:
+- Họ tên: Hiếu Nghị
+- CCCD: 123456789123 (12 chữ số)
+- Ngày sinh: 03/03/2005
+- Địa chỉ: 828 Đ. Sư Vạn Hạnh, Phường 12
+- SĐT: 0963023600 (10 chữ số)
+- Email: hieunghiwork123@gmail.com
+- Số tiền vay: 460 nghìn VNĐ
+- Kỳ hạn: 48 tháng
+- Mục đích: Kinh doanh
+- Ngày đăng ký: 12/12/2012
+- Giới tính: Nam
+- Công việc: Đang làm việc tại Renova Cloud Company Limited
+- Thu nhập: 122 VNĐ/tháng
+- Địa chỉ làm việc: asdasdad
+- Tài sản: Bất động sản, giá trị 456 nghìn VNĐ, mô tả: siêu xe
+Anh xác nhận ĐÚNG không?"
+```
+
+**User:** "Đúng"
+
+**Bot:** "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**→ Expected form data:**
+- customerName: "Hiếu Nghị"
+- customerId: "123456789123"
+- dateOfBirth: "2005-03-03"
+- address: "828 Đ. Sư Vạn Hạnh, Phường 12"
+- phoneNumber: "0963023600"
+- email: "hieunghiwork123@gmail.com"
+- gender: "male"
+- loanAmount: "460000"
+- loanPurpose: "business"
+- loanTerm: "48"
+- applicationDate: "2012-12-12"
+- employmentStatus: "employed"
+- companyName: "Renova Cloud Company Limited"
+- monthlyIncome: "122"
+- workAddress: "asdasdad"
+- collateralType: "real-estate"
+- collateralValue: "456000"
+- collateralDescription: "siêu xe"
+
+**→ Fills ALL 18 fields correctly!** ✅
+
+---
+
+### Scenario 1.3: Vay mua nhà đơn giản
 
 **User says:**
 ```
-"Đơn vay Trần Thị Bình CCCD 098765432109 sinh 20/07/1990 địa chỉ 456 Nguyễn Huệ Quận 5 SĐT 0912345678 email tranbinhbiz@yahoo.com vay 1 tỷ 200 triệu kinh doanh nhà hàng 36 tháng chủ doanh nghiệp Nhà Hàng Hương Việt thu nhập 50 triệu"
+"Đơn vay Trần Thị Bình CCCD 098765432109 sinh 20/07/1990 địa chỉ 456 Nguyễn Huệ Quận 5 SĐT 0912345678 email tranbinhbiz@yahoo.com vay 1 tỷ 200 triệu mua nhà 36 tháng chủ doanh nghiệp Nhà Hàng Hương Việt thu nhập 50 triệu"
 ```
 
 **Bot:** "Xác nhận: Trần Thị Bình, 1.2 tỷ, 36 tháng... Đúng không?"

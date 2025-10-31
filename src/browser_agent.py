@@ -110,89 +110,89 @@ class BrowserAgentHandler:
         data_text = "\n".join(data_lines)
         
         task = f"""
-Navigate to this form and fill it out accurately:
+            Navigate to this form and fill it out accurately:
 
-URL: {form_url}
+            URL: {form_url}
 
-Form Type: {form_type.upper()}
+            Form Type: {form_type.upper()}
 
-Data to fill:
-{data_text}
+            Data to fill:
+            {data_text}
 
-CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
+            CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
 
-1. Navigate to URL and wait 3 seconds for page load
+            1. Navigate to URL and wait 3 seconds for page load
 
-2. For SELECT DROPDOWN fields (gender, loanTerm, loanPurpose, employmentStatus, collateralType):
-   STEP 1: Find the <select> element by name attribute
-   STEP 2: Click on it to open dropdown
-   STEP 3: Wait 1 second
-   STEP 4: Find the <option> element with matching value
-   STEP 5: Click on that option
-   STEP 6: Verify it's selected
-   
-   Example for gender="male":
-   - Find: select[name="gender"]
-   - Click to open
-   - Find: option[value="male"]
-   - Click on it
+            2. For SELECT DROPDOWN fields (gender, loanTerm, loanPurpose, employmentStatus, collateralType):
+            STEP 1: Find the <select> element by name attribute
+            STEP 2: Click on it to open dropdown
+            STEP 3: Wait 1 second
+            STEP 4: Find the <option> element with matching value
+            STEP 5: Click on that option
+            STEP 6: Verify it's selected
+            
+            Example for gender="male":
+            - Find: select[name="gender"]
+            - Click to open
+            - Find: option[value="male"]
+            - Click on it
 
-3. For DATE field (dateOfBirth, applicationDate):
-   ⭐ BEST METHOD - Direct value set (bypasses calendar):
-   
-   Step 1: Identify the date input field
-   - Look for: <input type="date" name="dateOfBirth">
-   
-   Step 2: Set value directly using these actions in order:
-   a) Click on the date field once
-   b) Clear any existing value
-   c) Type the date in format: YYYY-MM-DD (e.g., "2005-03-15")
-   d) Press Tab or click outside to trigger change event
-   
-   Example: If dateOfBirth="2005-03-15"
-   - Find input with name="dateOfBirth"
-   - Click it
-   - Type exactly: 2005-03-15
-   - Tab away
-   
-   ⚠️ DO NOT try to open calendar picker! Just type the date directly.
+            3. For DATE field (dateOfBirth, applicationDate):
+            ⭐ BEST METHOD - Direct value set (bypasses calendar):
+            
+            Step 1: Identify the date input field
+            - Look for: <input type="date" name="dateOfBirth">
+            
+            Step 2: Set value directly using these actions in order:
+            a) Click on the date field once
+            b) Clear any existing value
+            c) Type the date in format: YYYY-MM-DD (e.g., "2005-03-15")
+            d) Press Tab or click outside to trigger change event
+            
+            Example: If dateOfBirth="2005-03-15"
+            - Find input with name="dateOfBirth"
+            - Click it
+            - Type exactly: 2005-03-15
+            - Tab away
+            
+            ⚠️ DO NOT try to open calendar picker! Just type the date directly.
 
-4. For TEXT INPUT fields (name, id, phone, email, address):
-   - Click on field
-   - Clear any existing value
-   - Type the new value
+            4. For TEXT INPUT fields (name, id, phone, email, address):
+            - Click on field
+            - Clear any existing value
+            - Type the new value
 
-5. For NUMBER INPUT fields (loanAmount, monthlyIncome, collateralValue):
-   - Enter numbers WITHOUT commas
-   - Example: 50000000 (not 50,000,000)
+            5. For NUMBER INPUT fields (loanAmount, monthlyIncome, collateralValue):
+            - Enter numbers WITHOUT commas
+            - Example: 50000000 (not 50,000,000)
 
-6. For TEXTAREA fields (address, workAddress, notes):
-   - Click and type directly
+            6. For TEXTAREA fields (address, workAddress, notes):
+            - Click and type directly
 
-7. SUBMIT (IMPORTANT - Multiple button names):
-   - Scroll to bottom of page
-   - Find submit button - Can have different text:
-     * "Gửi Đơn" (Loan form)
-     * "Cập Nhật CRM" (CRM form)
-     * "Gửi Báo Cáo" (Compliance form)
-     * "Xác Nhận Kiểm Tra" (Operations form)
-     * OR any button with type="submit"
-   - Click the submit button
-   - Wait 3-5 seconds for confirmation/success message
-   - Look for modal or alert confirming submission
+            7. SUBMIT (IMPORTANT - Multiple button names):
+            - Scroll to bottom of page
+            - Find submit button - Can have different text:
+                * "Gửi Đơn" (Loan form)
+                * "Cập Nhật CRM" (CRM form)
+                * "Gửi Báo Cáo" (Compliance form)
+                * "Xác Nhận Kiểm Tra" (Operations form)
+                * OR any button with type="submit"
+            - Click the submit button
+            - Wait 3-5 seconds for confirmation/success message
+            - Look for modal or alert confirming submission
 
-TROUBLESHOOTING:
-- If dropdown doesn't open: Click on the select element itself, not the label
-- If date not working: Use JavaScript method (more reliable)
-- If option not found: Check value matches exactly (case-sensitive)
-- If field not found: Try similar names or check HTML structure
+            TROUBLESHOOTING:
+            - If dropdown doesn't open: Click on the select element itself, not the label
+            - If date not working: Use JavaScript method (more reliable)
+            - If option not found: Check value matches exactly (case-sensitive)
+            - If field not found: Try similar names or check HTML structure
 
-IMPORTANT: 
-- Use JavaScript for date fields to avoid calendar struggles
-- Wait 1-2 seconds between dropdown actions
-- Verify each field is filled before moving to next
-- Do NOT skip any fields with data
-"""
+            IMPORTANT: 
+            - Use JavaScript for date fields to avoid calendar struggles
+            - Wait 1-2 seconds between dropdown actions
+            - Verify each field is filled before moving to next
+            - Do NOT skip any fields with data
+            """
         
         return task
 

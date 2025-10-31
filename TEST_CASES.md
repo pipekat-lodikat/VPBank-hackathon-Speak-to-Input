@@ -153,12 +153,12 @@ Nhân viên Phạm Văn Nam xử lý, khách đánh giá 4 điểm.
 
 **Voice Command:**
 ```
-Lưu tương tác với khách Lê Thị Mai, mã CUS003. 
-Tư vấn sản phẩm ngày 28 tháng 10 năm 2025. 
-Khách hỏi về gói tiết kiệm có lãi suất cao cho kỳ hạn 12 tháng. 
-Đã tư vấn gói Tiết Kiệm Vàng với lãi suất 6.5% năm, 
-khách hàng hài lòng và đồng ý mở tài khoản. 
-Nhân viên tư vấn Nguyễn Thị Lan, rating 5 sao.
+    Lưu tương tác với khách Lê Thị Mai, mã CUS003. 
+    Tư vấn sản phẩm ngày 28 tháng 10 năm 2025. 
+    Khách hỏi về gói tiết kiệm có lãi suất cao cho kỳ hạn 12 tháng. 
+    Đã tư vấn gói Tiết Kiệm Vàng với lãi suất 6.5% năm, 
+    khách hàng hài lòng và đồng ý mở tài khoản. 
+    Nhân viên tư vấn Nguyễn Thị Lan, rating 5 sao.
 ```
 
 **Expected Fields:**
@@ -491,3 +491,111 @@ Mỗi test case được coi là **PASS** nếu:
 ---
 
 **Total Test Coverage:** 5 Use Cases × 3 Test Cases = **15 Test Scenarios** 🎯
+
+---
+
+## 🟢 USE CASE 5: OPERATIONS (ONE-SHOT MODE - UPDATED)
+
+### Test Case 5.1: Kiểm tra giao dịch (ONE-SHOT - MINIMAL)
+
+**Voice Flow:**
+
+**User:** "Tôi cần kiểm tra giao dịch"
+
+**Bot:** "Dạ, cho tôi biết:
+- Mã giao dịch?
+- Số tiền?
+- Tên khách hàng?"
+
+**User:** "Mã TXN12345, số tiền 10 triệu, khách hàng Nguyễn Văn Anh"
+
+**Bot:** "Để tôi xác nhận:
+- Mã GD: TXN12345
+- Số tiền: 10 triệu VNĐ  
+- Khách hàng: Nguyễn Văn Anh
+Anh xác nhận ĐÚNG không?"
+
+**User:** "Đúng"
+
+**Bot:** "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**→ System Action:**
+- Extract: transaction_id="TXN12345", amount=10000000, customer_name="Nguyễn Văn Anh"
+- Auto-fill placeholders:
+  * transaction_date: Today
+  * transaction_type: "Chuyển khoản" (default)
+  * transaction_status: "Hoàn thành" (default)
+  * verified_by: "Hệ thống" (default)
+  * fraud_score: 0 (default)
+  * customer_id: "CUS00000"
+  * account_number: "0000000000"
+  * beneficiary_name: "Chưa rõ"
+  * beneficiary_account: "0000000000"
+  * channel: "Online Banking"
+  * system: "Core Banking"
+  * check_result: "Hợp lệ"
+  * notes: "Kiểm tra tự động qua voice bot"
+
+**Expected Fields Filled:**
+- ✅ Mã Giao Dịch: TXN12345
+- ✅ Số Tiền: 10000000
+- ✅ Tên Khách Hàng: Nguyễn Văn Anh
+- ✅ 15+ fields khác: Auto-filled với placeholders
+- ✅ Submit button clicked
+- ✅ Success confirmation
+
+**Total Conversation:** 3 turns (NHANH NHẤT!)
+
+---
+
+### Test Case 5.2: Đối soát giao dịch (ONE-SHOT)
+
+**Voice Flow:**
+
+**User:** "Đối soát giao dịch ngân hàng"
+
+**Bot:** "Mã giao dịch, số tiền và tên khách hàng?"
+
+**User:** "GD999, 50 triệu, Trần Văn B"
+
+**Bot:** "Mã GD999, 50 triệu, KH Trần Văn B. Xác nhận?"
+
+**User:** "OK"
+
+**Bot:** "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**Total:** 3 turns only!
+
+---
+
+## 📊 COMPARISON: FULL vs ONE-SHOT
+
+| Mode | Use Cases | Fields Asked | Auto-fill | Turns | Time |
+|------|-----------|--------------|-----------|-------|------|
+| FULL | 1, 2 | 10-13 | None | 8-12 | ~2 min |
+| MEDIUM | 3, 4 | 6-8 | Few | 5-8 | ~1.5 min |
+| ONE-SHOT | 5 | 3 | Many | 3-4 | ~30 sec |
+
+---
+
+## ✅ MINIMAL REQUIRED FIELDS (By Use Case)
+
+### Use Case 1 - Loan (FULL):
+✅ customer_name, customer_id, phone_number, email, loan_amount, loan_term
+
+### Use Case 2 - CRM (FULL):
+✅ customer_name, customer_id, interaction_type, issue_description
+
+### Use Case 3 - HR (MEDIUM):
+✅ employee_name, employee_id, request_type, start_date, end_date
+
+### Use Case 4 - Compliance (MEDIUM):
+✅ report_type, report_period, submitted_by
+
+### Use Case 5 - Operations (ONE-SHOT):
+✅ transaction_id, transaction_amount, customer_name
+❌ Không cần hỏi: date, type, status, verifier, fraud_score (auto-fill!)
+
+---
+
+*Updated: Oct 31, 2025 - Added ONE-SHOT mode for Use Case 5*

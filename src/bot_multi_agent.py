@@ -238,31 +238,49 @@ async def run_bot(webrtc_connection, ws_connections):
                 * Tên khách hàng
             - Tất cả fields khác dùng PLACEHOLDER/AUTO-FILL
 
-            📝 QUY TRÌNH (PHÂN BIỆT THEO USE CASE):
+📝 QUY TRÌNH ONE-SHOT (TẤT CẢ 5 USE CASES):
 
-            🔵 **FULL MODE** (Use Case 1: Loan, Use Case 2: CRM):
-            - Thu thập: Hỏi ĐẦY ĐỦ thông tin (10-13 fields)
-            - Xác nhận: Đọc lại TẤT CẢ
-            - Thực thi: Sau khi user confirm
+⚡ **USER NÓI 1 CÂU DUY NHẤT** chứa TẤT CẢ thông tin
+⚡ **BOT XÁC NHẬN** lại thông tin đã nghe
+⚡ **USER CONFIRM** → Thực thi ngay
 
-            🟡 **MEDIUM MODE** (Use Case 3: HR, Use Case 4: Compliance):
-            - Thu thập: Hỏi CƠ BẢN (6-8 fields quan trọng)
-            - Xác nhận: Đọc lại fields đã hỏi
-            - Thực thi: Sau khi user confirm
+VÍ DỤ CHUẨN:
 
-            🟢 **ONE-SHOT MODE** (Use Case 5: Operations - NHANH NHẤT):
-            - Thu thập: Chỉ hỏi 3 FIELDS:
-            1. "Mã giao dịch là gì?"
-            2. "Số tiền bao nhiêu?"
-            3. "Tên khách hàng?"
-            - Xác nhận: "Mã GD [X], số tiền [Y], khách hàng [Z]. Đúng không?"
-            - Thực thi: Ngay sau confirm (auto-fill các fields khác với placeholders)
+**Use Case 1 - Loan:**
+User: "Tạo đơn vay cho khách hàng Nguyễn Văn An, CCCD 012345678901, sinh 15/03/1985, địa chỉ 123 Lê Lợi Quận 1, SĐT 0901234567, email abc@gmail.com, vay 500 triệu mua nhà kỳ hạn 24 tháng, kỹ sư phần mềm FPT thu nhập 30 triệu/tháng"
+Bot: "Xác nhận: Nguyễn Văn An, CCCD 012345678901, 500 triệu, 24 tháng... [đọc lại tất cả]. Đúng không?"
+User: "Đúng"
+Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
-            ---
+**Use Case 2 - CRM:**
+User: "Cập nhật CRM khách Trần Văn B mã CUS002 khiếu nại thẻ bị khóa đã xử lý nhân viên Phạm Nam"
+Bot: "Xác nhận: KH Trần Văn B, mã CUS002, khiếu nại thẻ... Đúng không?"
+User: "OK"
+Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
-            CHI TIẾT TỪNG BƯỚC:
+**Use Case 3 - HR:**
+User: "Đơn nghỉ phép nhân viên Trần Thị Cúc NV001 từ 22 đến 24/10 việc gia đình phòng Kinh Doanh quản lý Lê Hoàng"
+Bot: "Xác nhận: Trần Thị Cúc, nghỉ 22-24/10... Đúng không?"
+User: "Đúng"
+Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
-            BƯỚC 1: Thu thập thông tin (tùy theo mode)
+**Use Case 4 - Compliance:**
+User: "Báo cáo AML tháng 9 nhân viên Lê Văn Cường không vi phạm"
+Bot: "Xác nhận: Báo cáo AML tháng 9, Lê Văn Cường, 0 vi phạm. Đúng không?"
+User: "Đúng"
+Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**Use Case 5 - Operations:**
+User: "Kiểm tra GD TXN12345 số tiền 10 triệu khách Nguyễn Văn A"
+Bot: "Xác nhận: TXN12345, 10 triệu, Nguyễn Văn A. Đúng không?"
+User: "Đúng"
+Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+---
+
+QUY TRÌNH THỐNG NHẤT (2 BƯỚC):
+
+BƯỚC 1: User nói 1 câu duy nhất (có thể dài)
 
             BƯỚC 2: XÁC NHẬN (BẮT BUỘC!)
             - Đọc lại TẤT CẢ thông tin đã thu thập theo format chuẩn:

@@ -1,149 +1,204 @@
-# 🎙️ VOICE TEST SCENARIOS - CONVERSATION FLOW
+# 🎙️ VOICE TEST SCENARIOS - ONE-SHOT MODE
 
-**Format:** Realistic conversation flows matching actual system prompt  
+**Format:** 1 câu duy nhất chứa TẤT CẢ thông tin  
 **Updated:** October 31, 2025
 
----
-
-## 🔵 USE CASE 1: LOAN (FULL MODE)
-
-### Scenario 1: Vay mua nhà
-
-```
-User: "Vay tiền mua nhà"
-Bot: "Họ tên và CCCD?"
-User: "Nguyễn Văn An, CCCD 012345678901"
-Bot: "Ngày sinh?"
-User: "15/03/1985"
-Bot: "Địa chỉ?"
-User: "123 Lê Lợi, Quận 1, TP.HCM"
-Bot: "SĐT và email?"
-User: "0901234567, nguyenvanan@gmail.com"
-Bot: "Số tiền vay?"
-User: "500 triệu"
-Bot: "Kỳ hạn?"
-User: "24 tháng"
-Bot: "Mục đích vay?"
-User: "Mua nhà"
-Bot: "Công việc?"
-User: "Kỹ sư phần mềm, FPT Software, thu nhập 30 triệu/tháng"
-Bot: "Xác nhận: [đọc lại tất cả]. Đúng không?"
-User: "Đúng"
-Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
-```
-
-**Fields:** 13 fields - customerName, customerId, dateOfBirth, address, phoneNumber, email, loanAmount, loanTerm, loanPurpose, employmentStatus, companyName, monthlyIncome, gender
+**Lưu ý:** Nói 1 lần duy nhất, bot xác nhận, user confirm → Thực thi!
 
 ---
 
-## 🔵 USE CASE 2: CRM (FULL MODE)
+## 🔵 USE CASE 1: LOAN (ONE-SHOT)
 
-### Scenario 1: Khiếu nại thẻ
+### Scenario 1.1: Vay mua nhà
 
+**User says (1 sentence):**
 ```
-User: "Ghi nhận khiếu nại khách hàng"
-Bot: "Tên và mã KH?"
-User: "Trần Văn B, mã CUS002"
-Bot: "Loại tương tác?"
-User: "Khiếu nại"
-Bot: "Vấn đề gì?"
-User: "Thẻ bị khóa đột ngột"
-Bot: "Đã xử lý như thế nào?"
-User: "Đã mở khóa và xin lỗi"
-Bot: "Nhân viên xử lý?"
-User: "Phạm Văn Nam"
-Bot: "Xác nhận: KH Trần Văn B, khiếu nại thẻ... Đúng không?"
-User: "Đúng"
-Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+"Tạo đơn vay cho khách hàng Nguyễn Văn An CCCD 012345678901 sinh ngày 15 tháng 3 năm 1985 địa chỉ 123 đường Lê Lợi Quận 1 TP HCM số điện thoại 0901234567 email nguyenvanan@gmail.com vay 500 triệu đồng mua nhà kỳ hạn 24 tháng kỹ sư phần mềm tại FPT Software thu nhập 30 triệu mỗi tháng"
 ```
 
-**Fields:** 18 fields - Full CRM update
+**Bot confirms:**
+```
+"Để tôi xác nhận:
+- Họ tên: Nguyễn Văn An
+- CCCD: 012345678901 (12 chữ số)
+- Ngày sinh: 15/03/1985
+- Địa chỉ: 123 Lê Lợi, Quận 1, TP.HCM
+- SĐT: 0901234567 (10 chữ số)
+- Email: nguyenvanan@gmail.com
+- Số tiền: 500 triệu VNĐ
+- Kỳ hạn: 24 tháng
+- Mục đích: Mua nhà
+- Công việc: Kỹ sư phần mềm, FPT Software
+- Thu nhập: 30 triệu VNĐ/tháng
+Anh xác nhận ĐÚNG không?"
+```
+
+**User:** "Đúng"
+
+**Bot:** "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**→ Browser fills 13 fields automatically!**
 
 ---
 
-## 🟡 USE CASE 3: HR (MEDIUM MODE)
+### Scenario 1.2: Vay kinh doanh
 
-### Scenario 1: Nghỉ phép
-
+**User says:**
 ```
-User: "Tạo đơn nghỉ phép"
-Bot: "Tên và mã nhân viên?"
-User: "Trần Thị Cúc, NV001"
-Bot: "Từ ngày nào đến ngày nào?"
-User: "22 đến 24 tháng 10"
-Bot: "Lý do?"
-User: "Việc gia đình"
-Bot: "Phòng ban và quản lý?"
-User: "Phòng Kinh Doanh, quản lý Lê Minh Hoàng"
-Bot: "Xác nhận: Trần Thị Cúc, nghỉ 22-24/10... Đúng không?"
-User: "Đúng"
-Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+"Đơn vay Trần Thị Bình CCCD 098765432109 sinh 20/07/1990 địa chỉ 456 Nguyễn Huệ Quận 5 SĐT 0912345678 email tranbinhbiz@yahoo.com vay 1 tỷ 200 triệu kinh doanh nhà hàng 36 tháng chủ doanh nghiệp Nhà Hàng Hương Việt thu nhập 50 triệu"
 ```
 
-**Fields:** 20 fields - Full HR workflow
+**Bot:** "Xác nhận: Trần Thị Bình, 1.2 tỷ, 36 tháng... Đúng không?"
+
+**User:** "Đúng"
+
+**→ Executes!**
 
 ---
 
-## 🟡 USE CASE 4: COMPLIANCE (MEDIUM MODE)
+## 🔵 USE CASE 2: CRM (ONE-SHOT)
 
-### Scenario 1: Báo cáo AML
+### Scenario 2.1: Khiếu nại thẻ
 
+**User says (1 sentence):**
 ```
-User: "Tạo báo cáo AML"
-Bot: "Tên người nộp báo cáo?"
-User: "Lê Văn Cường"
-Bot: "Kỳ báo cáo?"
-User: "Tháng 9 năm 2025"
-Bot: "Số vi phạm phát hiện?"
-User: "Không có vi phạm"
-Bot: "Xác nhận: Báo cáo AML tháng 9/2025, người nộp Lê Văn Cường, không vi phạm. Đúng không?"
-User: "Đúng"
-Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+"Cập nhật CRM khách hàng Trần Văn B mã CUS002 SĐT 0912345678 khiếu nại thẻ bị khóa đột ngột đã mở khóa và xin lỗi khách nhân viên Phạm Văn Nam xử lý"
 ```
 
-**Fields:** 23 fields - Auto-fills status, dates, etc.
+**Bot:** "Xác nhận: KH Trần Văn B (CUS002), khiếu nại thẻ bị khóa, đã xử lý, NV Phạm Văn Nam. Đúng không?"
+
+**User:** "Đúng"
+
+**Bot:** "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**→ Fills 18 CRM fields!**
 
 ---
 
-## 🟢 USE CASE 5: OPERATIONS (ONE-SHOT MODE) ⚡
+### Scenario 2.2: Tư vấn sản phẩm
 
-### Scenario 1: Kiểm tra giao dịch (FASTEST!)
-
+**User says:**
 ```
-User: "Kiểm tra giao dịch"
-Bot: "Dạ, cho tôi biết:
-- Mã giao dịch?
-- Số tiền?
-- Tên khách hàng?"
-
-User: "Mã TXN12345, 10 triệu, Nguyễn Văn A"
-
-Bot: "Xác nhận:
-- Mã GD: TXN12345
-- Số tiền: 10 triệu VNĐ
-- Khách hàng: Nguyễn Văn A
-Đúng không?"
-
-User: "Đúng"
-
-Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+"Lưu tương tác khách Lê Thị Mai CUS003 tư vấn sản phẩm tiết kiệm lãi suất cao đã tư vấn gói Vàng khách đồng ý mở tài khoản nhân viên Nguyễn Lan"
 ```
+
+**Bot:** "Xác nhận..."
+
+**User:** "OK"
+
+**→ Executes!**
+
+---
+
+## 🟡 USE CASE 3: HR (ONE-SHOT)
+
+### Scenario 3.1: Nghỉ phép
+
+**User says (1 sentence):**
+```
+"Đơn nghỉ phép nhân viên Trần Thị Cúc mã NV001 từ ngày 22 đến 24 tháng 10 năm 2025 lý do việc gia đình phòng Kinh Doanh quản lý Lê Minh Hoàng"
+```
+
+**Bot:** "Xác nhận: NV Trần Thị Cúc (NV001), nghỉ phép 22-24/10/2025, việc gia đình, Phòng Kinh Doanh, QL Lê Minh Hoàng. Đúng không?"
+
+**User:** "Đúng"
+
+**Bot:** "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**→ Fills 20 HR fields!**
+
+---
+
+### Scenario 3.2: Đăng ký đào tạo
+
+**User says:**
+```
+"Đăng ký đào tạo Phạm Minh Tuấn NV002 từ 5 đến 7 tháng 11 kỹ năng chăm sóc khách hàng phòng CSKH quản lý Trần Thu Hà"
+```
+
+**Bot:** "Xác nhận..."
+
+**User:** "OK"
+
+**→ Executes!**
+
+---
+
+## 🟡 USE CASE 4: COMPLIANCE (ONE-SHOT)
+
+### Scenario 4.1: Báo cáo AML
+
+**User says (1 sentence):**
+```
+"Báo cáo AML tháng 9 năm 2025 nhân viên Lê Văn Cường không phát hiện vi phạm kiểm tra 1250 giao dịch mức độ rủi ro thấp"
+```
+
+**Bot:** "Xác nhận: Báo cáo AML tháng 9/2025, NV Lê Văn Cường, 0 vi phạm, 1250 GD, rủi ro thấp. Đúng không?"
+
+**User:** "Đúng"
+
+**Bot:** "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+
+**→ Auto-fills 23 compliance fields!**
+
+---
+
+### Scenario 4.2: Báo cáo KYC
+
+**User says:**
+```
+"Báo cáo KYC quý 3 năm 2025 nhân viên Nguyễn Thị Lan phát hiện 3 vi phạm khách không cập nhật giấy tờ 850 hồ sơ rủi ro trung bình"
+```
+
+**Bot:** "Xác nhận..."
+
+**User:** "OK"
+
+**→ Executes!**
+
+---
+
+## 🟢 USE CASE 5: OPERATIONS (ONE-SHOT - MINIMAL)
+
+### Scenario 5.1: Kiểm tra giao dịch (FASTEST!)
+
+**User says (minimal - 3 fields only):**
+```
+"Kiểm tra giao dịch TXN12345 số tiền 10 triệu khách hàng Nguyễn Văn A"
+```
+
+**Bot:** "Xác nhận: Mã GD TXN12345, số tiền 10 triệu VNĐ, KH Nguyễn Văn A. Đúng không?"
+
+**User:** "Đúng"
+
+**Bot:** "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
 **→ AUTO-FILLS 23 FIELDS:**
-- customerId: "CUS00000"
-- accountNumber: "0000000000"
 - transactionDate: today
 - transactionType: "transfer"
-- channel: "online"
+- channel: "online"  
 - status: "completed"
-- validationResult: "valid"
-- reviewerName: "Hệ thống Voice Bot"
-- reviewDate: today
+- reviewerName: "Hệ thống"
 - fraudScore: "0"
-- ... và 13 fields khác
+- ... (20 more fields)
 
-**Total turns:** 3 only! (vs 8-12 turns for FULL mode)  
-**Time:** ~30 seconds (vs ~2 minutes)
+**Total:** 1 user input + 1 confirm = 2 turns only!  
+**Time:** ~15 seconds (NHANH NHẤT!)
+
+---
+
+### Scenario 5.2: Đối soát giao dịch
+
+**User says:**
+```
+"Đối soát GD999 50 triệu Trần Văn B"
+```
+
+**Bot:** "Xác nhận..."
+
+**User:** "OK"
+
+**→ Done in 15 seconds!**
 
 ---
 

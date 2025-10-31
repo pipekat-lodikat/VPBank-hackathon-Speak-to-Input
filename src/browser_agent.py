@@ -169,11 +169,17 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
 6. For TEXTAREA fields (address, workAddress, notes):
    - Click and type directly
 
-7. SUBMIT:
-   - Scroll to bottom
-   - Find button with text "Gửi Đơn" or type="submit"
-   - Click it
-   - Wait 3 seconds for success message
+7. SUBMIT (IMPORTANT - Multiple button names):
+   - Scroll to bottom of page
+   - Find submit button - Can have different text:
+     * "Gửi Đơn" (Loan form)
+     * "Cập Nhật CRM" (CRM form)
+     * "Gửi Báo Cáo" (Compliance form)
+     * "Xác Nhận Kiểm Tra" (Operations form)
+     * OR any button with type="submit"
+   - Click the submit button
+   - Wait 3-5 seconds for confirmation/success message
+   - Look for modal or alert confirming submission
 
 TROUBLESHOOTING:
 - If dropdown doesn't open: Click on the select element itself, not the label

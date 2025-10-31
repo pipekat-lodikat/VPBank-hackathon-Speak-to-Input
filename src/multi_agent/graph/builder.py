@@ -1,7 +1,6 @@
 """
 LangGraph Multi-Agent Workflow - Supervisor Pattern
 Sử dụng Supervisor Agent với tools để điều phối 5 use cases
-Ref: https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/
 """
 from typing import Annotated, Literal
 from datetime import datetime
@@ -126,22 +125,22 @@ def fill_crm_form(
     agent_name: str,
     satisfaction_rating: int
 ) -> str:
-    """
-    Cập nhật thông tin CRM (Use Case 2).
-    
-    Args:
-        customer_name: Tên khách hàng
-        customer_id: Mã khách hàng
-        interaction_type: Loại tương tác (Call/Email/Visit)
-        interaction_date: Ngày tương tác
-        issue_description: Mô tả vấn đề
-        resolution: Cách giải quyết
-        agent_name: Tên nhân viên xử lý
-        satisfaction_rating: Đánh giá hài lòng (1-5)
+        """
+        Cập nhật thông tin CRM (Use Case 2).
         
-    Returns:
-        Kết quả cập nhật CRM
-    """
+        Args:
+            customer_name: Tên khách hàng
+            customer_id: Mã khách hàng
+            interaction_type: Loại tương tác (Call/Email/Visit)
+            interaction_date: Ngày tương tác
+            issue_description: Mô tả vấn đề
+            resolution: Cách giải quyết
+            agent_name: Tên nhân viên xử lý
+            satisfaction_rating: Đánh giá hài lòng (1-5)
+            
+        Returns:
+            Kết quả cập nhật CRM
+        """
     logger.info(f"📞 Filling CRM form for: {customer_name}")
     
     form_data = {
@@ -252,41 +251,82 @@ def fill_hr_form(
 @tool
 def fill_compliance_form(
     report_type: str,
-    report_period: str,
-    submitted_by: str,
-    submission_date: str,
-    violations_found: int,
-    risk_level: str,
-    compliance_status: str,
-    notes: str
+    compliance_officer: str,
+    report_id: str = "BC-AUTO-001",
+    reporting_period: str = None,
+    submission_date: str = None,
+    report_title: str = "Báo cáo tự động qua voice bot",
+    officer_email: str = "compliance@vpbank.com",
+    officer_position: str = "Nhân viên tuân thủ",
+    department: str = "Risk & Compliance",
+    status: str = "in-progress",
+    cases_reviewed: int = 0,
+    high_risk_cases: int = 0,
+    violations_found: str = "none",
+    violation_details: str = "",
+    actions_taken: str = "Đang thực hiện kiểm tra",
+    preventive_measures: str = "Theo dõi định kỳ",
+    follow_up_required: str = "no",
+    overall_risk: str = "low",
+    risk_analysis: str = "Không phát hiện rủi ro",
+    executive_summary: str = "Báo cáo tự động",
+    additional_notes: str = "Được tạo tự động qua voice bot",
+    recommendations: str = "Tiếp tục theo dõi"
 ) -> str:
     """
-    Điền form báo cáo tuân thủ (Use Case 4).
+    Điền form báo cáo tuân thủ (Use Case 4) - MEDIUM MODE.
     
-    Args:
-        report_type: Loại báo cáo (AML/KYC/GDPR)
-        report_period: Kỳ báo cáo
-        submitted_by: Người nộp
-        submission_date: Ngày nộp
-        violations_found: Số vi phạm phát hiện
-        risk_level: Mức độ rủi ro (Low/Medium/High)
-        compliance_status: Trạng thái (Compliant/Non-Compliant)
-        notes: Ghi chú
-        
-    Returns:
-        Kết quả điền form compliance
+    Chỉ cần 2-3 fields chính từ user:
+    - report_type (AML/KYC/audit/etc.)
+    - compliance_officer (tên người nộp)
+    
+    Các fields khác có defaults!
     """
+    from datetime import datetime
+    
     logger.info(f"📋 Filling COMPLIANCE form: {report_type}")
     
+    # Auto-fill dates
+    if not reporting_period:
+        reporting_period = datetime.now().strftime("%Y-%m")
+    if not submission_date:
+        submission_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-4-compliance-reporting)
     form_data = {
+        # Report info
+        "reportId": report_id,
         "reportType": report_type,
-        "reportPeriod": report_period,
-        "submittedBy": submitted_by,
+        "reportingPeriod": reporting_period,
         "submissionDate": submission_date,
+        "reportTitle": report_title,
+        
+        # Officer info
+        "complianceOfficer": compliance_officer,
+        "officerEmail": officer_email,
+        "officerPosition": officer_position,
+        "department": department,
+        
+        # Status & Statistics
+        "status": status,
+        "casesReviewed": str(cases_reviewed),
+        "highRiskCases": str(high_risk_cases),
         "violationsFound": violations_found,
-        "riskLevel": risk_level,
-        "complianceStatus": compliance_status,
-        "notes": notes
+        "violationDetails": violation_details,
+        
+        # Actions
+        "actionsTaken": actions_taken,
+        "preventiveMeasures": preventive_measures,
+        "followUpRequired": follow_up_required,
+        
+        # Risk assessment
+        "overallRisk": overall_risk,
+        "riskAnalysis": risk_analysis,
+        
+        # Notes
+        "executiveSummary": executive_summary,
+        "additionalNotes": additional_notes,
+        "recommendations": recommendations
     }
     
     try:
@@ -319,50 +359,95 @@ def fill_compliance_form(
 @tool
 def fill_operations_form(
     transaction_id: str,
-    transaction_date: str,
     customer_name: str,
     transaction_amount: int,
-    transaction_type: str,
-    beneficiary_name: str,
-    beneficiary_account: str,
-    transaction_status: str,
-    verified_by: str,
-    fraud_score: int,
-    notes: str
+    customer_id: str = "CUS00000",
+    account_number: str = "0000000000",
+    phone_number: str = "0000000000",
+    transaction_date: str = None,
+    transaction_time: str = "09:00",
+    transaction_type: str = "transfer",
+    channel: str = "online",
+    processing_system: str = "core-banking",
+    transaction_description: str = "Kiểm tra tự động qua voice bot",
+    beneficiary_name: str = "Chưa rõ",
+    beneficiary_account: str = "0000000000",
+    beneficiary_bank: str = "VPBank",
+    status: str = "completed",
+    validation_result: str = "valid",
+    reviewer_name: str = "Hệ thống Voice Bot",
+    review_date: str = None,
+    balance_before: int = 0,
+    balance_after: int = 0,
+    balance_status: str = "matched",
+    fraud_score: int = 0,
+    fraud_indicators: str = "none",
+    notes: str = "Kiểm tra tự động",
+    action_required: str = "Không có"
 ) -> str:
     """
-    Điền form kiểm tra giao dịch (Use Case 5).
+    Điền form kiểm tra giao dịch (Use Case 5) - ONE-SHOT MODE.
     
-    Args:
-        transaction_id: Mã giao dịch
-        transaction_date: Ngày giao dịch
-        customer_name: Tên khách hàng
-        transaction_amount: Số tiền (VNĐ)
-        transaction_type: Loại giao dịch
-        beneficiary_name: Tên người thụ hưởng
-        beneficiary_account: Tài khoản người thụ hưởng
-        transaction_status: Trạng thái (Pending/Completed/Failed)
-        verified_by: Người xác minh
-        fraud_score: Điểm nghi ngờ gian lận (0-100)
-        notes: Ghi chú
-        
-    Returns:
-        Kết quả điền form operations
+    Chỉ cần 3 fields bắt buộc từ user:
+    - transaction_id
+    - customer_name  
+    - transaction_amount
+    
+    Tất cả fields khác có default values!
     """
-    logger.info(f"� Filling OPERATIONS form: {transaction_id}")
+    from datetime import datetime
     
+    logger.info(f"💳 Filling OPERATIONS form (ONE-SHOT): {transaction_id}")
+    
+    # Auto-fill dates nếu không có
+    if not transaction_date:
+        transaction_date = datetime.now().strftime("%Y-%m-%d")
+    if not review_date:
+        review_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-5-operations-validation)
     form_data = {
+        # Customer info
+        "customerName": customer_name,
+        "customerId": customer_id,
+        "accountNumber": account_number,
+        "phoneNumber": phone_number,
+        
+        # Transaction info
         "transactionId": transaction_id,
         "transactionDate": transaction_date,
-        "customerName": customer_name,
-        "transactionAmount": transaction_amount,
+        "transactionTime": transaction_time,
+        "transactionAmount": str(transaction_amount),
         "transactionType": transaction_type,
+        "channel": channel,
+        "transactionDescription": transaction_description,
+        
+        # Beneficiary (for transfers)
         "beneficiaryName": beneficiary_name,
         "beneficiaryAccount": beneficiary_account,
-        "transactionStatus": transaction_status,
-        "verifiedBy": verified_by,
-        "fraudScore": fraud_score,
-        "notes": notes
+        "beneficiaryBank": beneficiary_bank,
+        
+        # Status
+        "status": status,
+        "processingSystem": processing_system,
+        
+        # Validation
+        "validationResult": validation_result,
+        "reviewerName": reviewer_name,
+        "reviewDate": review_date,
+        
+        # Balance
+        "balanceBefore": str(balance_before),
+        "balanceAfter": str(balance_after),
+        "balanceStatus": balance_status,
+        
+        # Fraud
+        "fraudScore": str(fraud_score),
+        "fraudIndicators": fraud_indicators,
+        
+        # Notes
+        "notes": notes,
+        "actionRequired": action_required
     }
     
     try:

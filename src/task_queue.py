@@ -186,5 +186,4 @@ class TaskQueue:
         logger.warning("⚠️  Task queue cleared")
 
 
-# Global task queue instance
 task_queue = TaskQueue(maxsize=100)

@@ -41,11 +41,11 @@ Anh xác nhận ĐÚNG không?"
 
 ---
 
-### Scenario 1.2: Vay kinh doanh với tài sản đảm bảo (FULL - 18 FIELDS)
+### Scenario 1.2: Vay kinh doanh với tài sản đảm bảo (COMPLETE - 20 FIELDS)
 
 **User says (1 sentence with ALL details):**
 ```
-"Tạo đơn vay cho Hiếu Nghị CCCD 123456789123 sinh ngày 3 tháng 3 năm 2005 địa chỉ 828 đường Sư Vạn Hạnh Phường 12 số điện thoại 0963023600 email hieunghiwork123@gmail.com vay 460 nghìn đồng kinh doanh kỳ hạn 48 tháng ngày đăng ký 12 tháng 12 năm 2012 nam đang làm việc tại Renova Cloud Company Limited thu nhập 122 đồng địa chỉ làm việc asdasdad tài sản đảm bảo bất động sản giá trị 456 nghìn mô tả siêu xe"
+"Tạo đơn vay cho Hiếu Nghị CCCD 123456789123 sinh ngày 3 tháng 3 năm 2005 địa chỉ 828 đường Sư Vạn Hạnh Phường 12 số điện thoại 0963023600 email hieunghiwork123@gmail.com giới tính nam vay 460 nghìn đồng kinh doanh kỳ hạn 48 tháng ngày đăng ký 12 tháng 12 năm 2012 đang làm việc tại Renova Cloud Company Limited thu nhập 122 đồng địa chỉ làm việc asdasdad tài sản đảm bảo bất động sản giá trị 456 nghìn mô tả siêu xe nhân viên quan hệ Nguyễn Văn X ghi chú thêm không có gì đặc biệt"
 ```
 
 **Bot confirms:**
@@ -73,7 +73,9 @@ Anh xác nhận ĐÚNG không?"
 
 **Bot:** "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
 
-**→ Expected form data:**
+**→ Expected form data (ALL 20 FIELDS):**
+
+**Thông Tin Khách Hàng:**
 - customerName: "Hiếu Nghị"
 - customerId: "123456789123"
 - dateOfBirth: "2005-03-03"
@@ -81,19 +83,29 @@ Anh xác nhận ĐÚNG không?"
 - phoneNumber: "0963023600"
 - email: "hieunghiwork123@gmail.com"
 - gender: "male"
+
+**Thông Tin Khoản Vay:**
 - loanAmount: "460000"
 - loanPurpose: "business"
 - loanTerm: "48"
 - applicationDate: "2012-12-12"
+
+**Thông Tin Công Việc:**
 - employmentStatus: "employed"
 - companyName: "Renova Cloud Company Limited"
 - monthlyIncome: "122"
 - workAddress: "asdasdad"
+
+**Thông Tin Tài Sản:**
 - collateralType: "real-estate"
 - collateralValue: "456000"
 - collateralDescription: "siêu xe"
 
-**→ Fills ALL 18 fields correctly!** ✅
+**Thông Tin Bổ Sung:**
+- relationshipManager: "Nguyễn Văn X"
+- additionalNotes: "Không có gì đặc biệt"
+
+**→ Fills ALL 20 fields correctly!** ✅
 
 ---
 

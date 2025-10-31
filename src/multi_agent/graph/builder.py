@@ -42,7 +42,9 @@ def fill_loan_form(
     work_address: str = "",
     collateral_type: str = "none",
     collateral_value: int = 0,
-    collateral_description: str = ""
+    collateral_description: str = "",
+    relationship_manager: str = "",
+    additional_notes: str = ""
 ) -> str:
     """
     Điền form đơn vay vốn & KYC (Use Case 1).
@@ -90,7 +92,9 @@ def fill_loan_form(
         "workAddress": work_address,
         "collateralType": collateral_type,
         "collateralValue": str(collateral_value),
-        "collateralDescription": collateral_description
+        "collateralDescription": collateral_description,
+        "relationshipManager": relationship_manager,
+        "additionalNotes": additional_notes
     }
     
     try:

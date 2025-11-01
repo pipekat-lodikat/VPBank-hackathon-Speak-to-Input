@@ -64,6 +64,8 @@ async def poll_and_notify_task_completion(task_id: str, ws_connections: set, ses
         session_id: Current session ID
         processing_flag: Dict để track processing state
     """
+    from .task_queue import TaskStatus  # Import here to avoid circular
+    
     max_wait = 120  # Wait max 2 minutes
     poll_interval = 2  # Check every 2 seconds
     elapsed = 0

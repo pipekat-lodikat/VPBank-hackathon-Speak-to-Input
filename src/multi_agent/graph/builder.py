@@ -23,6 +23,92 @@ from browser_agent import browser_agent
 # BROWSER TOOLS - Các tools để điền form
 # ============================================
 
+# ============================================
+# INCREMENTAL MODE TOOLS (NEW!)
+# ============================================
+
+@tool
+async def start_incremental_form(form_type: str) -> str:
+    """
+    Bắt đầu session điền form incremental - Mở browser và giữ mở.
+    
+    Args:
+        form_type: Loại form (loan/crm/hr/compliance/operations)
+        
+    Returns:
+        Kết quả mở form
+    """
+    import os
+    
+    # Get form URL
+    urls = {
+        "loan": os.getenv("LOAN_FORM_URL", "http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com"),
+        "crm": os.getenv("CRM_FORM_URL", "http://use-case-2-crm-update.s3-website-us-west-2.amazonaws.com"),
+        "hr": os.getenv("HR_FORM_URL", "http://use-case-3-hr-workflow.s3-website-us-west-2.amazonaws.com"),
+        "compliance": os.getenv("COMPLIANCE_FORM_URL", "http://use-case-4-compliance-reporting.s3-website-us-west-2.amazonaws.com"),
+        "operations": os.getenv("OPERATIONS_FORM_URL", "http://use-case-5-operations-validation.s3-website-us-west-2.amazonaws.com")
+    }
+    
+    form_url = urls.get(form_type)
+    if not form_url:
+        return f"❌ Invalid form type: {form_type}"
+    
+    logger.info(f"🚀 Starting incremental form: {form_type}")
+    
+    result = await browser_agent.start_form_session(form_url, form_type)
+    
+    if result.get("success"):
+        return f"✅ Đã mở form {form_type}. Bạn có thể bắt đầu điền từng field bằng cách nói: 'Điền tên là X', 'Điền SĐT là Y'..."
+    else:
+        return f"❌ Lỗi mở form: {result.get('error')}"
+
+
+@tool
+async def fill_single_field(field_name: str, field_value: str) -> str:
+    """
+    Điền 1 field cụ thể trong form đang mở (incremental mode).
+    
+    Args:
+        field_name: Tên field HTML (customerName, phoneNumber, email, loanAmount, etc.)
+        field_value: Giá trị cần điền
+        
+    Returns:
+        Kết quả điền field
+    """
+    logger.info(f"📝 Incremental fill: {field_name} = {field_value}")
+    
+    result = await browser_agent.fill_field_incremental(field_name, field_value)
+    
+    if result.get("success"):
+        fields_count = result.get("fields_filled", 0)
+        return f"✅ Đã điền {field_name}. Tổng đã điền: {fields_count} fields. Tiếp tục điền hoặc nói 'Submit' để gửi."
+    else:
+        return f"❌ Lỗi điền field: {result.get('error')}"
+
+
+@tool
+async def submit_incremental_form() -> str:
+    """
+    Submit form đang được điền incremental.
+    
+    Returns:
+        Kết quả submit
+    """
+    logger.info(f"🚀 Submitting incremental form...")
+    
+    result = await browser_agent.submit_form_incremental()
+    
+    if result.get("success"):
+        fields_count = result.get("fields_filled", 0)
+        return f"✅ Form đã được submit thành công! Đã điền {fields_count} fields."
+    else:
+        return f"❌ Lỗi submit form: {result.get('error')}"
+
+
+# ============================================
+# ONE-SHOT MODE TOOLS (Legacy)
+# ============================================
+
 @tool
 def fill_loan_form(
     customer_name: str,
@@ -590,151 +676,181 @@ def build_supervisor_workflow(llm):
     # ============================================
     
     tools = [
+        # One-shot mode (5 tools - legacy)
         fill_loan_form,
         fill_crm_form,
         fill_hr_form,
         fill_compliance_form,
-        fill_operations_form
+        fill_operations_form,
+        
+        # Incremental mode (3 tools - NEW!)
+        start_incremental_form,
+        fill_single_field,
+        submit_incremental_form
     ]
     
-    supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL khi ĐỦ ĐIỀU KIỆN!
+    supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL phù hợp!
 
-BẠN CÓ 5 TOOLS:
-1. fill_loan_form - Đơn vay vốn & KYC
-2. fill_crm_form - CRM update
-3. fill_hr_form - HR workflow  
-4. fill_compliance_form - Báo cáo tuân thủ
-5. fill_operations_form - Kiểm tra giao dịch
+BẠN CÓ 8 TOOLS (2 MODES):
+
+🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin):
+1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc
+2. fill_crm_form - Điền TẤT CẢ fields CRM cùng lúc
+3. fill_hr_form - Điền TẤT CẢ fields HR cùng lúc
+4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
+5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
+
+🟢 **INCREMENTAL MODE** (3 tools - khi điền TỪNG FIELD):
+6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ
+7. fill_single_field(field_name, value) - Điền 1 field (có thể gọi NHIỀU LẦN)
+8. submit_incremental_form() - Submit form sau khi điền xong
+
+KHI NÀO DÙNG MỖI MODE:
+
+📋 **Use ONE-SHOT** khi:
+- User nói 1 câu chứa NHIỀU thông tin
+- VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901..."
+- → GỌI fill_loan_form() với TẤT CẢ params
+
+📝 **Use INCREMENTAL** khi:
+- User nói "Bắt đầu điền đơn vay" / "Mở form vay"
+  → GỌI start_incremental_form("loan")
+- User nói "Điền tên Hiếu Nghị"
+  → GỌI fill_single_field("customerName", "Hiếu Nghị")
+- User nói "Điền SĐT 0963023600"
+  → GỌI fill_single_field("phoneNumber", "0963023600")
+- User nói "Submit" / "Gửi form"
+  → GỌI submit_incremental_form()
 
 ⚠️ QUAN TRỌNG:
-- Bạn nhận TOÀN BỘ conversation history (multiple user messages)
-- User đã XÁC NHẬN thông tin qua Voice Agent
-- Message cuối cùng chứa "[CONFIRM_AND_EXECUTE]" = User đã đồng ý
+        - Bạn nhận TOÀN BỘ conversation history (multiple user messages)
+        - User đã XÁC NHẬN thông tin qua Voice Agent
+        - Message cuối cùng chứa "[CONFIRM_AND_EXECUTE]" = User đã đồng ý
 
-NHIỆM VỤ:
-1. Phân tích TOÀN BỘ conversation history
-2. Trích xuất thông tin từ TẤT CẢ user messages
-3. GỌI TOOL phù hợp với thông tin đã extract
-4. Dùng PLACEHOLDER cho fields vẫn còn thiếu
+        NHIỆM VỤ:
+        1. Phân tích TOÀN BỘ conversation history
+        2. Trích xuất thông tin từ TẤT CẢ user messages
+        3. GỌI TOOL phù hợp với thông tin đã extract
+        4. Dùng PLACEHOLDER cho fields vẫn còn thiếu
 
-PLACEHOLDER CHO FIELDS THIẾU:
-- customer_name: "Khách hàng" (nếu không có)
-- customer_id: "000000000000" (12 số 0)
-- phone_number: "0000000000" (10 số 0)
-- email: "temp@vpbank.com"
-- address: "Chưa cập nhật"
-- date_of_birth: "1990-01-01"
-- employment_status: "employed"
-- company_name: "Chưa cập nhật"
-- gender: "male"
-- monthly_income: 0
+        PLACEHOLDER CHO FIELDS THIẾU:
+        - customer_name: "Khách hàng" (nếu không có)
+        - customer_id: "000000000000" (12 số 0)
+        - phone_number: "0000000000" (10 số 0)
+        - email: "temp@vpbank.com"
+        - address: "Chưa cập nhật"
+        - date_of_birth: "1990-01-01"
+        - employment_status: "employed"
+        - company_name: "Chưa cập nhật"
+        - gender: "male"
+        - monthly_income: 0
 
-VÍ DỤ EXTRACTION:
+        VÍ DỤ EXTRACTION:
 
-Input conversation history:
-```
-user: Tôi muốn vay 50 triệu
-assistant: Cho tôi biết họ tên và CCCD?
-user: Tên Hiếu Nghị, CCCD 123456789012
-assistant: Số điện thoại và email?
-user: SĐT 0963023600, email abc@gmail.com
-assistant: Xác nhận: Hiếu Nghị, 50 triệu, 24 tháng. Đúng không?
-user: Đúng
-assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
-```
+        Input conversation history:
+        ```
+        user: Tôi muốn vay 50 triệu
+        assistant: Cho tôi biết họ tên và CCCD?
+        user: Tên Hiếu Nghị, CCCD 123456789012
+        assistant: Số điện thoại và email?
+        user: SĐT 0963023600, email abc@gmail.com
+        assistant: Xác nhận: Hiếu Nghị, 50 triệu, 24 tháng. Đúng không?
+        user: Đúng
+        assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
+        ```
 
-→ Extract từ TOÀN BỘ conversation:
-  - customer_name: "Hiếu Nghị" (từ message thứ 3)
-  - customer_id: "123456789012" (từ message thứ 3)
-  - phone_number: "0963023600" (từ message thứ 5)
-  - email: "abc@gmail.com" (từ message thứ 5)
-  - loan_amount: 50000000 (từ message thứ 1)
-  - loan_term: 24 (từ assistant confirmation)
+        → Extract từ TOÀN BỘ conversation:
+        - customer_name: "Hiếu Nghị" (từ message thứ 3)
+        - customer_id: "123456789012" (từ message thứ 3)
+        - phone_number: "0963023600" (từ message thứ 5)
+        - email: "abc@gmail.com" (từ message thứ 5)
+        - loan_amount: 50000000 (từ message thứ 1)
+        - loan_term: 24 (từ assistant confirmation)
 
-→ GỌI: fill_loan_form(
-    customer_name="Hiếu Nghị",
-    customer_id="123456789012",
-    phone_number="0963023600",
-    email="abc@gmail.com",
-    loan_amount=50000000,
-    loan_term=24,
-    address="Chưa cập nhật",  # Placeholder
-    ...
-)
+        → GỌI: fill_loan_form(
+            customer_name="Hiếu Nghị",
+            customer_id="123456789012",
+            phone_number="0963023600",
+            email="abc@gmail.com",
+            loan_amount=50000000,
+            loan_term=24,
+            address="Chưa cập nhật",  # Placeholder
+            ...
+        )
 
-🔍 EXTRACTION RULES (CRITICAL - Phân Biệt Rõ Ràng):
+        🔍 EXTRACTION RULES (CRITICAL - Phân Biệt Rõ Ràng):
 
-**Số Tiền Vay (loan_amount, monthlyIncome, collateralValue):**
-- Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương", "tài sản"
-- "50 triệu" → 50000000 (nhân 1,000,000)
-- "500 triệu" → 500000000
-- "1 tỷ" → 1000000000
-- "25 triệu/tháng" → monthly_income = 25000000
-- "460 nghìn" hoặc "460000" → 460000 (giữ nguyên nếu đã là số)
+        **Số Tiền Vay (loan_amount, monthlyIncome, collateralValue):**
+        - Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương", "tài sản"
+        - "50 triệu" → 50000000 (nhân 1,000,000)
+        - "500 triệu" → 500000000
+        - "1 tỷ" → 1000000000
+        - "25 triệu/tháng" → monthly_income = 25000000
+        - "460 nghìn" hoặc "460000" → 460000 (giữ nguyên nếu đã là số)
 
-**VALUE MAPPING (Vietnamese → English):**
+        **VALUE MAPPING (Vietnamese → English):**
 
-**loan_purpose:**
-- "mua nhà" / "nhà" → "home"
-- "kinh doanh" → "business"
-- "học tập" / "du học" → "education"
-- "mua xe" / "xe" → "vehicle"
-- "sửa nhà" → "renovation"
-- "tiêu dùng" / "cá nhân" → "personal"
-- Khác → "other"
+        **loan_purpose:**
+        - "mua nhà" / "nhà" → "home"
+        - "kinh doanh" → "business"
+        - "học tập" / "du học" → "education"
+        - "mua xe" / "xe" → "vehicle"
+        - "sửa nhà" → "renovation"
+        - "tiêu dùng" / "cá nhân" → "personal"
+        - Khác → "other"
 
-**gender:**
-- "nam" → "male"
-- "nữ" → "female"
-- "khác" → "other"
+        **gender:**
+        - "nam" → "male"
+        - "nữ" → "female"
+        - "khác" → "other"
 
-**employment_status:**
-- "đang làm việc" / "có việc" → "employed"
-- "tự kinh doanh" / "chủ doanh nghiệp" → "self-employed"
-- "chưa có việc" / "thất nghiệp" → "unemployed"
-- "nghỉ hưu" → "retired"
+        **employment_status:**
+        - "đang làm việc" / "có việc" → "employed"
+        - "tự kinh doanh" / "chủ doanh nghiệp" → "self-employed"
+        - "chưa có việc" / "thất nghiệp" → "unemployed"
+        - "nghỉ hưu" → "retired"
 
-**collateral_type:**
-- "bất động sản" / "nhà đất" → "real-estate"
-- "xe" / "ô tô" / "xe máy" → "vehicle"
-- "chứng khoán" / "cổ phiếu" → "securities"
-- "tiền gửi" / "tiết kiệm" → "deposit"
-- "không có" / "không" → "none"
+        **collateral_type:**
+        - "bất động sản" / "nhà đất" → "real-estate"
+        - "xe" / "ô tô" / "xe máy" → "vehicle"
+        - "chứng khoán" / "cổ phiếu" → "securities"
+        - "tiền gửi" / "tiết kiệm" → "deposit"
+        - "không có" / "không" → "none"
 
-**Số Điện Thoại (phone_number):**
-- Tìm từ khóa: "điện thoại", "SĐT", "phone", "gọi"
-- LUÔN 10 chữ số
-- LUÔN BẮT ĐẦU bằng 0
-- Ví dụ: "0963023600", "0901234567"
-- KHÔNG phải số tiền!
+        **Số Điện Thoại (phone_number):**
+        - Tìm từ khóa: "điện thoại", "SĐT", "phone", "gọi"
+        - LUÔN 10 chữ số
+        - LUÔN BẮT ĐẦU bằng 0
+        - Ví dụ: "0963023600", "0901234567"
+        - KHÔNG phải số tiền!
 
-**Số CCCD (customer_id):**
-- Tìm từ khóa: "CCCD", "CMND", "chứng minh"
-- LUÔN 12 chữ số
-- Ví dụ: "123456789012"
-- KHÔNG bắt đầu bằng 0
+        **Số CCCD (customer_id):**
+        - Tìm từ khóa: "CCCD", "CMND", "chứng minh"
+        - LUÔN 12 chữ số
+        - Ví dụ: "123456789012"
+        - KHÔNG bắt đầu bằng 0
 
-**Ngày Sinh (date_of_birth):**
-- Tìm từ khóa: "sinh", "ngày sinh", "date of birth"
-- Format input: "15 tháng 3 năm 2005" hoặc "15/03/2005"
-- Convert to: "2005-03-15" (YYYY-MM-DD)
+        **Ngày Sinh (date_of_birth):**
+        - Tìm từ khóa: "sinh", "ngày sinh", "date of birth"
+        - Format input: "15 tháng 3 năm 2005" hoặc "15/03/2005"
+        - Convert to: "2005-03-15" (YYYY-MM-DD)
 
-**Kỳ Hạn (loan_term):**
-- Tìm từ khóa: "kỳ hạn", "thời hạn", "tháng"
-- "24 tháng" → 24
-- Allowed values: 6, 12, 18, 24, 36, 48, 60
+        **Kỳ Hạn (loan_term):**
+        - Tìm từ khóa: "kỳ hạn", "thời hạn", "tháng"
+        - "24 tháng" → 24
+        - Allowed values: 6, 12, 18, 24, 36, 48, 60
 
-**Họ Tên (customer_name):**
-- Tìm từ khóa: "tên", "họ tên", "tên là"
-- Ví dụ: "Nguyễn Văn An", "Hiếu Nghị"
+        **Họ Tên (customer_name):**
+        - Tìm từ khóa: "tên", "họ tên", "tên là"
+        - Ví dụ: "Nguyễn Văn An", "Hiếu Nghị"
 
-⚠️ ĐẶC BIỆT LƯU Ý:
-- PHÂN BIỆT RÕ: Số điện thoại (10 số, bắt đầu 0) ≠ Số tiền (lớn hơn nhiều)
-- "0963023600" = phone_number (10 digits, starts with 0)
-- "50000000" = loan_amount (8 digits, no leading 0)
-- KHÔNG NHẦM LẪN giữa 2 loại số này!
+        ⚠️ ĐẶC BIỆT LƯU Ý:
+        - PHÂN BIỆT RÕ: Số điện thoại (10 số, bắt đầu 0) ≠ Số tiền (lớn hơn nhiều)
+        - "0963023600" = phone_number (10 digits, starts with 0)
+        - "50000000" = loan_amount (8 digits, no leading 0)
+        - KHÔNG NHẦM LẪN giữa 2 loại số này!
 
-✅ LUÔN GỌI TOOL với thông tin đã extract!
+        ✅ LUÔN GỌI TOOL với thông tin đã extract!
 """
     
     # Create supervisor agent with react pattern

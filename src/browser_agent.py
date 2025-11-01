@@ -5,7 +5,7 @@ Sử dụng browser-use với 2 modes:
 2. Incremental: Điền từng field qua voice commands liên tục (NEW!)
 """
 import asyncio
-from browser_use import Agent
+from browser_use import Agent, Browser
 from langchain_aws import ChatBedrockConverse
 from loguru import logger
 import os
@@ -265,13 +265,19 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             if self.active_session:
                 await self.end_session()
             
-            # Create browser instance and navigate to form
+            # Create persistent browser session (theo documentation chính thức)
+            # https://docs.browser-use.com/examples/templates/follow-up-tasks
+            self.browser = Browser(keep_alive=True)
+            await self.browser.start()
+            logger.info(f"✅ Browser started (persistent mode)")
+            
+            # Create agent với browser_session để giữ browser mở
             llm = self._get_llm()
             task = f"Navigate to {form_url} and wait for the form to load completely. Do NOT fill anything yet, just wait."
             
-            # Create agent - it will create and manage its own browser
             self.incremental_agent = Agent(
                 task=task,
+                browser_session=self.browser,  # ← Đúng parameter name theo docs
                 llm=llm,
                 use_vision=True,
                 max_failures=5,
@@ -280,10 +286,6 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             
             # Run initial navigation
             await self.incremental_agent.run(max_steps=3)
-            
-            # Get browser from agent (if accessible)
-            # Note: browser-use doesn't expose browser directly, so we'll reuse the agent
-            self.browser = getattr(self.incremental_agent, 'browser', None)
             logger.info(f"✅ Form loaded at {form_url}")
             
             # Create session
@@ -432,13 +434,13 @@ Submit the form:
         try:
             logger.info("🔒 Closing browser session...")
             
-            # Close agent (which will close its browser)
-            if self.incremental_agent:
-                # Agent manages browser internally, so we just reset references
-                self.incremental_agent = None
+            # Kill browser session (theo documentation)
+            if self.browser:
+                await self.browser.kill()
+                self.browser = None
             
-            # Reset session state
-            self.browser = None
+            # Reset agent and session state
+            self.incremental_agent = None
             self.active_session = None
             
             logger.info("✅ Session ended, browser closed")

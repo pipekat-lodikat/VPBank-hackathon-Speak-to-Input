@@ -27,12 +27,10 @@ class BrowserAgentHandler:
         # One-shot mode (legacy)
         self.agent = None
         
-        # Incremental mode (NEW!)
-        self.browser = None  # Persistent Browser instance
-        self.incremental_agent = None  # Persistent Agent for session
-        self.active_session = None  # Current session info
+        # Incremental mode - Session management per session_id
+        self.sessions: dict[str, dict] = {}  # session_id -> {browser, agent, session_data}
         
-        logger.info("🌐 BrowserAgentHandler initialized (supports one-shot & incremental)")
+        logger.info("🌐 BrowserAgentHandler initialized (supports one-shot & incremental with session management)")
     
     def _get_llm(self):
         """Lazy load LLM"""
@@ -246,7 +244,7 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
     # INCREMENTAL MODE METHODS (NEW!)
     # ============================================
     
-    async def start_form_session(self, form_url: str, form_type: str) -> dict:
+    async def start_form_session(self, form_url: str, form_type: str, session_id: str = "default") -> dict:
         """
         Bắt đầu session điền form incremental
         Mở browser và navigate to form, giữ browser mở
@@ -254,32 +252,42 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
         Args:
             form_url: URL của form
             form_type: Loại form (loan/crm/hr/compliance/operations)
+            session_id: Session ID để quản lý multiple sessions
             
         Returns:
             Session info
         """
         try:
-            logger.info(f"🚀 Starting INCREMENTAL form session: {form_type}")
+            logger.info(f"🚀 Starting INCREMENTAL form session: {form_type} (session_id: {session_id})")
             
-            # Close any existing session
-            if self.active_session:
-                await self.end_session()
+            # REUSE session nếu đã có cho session_id này
+            if session_id in self.sessions:
+                existing_session = self.sessions[session_id]
+                if existing_session.get("browser") and existing_session.get("agent"):
+                    logger.info(f"♻️  Reusing existing session for {session_id}")
+                    return {
+                        "success": True,
+                        "message": f"Đã có session cho {form_type}. Tiếp tục điền field.",
+                        "session": existing_session["session_data"]
+                    }
             
-            # Create persistent browser session (theo documentation chính thức)
-            # https://docs.browser-use.com/examples/templates/follow-up-tasks
-            # Note: browser-use 0.1.40 uses BrowserConfig with _force_keep_browser_alive
+            # Close session cũ nếu có (same session_id)
+            if session_id in self.sessions:
+                await self._close_session(session_id)
+            
+            # Create persistent browser session
             browser_config = BrowserConfig(_force_keep_browser_alive=True)
-            self.browser = Browser(config=browser_config)
-            await self.browser.start()
-            logger.info(f"✅ Browser started (persistent mode)")
+            browser = Browser(config=browser_config)
+            await browser.start()
+            logger.info(f"✅ Browser started (persistent mode) for session {session_id}")
             
             # Create agent với browser_session để giữ browser mở
             llm = self._get_llm()
             task = f"Navigate to {form_url} and wait for the form to load completely. Do NOT fill anything yet, just wait."
             
-            self.incremental_agent = Agent(
+            incremental_agent = Agent(
                 task=task,
-                browser_session=self.browser,  # ← Đúng parameter name theo docs
+                browser_session=browser,
                 llm=llm,
                 use_vision=True,
                 max_failures=5,
@@ -287,46 +295,70 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             )
             
             # Run initial navigation
-            await self.incremental_agent.run(max_steps=3)
-            logger.info(f"✅ Form loaded at {form_url}")
+            await incremental_agent.run(max_steps=3)
+            logger.info(f"✅ Form loaded at {form_url} for session {session_id}")
             
-            # Create session
-            self.active_session = {
+            # Create session data
+            session_data = {
                 "url": form_url,
                 "type": form_type,
                 "fields_filled": [],
-                "start_time": asyncio.get_event_loop().time()
+                "start_time": asyncio.get_event_loop().time(),
+                "session_id": session_id
+            }
+            
+            # Store session
+            self.sessions[session_id] = {
+                "browser": browser,
+                "agent": incremental_agent,
+                "session_data": session_data
             }
             
             return {
                 "success": True,
                 "message": f"Đã mở form {form_type}. Bạn có thể bắt đầu điền từng field.",
-                "session": self.active_session
+                "session": session_data
             }
             
         except Exception as e:
             logger.error(f"❌ Error starting session: {e}")
             return {"success": False, "error": str(e)}
     
-    async def fill_field_incremental(self, field_name: str, value: str) -> dict:
+    async def fill_field_incremental(self, field_name: str, value: str, session_id: str = "default") -> dict:
         """
-        Điền 1 field cụ thể trong session đang active
+        Điền 1 field cụ thể trong session
         
         Args:
             field_name: Tên field (HTML name attribute)
             value: Giá trị cần điền
+            session_id: Session ID để lấy đúng session
             
         Returns:
             Result dict
         """
         try:
-            if not self.active_session:
+            # Get session
+            if session_id not in self.sessions:
                 return {
                     "success": False,
-                    "error": "No active session. Call start_form_session() first."
+                    "error": f"No active session for {session_id}. Call start_form_session() first."
                 }
             
-            logger.info(f"📝 Filling field incrementally: {field_name} = {value}")
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
+            
+            # Check if field already filled (avoid duplicate)
+            already_filled = any(f["field"] == field_name for f in session_data["fields_filled"])
+            if already_filled:
+                logger.info(f"⚠️  Field {field_name} already filled, updating value...")
+                # Update existing value
+                for f in session_data["fields_filled"]:
+                    if f["field"] == field_name:
+                        f["value"] = value
+                        break
+            
+            logger.info(f"📝 Filling field incrementally: {field_name} = {value} (session: {session_id})")
             
             # Create task for this specific field
             task = f"""
@@ -335,32 +367,34 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
                 Instructions:
                 1. Find the input/select/textarea element with name="{field_name}"
                 2. Click on it
-                3. Fill with value: {value}
-                4. Tab away or click outside to confirm
-                5. Do NOT fill any other fields
-                6. Do NOT click submit
+                3. Clear existing value if any
+                4. Fill with value: {value}
+                5. Tab away or click outside to confirm
+                6. Do NOT fill any other fields
+                7. Do NOT click submit
 
                 IMPORTANT: Only fill this ONE field, nothing else!
                 """
             
             # Add task to existing agent
-            self.incremental_agent.add_new_task(task)
-            await self.incremental_agent.run(max_steps=5)
+            agent.add_new_task(task)
+            await agent.run(max_steps=5)
             
-            # Track filled field
-            self.active_session["fields_filled"].append({
-                "field": field_name,
-                "value": value
-            })
+            # Track filled field (only if not already tracked)
+            if not already_filled:
+                session_data["fields_filled"].append({
+                    "field": field_name,
+                    "value": value
+                })
             
             logger.info(f"✅ Field {field_name} filled successfully")
-            logger.info(f"📊 Progress: {len(self.active_session['fields_filled'])} fields filled")
+            logger.info(f"📊 Progress: {len(session_data['fields_filled'])} fields filled")
             
             return {
                 "success": True,
                 "field": field_name,
                 "value": value,
-                "fields_filled": len(self.active_session['fields_filled']),
+                "fields_filled": len(session_data['fields_filled']),
                 "message": f"Đã điền {field_name}"
             }
             
@@ -368,23 +402,30 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             logger.error(f"❌ Error filling field {field_name}: {e}")
             return {"success": False, "error": str(e)}
     
-    async def submit_form_incremental(self) -> dict:
+    async def submit_form_incremental(self, session_id: str = "default") -> dict:
         """
-        Submit form trong session incremental
+        Submit form trong session incremental và đóng browser sau khi xong
         
+        Args:
+            session_id: Session ID để lấy đúng session
+            
         Returns:
             Result dict
         """
         try:
-            if not self.active_session:
+            if session_id not in self.sessions:
                 return {
                     "success": False,
-                    "error": "No active session to submit"
+                    "error": f"No active session for {session_id} to submit"
                 }
             
-            logger.info(f"🚀 Submitting form in incremental mode...")
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
             
-            form_type = self.active_session["type"]
+            logger.info(f"🚀 Submitting form in incremental mode... (session: {session_id})")
+            
+            form_type = session_data["type"]
             submit_buttons = {
                 "loan": "Gửi Đơn",
                 "crm": "Cập Nhật CRM",
@@ -405,23 +446,24 @@ Submit the form:
 7. Confirm submission completed
 """
             
-            self.incremental_agent.add_new_task(task)
-            await self.incremental_agent.run()
+            agent.add_new_task(task)
+            await agent.run()
             
             logger.info(f"✅ Form submitted successfully!")
             
             # Wait for confirmation
             await asyncio.sleep(3)
             
-            # End session
+            # Get result before closing
             result = {
                 "success": True,
-                "form_type": self.active_session["type"],
-                "fields_filled": len(self.active_session["fields_filled"]),
+                "form_type": session_data["type"],
+                "fields_filled": len(session_data["fields_filled"]),
                 "message": "Form đã được submit thành công"
             }
             
-            await self.end_session()
+            # Close session after submit
+            await self._close_session(session_id)
             
             return result
             
@@ -429,29 +471,41 @@ Submit the form:
             logger.error(f"❌ Error submitting form: {e}")
             return {"success": False, "error": str(e)}
     
-    async def end_session(self):
+    async def _close_session(self, session_id: str):
         """
-        Kết thúc session và đóng browser
+        Đóng browser session cho session_id cụ thể
         """
         try:
-            logger.info("🔒 Closing browser session...")
+            if session_id not in self.sessions:
+                return
             
-            # Kill browser session (theo documentation)
-            if self.browser:
-                await self.browser.kill()
-                self.browser = None
+            logger.info(f"🔒 Closing browser session for {session_id}...")
             
-            # Reset agent and session state
-            self.incremental_agent = None
-            self.active_session = None
+            session = self.sessions[session_id]
+            browser = session.get("browser")
             
-            logger.info("✅ Session ended, browser closed")
+            # Kill browser session
+            if browser:
+                try:
+                    await browser.kill()
+                except Exception as e:
+                    logger.warning(f"Error killing browser: {e}")
+            
+            # Remove session
+            del self.sessions[session_id]
+            
+            logger.info(f"✅ Session {session_id} ended, browser closed")
         except Exception as e:
-            logger.warning(f"Error closing browser: {e}")
-            # Reset anyway
-            self.browser = None
-            self.incremental_agent = None
-            self.active_session = None
+            logger.warning(f"Error closing session {session_id}: {e}")
+            # Remove anyway
+            if session_id in self.sessions:
+                del self.sessions[session_id]
+    
+    async def end_session(self, session_id: str = "default"):
+        """
+        Public method để đóng session (wrapper cho _close_session)
+        """
+        await self._close_session(session_id)
 
 
 # Global instance

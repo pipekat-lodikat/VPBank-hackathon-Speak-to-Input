@@ -24,10 +24,19 @@ from src.browser_agent import browser_agent
 # INCREMENTAL MODE TOOLS (NEW!)
 # ============================================
 
+# Store current session_id from state (accessed via closure)
+_current_session_id = "default"
+
+def set_session_id(session_id: str):
+    """Set current session_id for tools"""
+    global _current_session_id
+    _current_session_id = session_id
+
 @tool
 async def start_incremental_form(form_type: str) -> str:
     """
     Bắt đầu session điền form incremental - Mở browser và giữ mở.
+    Reuses existing session if available for this session_id.
     
     Args:
         form_type: Loại form (loan/crm/hr/compliance/operations)
@@ -36,23 +45,24 @@ async def start_incremental_form(form_type: str) -> str:
         Kết quả mở form
     """
     import os
+    global _current_session_id
     
     # Get form URL
     urls = {
-        "loan": os.getenv("LOAN_FORM_URL", "http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com"),
-        "crm": os.getenv("CRM_FORM_URL", "http://use-case-2-crm-update.s3-website-us-west-2.amazonaws.com"),
-        "hr": os.getenv("HR_FORM_URL", "http://use-case-3-hr-workflow.s3-website-us-west-2.amazonaws.com"),
-        "compliance": os.getenv("COMPLIANCE_FORM_URL", "http://use-case-4-compliance-reporting.s3-website-us-west-2.amazonaws.com"),
-        "operations": os.getenv("OPERATIONS_FORM_URL", "http://use-case-5-operations-validation.s3-website-us-west-2.amazonaws.com")
+        "loan": os.getenv("LOAN_FORM_URL", "http://host-form123.s3-website-us-west-2.amazonaws.com"),
+        "crm": os.getenv("CRM_FORM_URL", "http://hostform-2.s3-website-us-west-2.amazonaws.com"),
+        "hr": os.getenv("HR_FORM_URL", "http://hostform-3.s3-website-us-west-2.amazonaws.com"),
+        "compliance": os.getenv("COMPLIANCE_FORM_URL", "http://hostform-4.s3-website-us-west-2.amazonaws.com"),
+        "operations": os.getenv("OPERATIONS_FORM_URL", "http://hostform-5.s3-website-us-west-2.amazonaws.com")
     }
     
     form_url = urls.get(form_type)
     if not form_url:
         return f"❌ Invalid form type: {form_type}"
     
-    logger.info(f"🚀 Starting incremental form: {form_type}")
+    logger.info(f"🚀 Starting incremental form: {form_type} (session_id: {_current_session_id})")
     
-    result = await browser_agent.start_form_session(form_url, form_type)
+    result = await browser_agent.start_form_session(form_url, form_type, _current_session_id)
     
     if result.get("success"):
         return f"✅ Đã mở form {form_type}. Bạn có thể bắt đầu điền từng field bằng cách nói: 'Điền tên là X', 'Điền SĐT là Y'..."
@@ -64,6 +74,7 @@ async def start_incremental_form(form_type: str) -> str:
 async def fill_single_field(field_name: str, field_value: str) -> str:
     """
     Điền 1 field cụ thể trong form đang mở (incremental mode).
+    Reuses existing session for this session_id.
     
     Args:
         field_name: Tên field HTML (customerName, phoneNumber, email, loanAmount, etc.)
@@ -73,29 +84,27 @@ async def fill_single_field(field_name: str, field_value: str) -> str:
         Kết quả điền field
     """
     import os
-    logger.info(f"📝 Incremental fill: {field_name} = {field_value}")
+    global _current_session_id
+    logger.info(f"📝 Incremental fill: {field_name} = {field_value} (session_id: {_current_session_id})")
     
-    # AUTO-START SESSION nếu chưa có active session
-    if not browser_agent.active_session:
-        logger.info(f"⚠️  No active session, auto-starting session...")
+    # AUTO-START SESSION nếu chưa có active session cho session_id này
+    if _current_session_id not in browser_agent.sessions:
+        logger.info(f"⚠️  No active session for {_current_session_id}, auto-starting session...")
         
         # Detect form type từ field_name hoặc context
         form_type = "loan"  # Default
         
-        # Try to detect from context (có thể improve sau)
-        # For now, assume loan form if not specified
-        
         # Auto-start session
-        form_url = os.getenv("LOAN_FORM_URL", "http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com")
-        start_result = await browser_agent.start_form_session(form_url, form_type)
+        form_url = os.getenv("LOAN_FORM_URL", "http://host-form123.s3-website-us-west-2.amazonaws.com")
+        start_result = await browser_agent.start_form_session(form_url, form_type, _current_session_id)
         
         if not start_result.get("success"):
             return f"❌ Không thể mở form: {start_result.get('error')}. Vui lòng thử lại."
         
-        logger.info(f"✅ Auto-started session for {form_type} form")
+        logger.info(f"✅ Auto-started session for {form_type} form (session_id: {_current_session_id})")
     
     # Now fill the field
-    result = await browser_agent.fill_field_incremental(field_name, field_value)
+    result = await browser_agent.fill_field_incremental(field_name, field_value, _current_session_id)
     
     if result.get("success"):
         fields_count = result.get("fields_filled", 0)
@@ -107,18 +116,19 @@ async def fill_single_field(field_name: str, field_value: str) -> str:
 @tool
 async def submit_incremental_form() -> str:
     """
-    Submit form đang được điền incremental.
+    Submit form đang được điền incremental và đóng browser sau khi xong.
     
     Returns:
         Kết quả submit
     """
-    logger.info(f"🚀 Submitting incremental form...")
+    global _current_session_id
+    logger.info(f"🚀 Submitting incremental form... (session_id: {_current_session_id})")
     
-    result = await browser_agent.submit_form_incremental()
+    result = await browser_agent.submit_form_incremental(_current_session_id)
     
     if result.get("success"):
         fields_count = result.get("fields_filled", 0)
-        return f"✅ Form đã được submit thành công! Đã điền {fields_count} fields."
+        return f"✅ Form đã được submit thành công! Đã điền {fields_count} fields. Browser đã đóng."
     else:
         return f"❌ Lỗi submit form: {result.get('error')}"
 
@@ -990,10 +1000,20 @@ LUÔN LUÔN:
     # Build Graph
     # ============================================
     
+    async def supervisor_with_session_id(state: MultiAgentState):
+        """Supervisor node với session_id setup"""
+        # Set session_id từ state vào global variable cho tools
+        session_id = state.get("task_id") or state.get("metadata", {}).get("session_id", "default")
+        set_session_id(session_id)
+        logger.debug(f"🔑 Set session_id for tools: {session_id}")
+        
+        # Call supervisor agent
+        return await supervisor_agent.ainvoke(state)
+    
     workflow = StateGraph(MultiAgentState)
     
-    # Add supervisor node
-    workflow.add_node("supervisor", supervisor_agent)
+    # Add supervisor node với session_id setup
+    workflow.add_node("supervisor", supervisor_with_session_id)
     
     # Set entry point
     workflow.add_edge(START, "supervisor")

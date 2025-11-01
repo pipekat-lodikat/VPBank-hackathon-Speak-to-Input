@@ -5,7 +5,7 @@ Sử dụng browser-use với 2 modes:
 2. Incremental: Điền từng field qua voice commands liên tục (NEW!)
 """
 import asyncio
-from browser_use import Agent, Browser
+from browser_use import Agent, Browser, BrowserConfig
 from langchain_aws import ChatBedrockConverse
 from loguru import logger
 import os
@@ -267,7 +267,9 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             
             # Create persistent browser session (theo documentation chính thức)
             # https://docs.browser-use.com/examples/templates/follow-up-tasks
-            self.browser = Browser(keep_alive=True)
+            # Note: browser-use 0.1.40 uses BrowserConfig with _force_keep_browser_alive
+            browser_config = BrowserConfig(_force_keep_browser_alive=True)
+            self.browser = Browser(config=browser_config)
             await self.browser.start()
             logger.info(f"✅ Browser started (persistent mode)")
             

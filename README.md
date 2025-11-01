@@ -1,54 +1,140 @@
-## 📊 VPBank Multi-Agent Voice Bot - Hệ Thống Hoàn Chỉnh
+# VPBank Voice Agent
 
-**Status:** ✅ PRODUCTION READY (Updated: Oct 29, 2025)
+A production-ready voice-powered form automation system for banking operations. This system enables users to fill banking forms using natural Vietnamese speech through a multi-agent architecture.
 
-Hệ thống voice bot tự động điền form ngân hàng qua giọng nói tiếng Việt với **Multi-Agent Architecture**.
+## Overview
 
-### 🎯 Tính Năng Chính
+VPBank Voice Agent is a microservices-based system that combines speech recognition, natural language understanding, and browser automation to automate form filling for five banking use cases:
 
-- ✅ **5 Use Cases**: Loan, CRM, HR, Compliance, Operations
-- ✅ **Multi-Agent System**: Supervisor + 5 Specialist Tools (LangGraph)
-- ✅ **Voice Pipeline**: AWS Transcribe (STT) + AWS Bedrock (LLM) + OpenAI (TTS)
-- ✅ **Browser Automation**: browser-use + Playwright tự động điền form
-- ✅ **Real-time**: WebRTC audio + WebSocket transcript streaming
-- ✅ **Async Processing**: Task queue + background worker
+- Loan Origination & KYC
+- CRM Updates
+- HR Workflows
+- Compliance Reporting
+- Operations Validation
 
----
+### Architecture
 
-## 🚀 Quick Start (10 phút)
+The system follows a microservices architecture with three independent services:
 
-### Yêu cầu hệ thống
+1. **Voice Bot Service** (Port 7860): Handles WebRTC audio streaming, speech-to-text, text-to-speech, and conversational AI
+2. **Task Queue Service** (Port 7862): HTTP REST API for managing tasks between services
+3. **Browser Worker Service**: Background service that executes multi-agent workflows and browser automation
 
-- **Python**: 3.11.x (BẮT BUỘC - không dùng 3.12 hay 3.13!)
-- **Node.js**: 18.x trở lên
-- **OS**: Windows 10+, macOS, hoặc Linux
+Communication between services is handled via HTTP REST API through the Task Queue Service.
 
-### 0. Thiết lập AWS IAM và OpenAI API Keys (Bắt buộc)
+## Prerequisites
 
-Trước khi cài đặt project, bạn cần chuẩn bị credentials cho AWS và OpenAI.
+### System Requirements
 
-#### 0.1. AWS IAM User Setup
+- **Python**: 3.11.x (required, not 3.12 or 3.13)
+- **Operating System**: Windows 10+, macOS, or Linux
+- **Rust**: Required for building some Python dependencies
 
-**Bước 1: Tạo IAM User**
+### Required Credentials
 
-1. Đăng nhập vào [AWS Console](https://console.aws.amazon.com/)
-2. Vào **IAM** → **Users** → **Create user**
-3. Đặt tên user (ví dụ: `vpbank-voice-agent`)
-4. Chọn **Attach policies directly**
-5. Attach các policies sau:
+Before installation, ensure you have:
+
+1. **AWS Account** with IAM user credentials:
+   - Access to AWS Transcribe (Speech-to-Text)
+   - Access to AWS Bedrock with Claude Sonnet 4 model enabled
+   - Required permissions documented below
+
+2. **OpenAI API Key**:
+   - Account with billing enabled
+   - API key with model access permissions
+
+## Installation
+
+### Step 1: Clone Repository
+
+```bash
+git clone <repository-url>
+cd VPBankHackathon
+```
+
+### Step 2: Set Up Python Environment
+
+```bash
+# Create virtual environment
+python3.11 -m venv venv
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Step 3: Install Rust (if not already installed)
+
+Some Python dependencies require Rust to compile.
+
+**Windows:**
+```powershell
+winget install Rustlang.Rustup
+```
+
+**Linux/macOS:**
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
+
+### Step 4: Install Playwright Browsers
+
+```bash
+playwright install chromium
+playwright install-deps chromium  # Linux only
+```
+
+### Step 5: Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and provide the following variables:
+
+```env
+# AWS Credentials
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=us-east-1
+
+# AWS Bedrock Model ID
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+
+# OpenAI API Key
+OPENAI_API_KEY=your_openai_api_key
+
+# Task Queue Service URL (for microservices mode)
+TASK_QUEUE_SERVICE_URL=http://localhost:7862
+
+# Form URLs (optional, defaults provided)
+LOAN_FORM_URL=http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com
+CRM_FORM_URL=http://use-case-2-crm-update.s3-website-us-west-2.amazonaws.com
+HR_FORM_URL=http://use-case-3-hr-workflow.s3-website-us-west-2.amazonaws.com
+COMPLIANCE_FORM_URL=http://use-case-4-compliance-reporting.s3-website-us-west-2.amazonaws.com
+OPERATIONS_FORM_URL=http://use-case-5-operations-validation.s3-website-us-west-2.amazonaws.com
+```
+
+### Step 6: AWS IAM Setup
+
+Create an IAM user with the following permissions:
 
 **Required Policies:**
-```
-- AmazonTranscribeFullAccess       (cho Speech-to-Text)
-- AmazonBedrockFullAccess          (cho Claude LLM)
-```
+- `AmazonTranscribeFullAccess` (for Speech-to-Text)
+- `AmazonBedrockFullAccess` (for Claude LLM)
 
-**Tùy chọn 1: Sử dụng AWS Managed Policies (Khuyến nghị cho development)**
-- Tìm và attach 2 policies trên từ danh sách
-
-**Tùy chọn 2: Tạo Custom Policy (Khuyến nghị cho production - Least Privilege)**
-
-Vào **IAM** → **Policies** → **Create policy** → Tab **JSON**, paste:
+**Or create a custom policy with least privilege:**
 
 ```json
 {
@@ -79,494 +165,269 @@ Vào **IAM** → **Policies** → **Create policy** → Tab **JSON**, paste:
 }
 ```
 
-Đặt tên policy: `VPBankVoiceAgentPolicy` → **Create policy** → Attach vào user
+**Enable Bedrock Model Access:**
+1. Go to [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
+2. Select region: US East (N. Virginia) - us-east-1
+3. Navigate to Model access
+4. Enable: Anthropic Claude Sonnet 4
 
-**Bước 2: Tạo Access Keys**
+### Step 7: OpenAI Setup
 
-1. Vào **IAM** → **Users** → Chọn user vừa tạo
-2. Tab **Security credentials** → **Create access key**
-3. Chọn use case: **Application running outside AWS**
-4. Nhấn **Next** → (Optional) Thêm description tag → **Create access key**
-5. **Quan trọng**: Lưu lại ngay:
-   - **Access key ID**: `AKIAXXXXXXXXXXXXXXXX`
-   - **Secret access key**: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
-   
-   ⚠️ **Cảnh báo**: Secret key chỉ hiển thị 1 lần duy nhất! Download `.csv` file để backup.
+1. Create account at [OpenAI Platform](https://platform.openai.com/)
+2. Add payment method and credits
+3. Create API key from [API Keys](https://platform.openai.com/api-keys)
+4. Set usage limits (recommended for production)
 
-**Bước 3: Kích hoạt AWS Bedrock (Nếu chưa có)**
+## Running the Application
 
-1. Vào [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
-2. Chọn region **US East (N. Virginia) - us-east-1**
-3. Vào **Model access** (menu bên trái)
-4. Nhấn **Manage model access** hoặc **Enable specific models**
-5. Chọn các models:
-   - ✅ **Anthropic Claude 3.5 Sonnet**
-   - ✅ **Anthropic Claude Sonnet 4** (us.anthropic.claude-sonnet-4-20250514-v1:0)
-6. Nhấn **Request model access** → Đợi vài phút để AWS approve (thường instant)
-7. Kiểm tra status: **Access granted** (màu xanh)
+### Option 1: Monolithic Mode (Single Process)
 
-**Lưu ý quan trọng:**
-- Bedrock chỉ available ở một số regions: `us-east-1`, `us-west-2`, `ap-southeast-2`
-- Project này dùng `us-east-1` (mặc định trong `.env`)
-- Nếu chọn region khác, nhớ update `AWS_REGION` trong file `.env`
-
-#### 0.2. OpenAI API Key Setup
-
-**Bước 1: Tạo OpenAI Account**
-
-1. Truy cập [OpenAI Platform](https://platform.openai.com/)
-2. Sign up nếu chưa có account (hỗ trợ login bằng Google/Microsoft)
-3. Verify email
-
-**Bước 2: Nạp credits (Bắt buộc)**
-
-1. Vào [Billing Settings](https://platform.openai.com/account/billing/overview)
-2. Nhấn **Add payment method** → Thêm thẻ tín dụng/debit card
-3. Chọn **Add to credit balance** → Nạp tối thiểu **$5 USD**
-   - Khuyến nghị: Nạp $20-50 cho development/testing
-   - Giá TTS: ~$15/1M characters (rất rẻ)
-   - Giá Browser-Use (dùng GPT-4): ~$0.01-0.03 per task
-
-**Bước 3: Tạo API Key**
-
-1. Vào [API Keys](https://platform.openai.com/api-keys)
-2. Nhấn **Create new secret key**
-3. Đặt tên: `VPBank Voice Agent` (để dễ quản lý)
-4. Chọn permissions:
-   - **Restricted** (khuyến nghị): Chỉ enable **Model capabilities**
-   - Hoặc **All** (cho đơn giản, nhưng ít secure hơn)
-5. Nhấn **Create secret key**
-6. **Copy ngay key**: `sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
-   
-   ⚠️ **Cảnh báo**: API key chỉ hiển thị 1 lần duy nhất!
-
-**Bước 4: Set Usage Limits (Khuyến nghị)**
-
-1. Vào [Usage Limits](https://platform.openai.com/account/limits)
-2. Set **Monthly budget** để tránh vượt chi phí:
-   - Development: $10-20/month
-   - Production: Tùy nhu cầu
-3. Enable **Email notifications** khi đạt 75%, 90%, 100% budget
-
-**Chi phí ước tính cho project:**
-- **TTS (Text-to-Speech)**: $15/1M characters
-  - 1 cuộc hội thoại ~500 characters → $0.0075
-  - 100 cuộc hội thoại/ngày → $0.75/ngày = $22.5/tháng
-- **Browser-Use Agent**: $0.01-0.03/task
-  - 100 tasks/ngày → $1-3/ngày = $30-90/tháng
-- **Tổng ước tính**: ~$50-120/tháng cho moderate usage
-
-#### 0.3. Lưu Credentials an toàn
-
-**Tuyệt đối KHÔNG:**
-- ❌ Commit file `.env` lên Git/GitHub
-- ❌ Share credentials qua email/chat
-- ❌ Screenshot có chứa keys
-- ❌ Hard-code keys vào source code
-
-**Khuyến nghị:**
-- ✅ Lưu keys trong password manager (1Password, Bitwarden)
-- ✅ Sử dụng file `.env` (đã có trong `.gitignore`)
-- ✅ Rotate keys định kỳ (3-6 tháng)
-- ✅ Xóa keys cũ sau khi tạo keys mới
-- ✅ Enable MFA cho AWS và OpenAI accounts
-
-**Kiểm tra file `.gitignore` có chứa:**
-```gitignore
-.env
-.env.local
-.env.*.local
-```
-
----
-
-### 1. Cài đặt WSL2 (Chỉ dành cho Windows)
-
-**Lý do**: Pipecat AI framework và các dependencies không hỗ trợ Windows native. Bắt buộc phải dùng WSL2.
-
-#### Bước 1.1: Bật WSL2
-```powershell
-# Mở PowerShell với quyền Administrator và chạy:
-wsl --install
-```
-
-#### Bước 1.2: Khởi động lại máy tính
-
-#### Bước 1.3: Thiết lập Ubuntu
-```bash
-# WSL sẽ tự động cài Ubuntu. Sau khi khởi động lại, mở Ubuntu từ Start Menu
-# Tạo username và password khi được yêu cầu
-```
-
-#### Bước 1.4: Cập nhật packages trong WSL
-```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-#### Bước 1.5: Cài đặt Python 3.10+ trong WSL
-```bash
-# Kiểm tra version Python
-python3 --version
-
-# Nếu chưa có Python 3.10+, cài đặt:
-sudo apt install python3.10 python3.10-venv python3-pip -y
-```
-
-#### Bước 1.6: Cài đặt Node.js trong WSL (cho frontend)
-```bash
-# Cài đặt nvm (Node Version Manager)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-
-# Restart terminal hoặc chạy:
-source ~/.bashrc
-
-# Cài đặt Node.js
-nvm install 18
-nvm use 18
-node --version  # Kiểm tra version
-```
-
-### 2. Clone dự án
+Run all services in a single process:
 
 ```bash
-# Trong WSL (Windows) hoặc Terminal (macOS/Linux)
-cd ~
-git clone https://github.com/minhnghia2k3/Speak_To_Input.git
-cd Speak_To_Input
-```
-
-### 3. Cấu hình Backend (Python)
-
-#### Bước 3.1: Tạo virtual environment
-```bash
-python3 -m venv venv
-source venv/bin/activate  # Kích hoạt virtual environment
-```
-
-#### Bước 3.2: Cài đặt dependencies
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-**⚠️ LƯU Ý:** Nếu gặp lỗi **build from source** (orjson, msgpack, etc.) do thiếu Rust compiler:
-
-**Windows:**
-```powershell
-# Download và cài Rust từ https://rustup.rs/
-# Hoặc dùng winget:
-winget install Rustlang.Rustup
-
-# Restart terminal và thử lại
-pip install -r requirements.txt
-```
-
-**Linux/WSL:**
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-pip install -r requirements.txt
-```
-
-**HOẶC** đơn giản hơn: **Dùng Python 3.11** (có pre-built wheels cho tất cả packages)!
-
-#### Bước 3.3: Cài đặt Playwright browsers
-```bash
-# Cài đặt Chromium cho browser automation
-playwright install chromium
-
-# Linux/WSL: Cài system dependencies nếu cần
-playwright install-deps chromium
-```
-
-**⏱️ Thời gian:** ~2-5 phút (download ~200MB Chromium browser)
-
-#### Bước 3.4: Cấu hình biến môi trường
-```bash
-# Copy file .env.example thành .env
-cp .env.example .env
-
-# Mở file .env và điền các thông tin cần thiết:
-nano .env  # hoặc dùng vi/vim/code
-```
-
-**Nội dung file .env cần điền:**
-```bash
-# AWS Credentials (cho STT và LLM)
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
-AWS_REGION=us-east-1
-
-# AWS Bedrock Model
-BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
-
-# OpenAI API Key (cho TTS và Browser-Use Agent)
-OPENAI_API_KEY=your_openai_api_key
-
-# Google Sheets URL (thay YOUR_SHEET_ID bằng ID của sheet)
-GOOGLE_SHEETS_URL=https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit
-```
-
-**Lưu ý:**
-- AWS credentials cần có quyền truy cập AWS Transcribe và AWS Bedrock
-- OPENAI_API_KEY dùng cho TTS (Text-to-Speech) và Browser-Use automation
-- GOOGLE_SHEETS_URL phải là sheet public hoặc đã đăng nhập Google trong browser
-
-### 4. Cấu hình Frontend (React)
-
-#### Bước 4.1: Di chuyển vào thư mục frontend
-```bash
-cd frontend
-```
-
-#### Bước 4.2: Cài đặt dependencies
-```bash
-npm install
-```
-
-### 5. Chạy dự án
-
-#### Cách 1: Chạy Backend và Frontend riêng biệt (Khuyên dùng cho development)
-
-**Terminal 1 - Backend (trong WSL/Linux/macOS):**
-```bash
-# Từ thư mục gốc của project
-cd ~/Speak_To_Input
-source venv/bin/activate  # Kích hoạt virtual environment
 python main.py
 ```
 
-Backend sẽ chạy tại: http://localhost:7860
+The server will start on `http://localhost:7860`
 
-**Terminal 2 - Frontend:**
-```bash
-# Từ thư mục frontend
-cd ~/Speak_To_Input/frontend
-npm run dev
-```
+### Option 2: Microservices Mode (Recommended for Production)
 
-Frontend sẽ chạy tại: http://localhost:5173
+Run services separately for better scalability and fault isolation.
 
-#### Cách 2: Chạy cả hai với tmux/screen (Linux/macOS/WSL)
+#### Terminal 1: Task Queue Service
 
 ```bash
-# Cài đặt tmux nếu chưa có
-sudo apt install tmux -y  # Ubuntu/Debian/WSL
-
-# Tạo session mới
-tmux new-session -s vpbank
-
-# Terminal 1: Chạy backend
-cd ~/Speak_To_Input
-source venv/bin/activate
-python main.py
-
-# Nhấn Ctrl+B rồi nhấn C để tạo window mới
-# Terminal 2: Chạy frontend
-cd ~/Speak_To_Input/frontend
-npm run dev
-
-# Để detach: Ctrl+B rồi D
-# Để attach lại: tmux attach -t vpbank
+python services/task_queue_service/main.py
 ```
 
-### 6. Truy cập ứng dụng
+Service starts on `http://localhost:7862`
 
-1. Mở browser và truy cập: http://localhost:5173
-2. Cho phép truy cập microphone khi được yêu cầu
-3. Click nút "Connect" để bắt đầu
-4. Nói tiếng Việt để điền form/Google Sheets
-
-### 7. Kiểm tra logs
-
-**Backend logs:**
-```bash
-# Logs sẽ hiển thị trực tiếp trên terminal chạy main.py
-# Bao gồm:
-# - WebRTC connection status
-# - STT transcriptions
-# - LLM responses
-# - Browser automation actions
-```
-
-**Transcript files:**
-```bash
-# Lịch sử cuộc trò chuyện được lưu tại:
-~/Speak_To_Input/transcripts/conversation_YYYYMMDD_HHMMSS.json
-```
-
-**Sheet data output:**
-```bash
-# Dữ liệu sheet được lưu tại:
-~/Speak_To_Input/src/output/sheet_data_{session_id}.json
-```
-
-### 8. Troubleshooting (Xử lý lỗi thường gặp)
-
-#### Lỗi 1: "Module not found" khi chạy backend
-```bash
-# Đảm bảo virtual environment đã được kích hoạt
-source venv/bin/activate
-
-# Cài lại dependencies
-pip install -r requirements.txt
-```
-
-#### Lỗi 2: Playwright browser không tìm thấy
-```bash
-# Cài lại Chromium
-playwright install chromium
-playwright install-deps chromium  # Linux/WSL
-```
-
-#### Lỗi 3: Frontend không kết nối được backend
-```bash
-# Kiểm tra backend đang chạy tại port 7860
-curl http://localhost:7860
-
-# Kiểm tra CORS settings trong bot_form.py
-# Đảm bảo Access-Control-Allow-Origin: '*'
-```
-
-#### Lỗi 4: Không nhận được audio trong Docker
-```bash
-# Đảm bảo đã cấu hình TURN server trong bot_form.py
-# ice_servers phải có TURN server (đã được config sẵn)
-
-# Container chỉ cần expose port 7860:
-# docker run -p 7860:7860 ...
-```
-
-#### Lỗi 5: AWS credentials không hợp lệ
-```bash
-# Kiểm tra file .env
-cat .env | grep AWS
-
-# Test AWS credentials
-aws sts get-caller-identity
-
-# Đảm bảo có quyền truy cập Bedrock và Transcribe
-```
-
-#### Lỗi 6: Browser automation timeout
-```bash
-# Set headless=False để debug browser
-# Trong src/browser_agent.py, sửa:
-# headless=False
-
-# Kiểm tra GOOGLE_SHEETS_URL có đúng không
-# Đảm bảo sheet có quyền truy cập (public hoặc đã login)
-```
-
-### 9. Development Commands
+#### Terminal 2: Voice Bot Service
 
 ```bash
-# Backend - Chạy với debug logs
-export PIPECAT_LOG_LEVEL=DEBUG
-python main.py
+# Windows PowerShell:
+$env:TASK_QUEUE_SERVICE_URL="http://localhost:7862"
+python main_voice.py
 
-# Frontend - Lint code
-cd frontend
-npm run lint
-
-# Frontend - Build production
-cd frontend
-npm run build
-
-# Frontend - Preview production build
-cd frontend
-npm run preview
-
-# Backend - Chạy single test file
-python test_stable_config.py
-python test_google_sheets.py
+# Linux/macOS:
+export TASK_QUEUE_SERVICE_URL="http://localhost:7862"
+python main_voice.py
 ```
 
-### 10. Docker Deployment (Optional)
+Service starts on `http://localhost:7860`
 
-**Lưu ý**: Đã cấu hình TURN server để giải quyết vấn đề random UDP ports. Container chỉ cần expose port 7860.
-
-```dockerfile
-# Dockerfile (example)
-FROM python:3.10-slim
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy và install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright
-RUN playwright install chromium
-RUN playwright install-deps chromium
-
-# Copy source code
-COPY . .
-
-# Expose port
-EXPOSE 7860
-
-# Run application
-CMD ["python", "main.py"]
-```
+#### Terminal 3: Browser Worker Service
 
 ```bash
-# Build và run Docker
-docker build -t vpbank-voice-agent .
-docker run -p 7860:7860 --env-file .env vpbank-voice-agent
+# Windows PowerShell:
+$env:TASK_QUEUE_SERVICE_URL="http://localhost:7862"
+python main_worker.py
+
+# Linux/macOS:
+export TASK_QUEUE_SERVICE_URL="http://localhost:7862"
+python main_worker.py
 ```
 
-### 11. Cấu trúc thư mục
+Service runs in background, polling tasks from Task Queue Service.
+
+### Option 3: Docker Compose
+
+Build and run all services using Docker:
+
+```bash
+docker-compose up --build
+```
+
+View logs:
+```bash
+docker-compose logs -f
+```
+
+Stop services:
+```bash
+docker-compose down
+```
+
+## API Endpoints
+
+### Task Queue Service (Port 7862)
+
+- `POST /api/tasks/push` - Push a new task to queue
+- `GET /api/tasks/pop` - Pop next task (long polling, 30s timeout)
+- `PATCH /api/tasks/{task_id}` - Update task status
+- `GET /api/tasks/{task_id}` - Get task by ID
+- `GET /api/health` - Health check endpoint
+
+### Voice Bot Service (Port 7860)
+
+- `POST /offer` - WebRTC offer endpoint
+- `GET /ws` - WebSocket endpoint for transcript streaming
+
+## Configuration
+
+### Environment Variables
+
+All services share the same `.env` file. Key variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `AWS_ACCESS_KEY_ID` | AWS IAM user access key | Yes |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM user secret key | Yes |
+| `AWS_REGION` | AWS region (default: us-east-1) | Yes |
+| `BEDROCK_MODEL_ID` | Bedrock model identifier | Yes |
+| `OPENAI_API_KEY` | OpenAI API key | Yes |
+| `TASK_QUEUE_SERVICE_URL` | Task queue service URL (microservices mode) | No |
+
+### Logging
+
+Logs are output to console with structured formatting using `loguru`. Set log level via:
+
+```bash
+export LOG_LEVEL=DEBUG  # Linux/macOS
+$env:LOG_LEVEL="DEBUG"  # Windows PowerShell
+```
+
+## Project Structure
 
 ```
 VPBankHackathon/
 ├── src/                          # Backend source code
-│   ├── bot_form.py              # WebRTC server & pipeline orchestrator
-│   ├── flow_form.py             # Conversation flow logic
-│   ├── prompt_form.py           # System prompts
-│   ├── browser_agent.py         # Browser automation handler
-│   └── utils/                   # Utility functions
-├── frontend/                     # React frontend
-│   ├── src/
-│   │   └── App.tsx              # Main UI component
-│   └── package.json
-├── transcripts/                  # Conversation history (auto-generated)
-├── venv/                         # Python virtual environment
-├── main.py                       # Backend entry point
-├── requirements.txt              # Python dependencies
-├── .env                          # Environment variables (create from .env.example)
-├── .env.example                  # Environment template
-├── AGENTS.md                     # Guide for AI coding agents
-├── CLAUDE.md                     # Detailed project documentation
-└── README.md                     # This file
+│   ├── bot_multi_agent.py        # Voice bot service (WebRTC/STT/TTS/LLM)
+│   ├── workflow_worker.py       # Browser worker service
+│   ├── browser_agent.py          # Browser automation handler
+│   ├── task_queue.py             # Task queue implementation
+│   └── multi_agent/              # Multi-agent system
+│       └── graph/
+│           ├── builder.py        # Supervisor workflow builder
+│           └── state.py          # LangGraph state definition
+├── services/                      # Microservices
+│   ├── task_queue_service/       # Task queue HTTP API server
+│   │   └── main.py
+│   └── shared/                   # Shared utilities
+│       ├── task_queue_api.py    # HTTP API client
+│       └── task_queue_wrapper.py # Wrapper (local/API modes)
+├── main.py                       # Monolithic entry point
+├── main_voice.py                 # Voice bot service entry point
+├── main_worker.py                # Browser worker entry point
+├── requirements.txt               # Python dependencies
+├── docker-compose.yml             # Docker orchestration
+├── Dockerfile                     # Docker image definition
+└── .env                           # Environment variables (not in git)
 ```
 
-### 12. Tech Stack Summary
+## Technology Stack
 
-**Backend:**
-- Python 3.10+
-- Pipecat AI v0.0.78 (Voice AI framework)
-- AWS Transcribe (STT - Vietnamese)
-- AWS Bedrock Claude 3.5 Sonnet (LLM)
-- OpenAI TTS (Text-to-Speech)
-- browser-use + Playwright (Browser automation)
-- aiohttp (WebRTC server)
+### Backend
 
-**Frontend:**
-- React 19.1 + TypeScript
-- Vite (Build tool)
-- Tailwind CSS
-- Pipecat Voice UI Kit
-- Small WebRTC (Real-time audio)
+- **Python 3.11**: Core runtime
+- **Pipecat AI 0.0.91**: Voice AI framework (WebRTC, STT, TTS)
+- **AWS Transcribe**: Speech-to-text (Vietnamese)
+- **AWS Bedrock**: Claude Sonnet 4 LLM
+- **OpenAI TTS**: Text-to-speech
+- **LangGraph 1.0.1**: Multi-agent orchestration
+- **browser-use 0.1.40**: AI-powered browser automation
+- **Playwright 1.55.0**: Browser automation runtime
+- **aiohttp 3.11.12**: Async HTTP server
 
-**Communication:**
-- WebRTC for bidirectional audio streaming
-- WebSocket for transcript streaming
-- Free TURN server (openrelay.metered.ca) for Docker/NAT traversal
+### Communication
 
----
+- **WebRTC**: Bidirectional audio streaming
+- **WebSocket**: Real-time transcript streaming
+- **HTTP REST API**: Inter-service communication
+
+## Development
+
+### Running Tests
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+
+# Run specific tests (if available)
+python -m pytest tests/
+```
+
+### Code Formatting
+
+```bash
+# Format Python code
+black src/
+isort src/
+
+# Type checking
+mypy src/
+```
+
+### Debug Mode
+
+Enable debug logging:
+
+```bash
+export LOG_LEVEL=DEBUG
+python main.py
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Error: Module not found**
+- Ensure virtual environment is activated
+- Reinstall dependencies: `pip install -r requirements.txt`
+
+**Error: Playwright browser not found**
+```bash
+playwright install chromium
+playwright install-deps chromium  # Linux only
+```
+
+**Error: AWS credentials invalid**
+- Verify `.env` file has correct credentials
+- Test with: `aws sts get-caller-identity`
+- Ensure IAM user has required permissions
+
+**Error: Docker Desktop not running**
+- Start Docker Desktop application
+- Or use manual setup instead
+
+**Error: Service connection failed**
+- Verify Task Queue Service is running: `curl http://localhost:7862/api/health`
+- Check `TASK_QUEUE_SERVICE_URL` environment variable is set correctly
+
+**Error: Browser automation timeout**
+- Check form URLs are accessible
+- Verify Playwright browsers are installed
+- Review browser automation logs for details
+
+## Security Considerations
+
+1. **Never commit `.env` file** to version control
+2. **Rotate API keys** regularly (every 3-6 months)
+3. **Use IAM roles** in production (instead of access keys when possible)
+4. **Enable MFA** on AWS and OpenAI accounts
+5. **Set usage limits** on OpenAI API keys
+6. **Monitor costs** via AWS Cost Explorer and OpenAI usage dashboard
+
+## Cost Estimation
+
+Approximate monthly costs for moderate usage:
+
+- **AWS Transcribe**: ~$0.024 per minute of audio
+- **AWS Bedrock (Claude Sonnet 4)**: ~$0.003 per 1K input tokens
+- **OpenAI TTS**: $15 per 1M characters
+- **browser-use (GPT-4)**: ~$0.01-0.03 per task
+
+**Estimated monthly cost**: $50-120 for moderate usage (100 conversations/day, 100 tasks/day)
+
+## License
+
+[Specify license here]
+
+## Contributing
+
+[Contributing guidelines if applicable]
+
+## Support
+
+For issues and questions, please open an issue in the repository.

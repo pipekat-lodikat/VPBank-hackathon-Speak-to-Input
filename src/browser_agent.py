@@ -284,38 +284,22 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             # Create agent với browser_session để giữ browser mở
             llm = self._get_llm()
             task = f"""
-Navigate to {form_url} and wait for the form to load completely.
+                Navigate to {form_url} and wait for the form to load completely.
 
-CRITICAL INSTRUCTIONS:
-1. Navigate to the form URL
-2. Wait for the form to load completely
-3. Do NOT click on any fields
-4. Do NOT fill any values
-5. Do NOT interact with any form elements
-6. Just wait and confirm the form is loaded
+                CRITICAL INSTRUCTIONS:
+                1. Navigate to the form URL
+                2. Wait for the form to load completely
+                3. Do NOT click on any fields
+                4. Do NOT fill any values
+                5. Do NOT interact with any form elements
+                6. Just wait and confirm the form is loaded
 
-DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
-"""
-            
-            # Lifecycle hook để pause/resume agent khi cần
-            async def on_step_start_hook(agent):
-                """Hook executed at the beginning of each step"""
-                # Check if agent is paused (can be set from outside)
-                # If paused, wait for resume signal
-                if hasattr(agent, '_paused') and agent._paused:
-                    logger.debug(f"Agent paused, waiting for resume...")
-                    # Agent will stay paused until resume() is called
-                    pass
-            
-            async def on_step_end_hook(agent):
-                """Hook executed at the end of each step"""
-                # Log step completion
-                logger.debug(f"Step completed for session {session_id}")
-                # Check for pending tasks
-                if hasattr(agent, '_pending_tasks') and agent._pending_tasks:
-                    logger.debug(f"Found {len(agent._pending_tasks)} pending tasks")
+                DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
+                """
             
             # Create Agent with browser parameter (standard parameter name)
+            # Note: Hooks (on_step_start/on_step_end) are not supported in browser-use 0.1.40
+            # Use pause()/resume()/add_new_task() directly instead
             incremental_agent = Agent(
                 task=task,
                 browser=browser,  # Use 'browser' parameter (standard)
@@ -329,12 +313,9 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
             incremental_agent._paused = False
             incremental_agent._pending_tasks = []
             
-            # Run initial navigation với hooks - chỉ navigate, không fill gì
-            await incremental_agent.run(
-                max_steps=3,
-                on_step_start=on_step_start_hook,
-                on_step_end=on_step_end_hook
-            )
+            # Run initial navigation - chỉ navigate, không fill gì
+            # Hooks removed - not supported in browser-use 0.1.40
+            await incremental_agent.run(max_steps=3)
             logger.info(f"✅ Form loaded at {form_url} for session {session_id}")
             
             # Create session data
@@ -477,30 +458,12 @@ Field to fill: {field_name}
 Value to set: {value}
 """
             
-            # Lifecycle hooks for field filling
-            async def fill_field_step_start(agent):
-                """Hook before each step when filling field"""
-                # If agent is paused, keep it paused
-                if hasattr(agent, '_paused') and agent._paused:
-                    logger.debug(f"Agent paused during field fill, waiting...")
-            
-            async def fill_field_step_end(agent):
-                """Hook after each step when filling field"""
-                # Log progress
-                logger.debug(f"Field fill step completed: {field_name}")
-            
-            # Pause agent before adding task (if needed for synchronization)
-            # Agent will be automatically unpaused when run() is called
-            
             # Add task to existing agent
             agent.add_new_task(task)
             
-            # Run with hooks to enable pause/resume mechanism
-            result = await agent.run(
-                max_steps=5,
-                on_step_start=fill_field_step_start,
-                on_step_end=fill_field_step_end
-            )
+            # Run agent (hooks removed - not supported in browser-use 0.1.40)
+            # Use pause()/resume()/add_new_task() directly if needed
+            result = await agent.run(max_steps=5)
             
             # Check if agent reported that field already has value
             result_str = str(result).lower() if result else ""

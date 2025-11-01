@@ -548,17 +548,9 @@ Field to fill: {field_name}
 Value to set: {value}
 """
             
-            # Resume agent nếu đang pause (để nhận task mới)
-            try:
-                if hasattr(agent, '_paused') and agent._paused:
-                    agent._paused = False
-                    agent.resume()
-                    logger.debug(f"▶️  Resumed paused agent to fill {field_name}")
-            except Exception as e:
-                logger.debug(f"Agent not paused or cannot resume: {e}")
-            
             # Verify browser is still alive and same browser is used
             browser = session.get("browser")
+            form_url = session_data.get("url")
             if not browser:
                 logger.error(f"❌ Browser session lost for {session_id}, cannot continue")
                 return {
@@ -566,21 +558,84 @@ Value to set: {value}
                     "error": f"Browser session lost for {session_id}. Please restart form session."
                 }
             
-            # Verify browser is actually alive
+            # CRITICAL: Ensure browser is on correct URL BEFORE adding fill task
+            # This prevents agent from staying on about:blank
             try:
-                # Try to verify browser is still working
+                current_url = None
                 if hasattr(agent, 'browser_session'):
                     browser_session = agent.browser_session
                     if hasattr(browser_session, 'get_current_page_url'):
                         try:
                             current_url = await browser_session.get_current_page_url()
                             logger.debug(f"📍 Browser current URL before fill: {current_url}")
-                            if 'about:blank' in current_url:
-                                logger.warning(f"⚠️  Browser on blank page, may need to navigate first")
                         except Exception as e:
                             logger.warning(f"⚠️  Could not get current URL: {e}")
+                
+                # If browser is on blank page or wrong URL, navigate first
+                if not current_url or 'about:blank' in current_url or (form_url and form_url not in current_url):
+                    logger.warning(f"⚠️  Browser not on correct URL ({current_url}), navigating to {form_url} first...")
+                    
+                    # Pause agent if running to prevent task overlap
+                    try:
+                        if hasattr(agent, '_paused') and not agent._paused:
+                            agent.pause()
+                            logger.debug(f"⏸️  Paused agent to navigate")
+                    except:
+                        pass
+                    
+                    # Navigate to correct URL first
+                    nav_task = f"""
+Navigate to {form_url} and wait for the form to load completely.
+Do NOT fill any fields yet, just navigate and wait for the page to load.
+"""
+                    # Use a fresh navigation run instead of adding to queue
+                    nav_agent = Agent(
+                        task=nav_task,
+                        browser=browser,
+                        llm=agent.llm if hasattr(agent, 'llm') else self._get_llm(),
+                        use_vision=True,
+                        max_failures=3,
+                        max_actions_per_step=5
+                    )
+                    
+                    logger.info(f"🧭 Navigating to {form_url}...")
+                    await nav_agent.run(max_steps=10)  # Enough steps for navigation
+                    
+                    # Verify navigation succeeded
+                    try:
+                        if hasattr(nav_agent, 'browser_session'):
+                            nav_browser_session = nav_agent.browser_session
+                            if hasattr(nav_browser_session, 'get_current_page_url'):
+                                verified_url = await nav_browser_session.get_current_page_url()
+                                logger.info(f"✅ Navigation completed, current URL: {verified_url}")
+                    except:
+                        pass
+                    
+                    # Resume agent after navigation
+                    try:
+                        if hasattr(agent, '_paused') and agent._paused:
+                            agent._paused = False
+                            agent.resume()
+                            logger.debug(f"▶️  Resumed agent after navigation")
+                    except:
+                        pass
+                    
+                    # Update agent's browser reference
+                    if hasattr(agent, 'browser'):
+                        agent.browser = browser
+                    elif hasattr(agent, 'browser_session'):
+                        agent.browser_session = browser
             except Exception as e:
-                logger.debug(f"Could not verify browser URL: {e}")
+                logger.warning(f"⚠️  Error ensuring correct URL: {e}, continuing anyway...")
+            
+            # Resume agent if paused (for new task)
+            try:
+                if hasattr(agent, '_paused') and agent._paused:
+                    agent._paused = False
+                    agent.resume()
+                    logger.debug(f"▶️  Resumed paused agent to fill {field_name}")
+            except Exception as e:
+                logger.debug(f"Agent not paused or cannot resume: {e}")
             
             # Verify agent is using the same browser instance
             if hasattr(agent, 'browser') and agent.browser != browser:
@@ -591,13 +646,13 @@ Value to set: {value}
                 agent.browser_session = browser
             
             # Add task to existing agent - reuse same agent và browser
+            # Note: Agent will handle task queue internally
             agent.add_new_task(task)
             logger.debug(f"📝 Added task for {field_name} to existing agent on same browser")
             
-            # Run agent với max_steps nhỏ để chỉ fill 1 field
-            # Browser session vẫn được giữ lại (keep_alive=True)
-            # Same browser instance được reuse cho tất cả field fills
-            result = await agent.run(max_steps=3)  # Giảm steps để chỉ fill 1 field
+            # Run agent với max_steps đủ để fill 1 field
+            # Browser is already on correct URL, so this should be quick
+            result = await agent.run(max_steps=5)  # Enough steps to find and fill field
             
             # Verify browser is still alive after run
             if session_id not in self.sessions:

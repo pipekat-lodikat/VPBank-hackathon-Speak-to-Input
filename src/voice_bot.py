@@ -283,19 +283,29 @@ async def run_bot(webrtc_connection, ws_connections):
                     form_keywords = [
                         # Start form keywords
                         "bắt đầu điền", "mở form", "tạo form", "điền đơn", "làm đơn vay",
-                        # Field keywords
+                        # Field keywords - MỞ RỘNG để catch nhiều hơn
                         "vay", "khoản vay", "đơn vay", "làm đơn vay", "tạo đơn vay",
                         "cccd", "căn cước", "số điện thoại", "sdt", "email", "địa chỉ",
                         "số tiền", "kỳ hạn", "mục đích vay", "thu nhập", "công ty",
                         "tên", "ngày sinh", "giới tính", "mục đích", "kỳ hạn",
+                        # Common action keywords
+                        "điền", "nhập", "điền vào", "cho", "là", "là",
                         # Submit keywords
                         "gửi form", "gửi đơn", "submit", "xong rồi", "làm xong"
                     ]
                     
                     # Push ngay khi detect intent (incremental mode - mỗi message push ngay)
-                    if any(keyword in msg_lower for keyword in form_keywords):
+                    # HOẶC nếu message có từ "điền" + tên/giá trị
+                    has_form_intent = any(keyword in msg_lower for keyword in form_keywords)
+                    has_fill_action = "điền" in msg_lower and len(msg_lower.split()) >= 2
+                    
+                    if has_form_intent or has_fill_action:
                         should_push_task = True
                         logger.info(f"🚀 Detected form intent in user message, pushing immediately to Browser Service")
+                        logger.debug(f"   Message: {message.content[:100]}")
+                        logger.debug(f"   Matched keywords: {[k for k in form_keywords if k in msg_lower]}")
+                    else:
+                        logger.debug(f"⚠️  No form intent detected in message: {message.content[:100]}")
                 
                 if should_push_task:
                     # Lấy TOÀN BỘ conversation history để extract thông tin

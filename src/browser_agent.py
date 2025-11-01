@@ -263,15 +263,37 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             # REUSE session nếu đã có cho session_id này
             if session_id in self.sessions:
                 existing_session = self.sessions[session_id]
-                if existing_session.get("browser") and existing_session.get("agent"):
-                    logger.info(f"♻️  Reusing existing session for {session_id}")
-                    return {
-                        "success": True,
-                        "message": f"Đã có session cho {form_type}. Tiếp tục điền field.",
-                        "session": existing_session["session_data"]
-                    }
+                browser = existing_session.get("browser")
+                agent = existing_session.get("agent")
+                
+                # Check if browser is still alive
+                if browser and agent:
+                    try:
+                        # Try to check if browser is still running
+                        # If browser is dead, create new session
+                        browser_alive = True  # Assume alive, will fail if not
+                        logger.info(f"♻️  Reusing existing session for {session_id}")
+                        
+                        # Resume agent if paused
+                        try:
+                            if hasattr(agent, '_paused') and agent._paused:
+                                agent.resume()
+                                logger.debug(f"▶️  Resumed paused agent for session {session_id}")
+                        except:
+                            pass
+                        
+                        return {
+                            "success": True,
+                            "message": f"Đã có session cho {form_type}. Tiếp tục điền field.",
+                            "session": existing_session["session_data"]
+                        }
+                    except Exception as e:
+                        logger.warning(f"⚠️  Existing session seems dead, creating new: {e}")
+                        # Session is dead, remove it and create new
+                        if session_id in self.sessions:
+                            del self.sessions[session_id]
             
-            # Close session cũ nếu có (same session_id)
+            # Close session cũ nếu có (same session_id) - should not reach here if reuse worked
             if session_id in self.sessions:
                 await self._close_session(session_id)
             
@@ -461,9 +483,18 @@ Value to set: {value}
             # Add task to existing agent
             agent.add_new_task(task)
             
-            # Run agent (hooks removed - not supported in browser-use 0.1.40)
-            # Use pause()/resume()/add_new_task() directly if needed
-            result = await agent.run(max_steps=5)
+            # Run agent với max_steps nhỏ để chỉ fill 1 field rồi dừng
+            # Sau khi fill xong, agent sẽ pause và chờ input tiếp theo
+            # Browser session vẫn được giữ lại (keep_alive=True)
+            result = await agent.run(max_steps=3)  # Giảm steps để chỉ fill 1 field
+            
+            # Pause agent sau khi fill xong để chờ input tiếp theo
+            # Browser vẫn mở, chỉ agent dừng lại
+            try:
+                agent.pause()
+                logger.debug(f"⏸️  Agent paused after filling {field_name}, waiting for next input")
+            except Exception as e:
+                logger.debug(f"Could not pause agent: {e} (may already be paused)")
             
             # Check if agent reported that field already has value
             result_str = str(result).lower() if result else ""

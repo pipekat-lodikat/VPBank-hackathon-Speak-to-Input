@@ -5,7 +5,7 @@ Sử dụng browser-use với 2 modes:
 2. Incremental: Điền từng field qua voice commands liên tục (NEW!)
 """
 import asyncio
-from browser_use import Agent, Browser
+from browser_use import Agent
 from langchain_aws import ChatBedrockConverse
 from loguru import logger
 import os
@@ -265,24 +265,25 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             if self.active_session:
                 await self.end_session()
             
-            # Create persistent browser
-            self.browser = Browser(keep_alive=True)
-            await self.browser.start()
-            logger.info(f"✅ Browser started (persistent mode)")
-            
-            # Navigate to form
+            # Create browser instance and navigate to form
             llm = self._get_llm()
             task = f"Navigate to {form_url} and wait for the form to load completely. Do NOT fill anything yet, just wait."
             
+            # Create agent - it will create and manage its own browser
             self.incremental_agent = Agent(
                 task=task,
-                browser=self.browser,
                 llm=llm,
                 use_vision=True,
-                max_failures=5
+                max_failures=5,
+                max_actions_per_step=10
             )
             
+            # Run initial navigation
             await self.incremental_agent.run(max_steps=3)
+            
+            # Get browser from agent (if accessible)
+            # Note: browser-use doesn't expose browser directly, so we'll reuse the agent
+            self.browser = getattr(self.incremental_agent, 'browser', None)
             logger.info(f"✅ Form loaded at {form_url}")
             
             # Create session
@@ -429,15 +430,24 @@ Submit the form:
         Kết thúc session và đóng browser
         """
         try:
-            if self.browser:
-                logger.info("🔒 Closing browser session...")
-                await self.browser.close()
-                self.browser = None
+            logger.info("🔒 Closing browser session...")
+            
+            # Close agent (which will close its browser)
+            if self.incremental_agent:
+                # Agent manages browser internally, so we just reset references
                 self.incremental_agent = None
-                self.active_session = None
-                logger.info("✅ Session ended, browser closed")
+            
+            # Reset session state
+            self.browser = None
+            self.active_session = None
+            
+            logger.info("✅ Session ended, browser closed")
         except Exception as e:
             logger.warning(f"Error closing browser: {e}")
+            # Reset anyway
+            self.browser = None
+            self.incremental_agent = None
+            self.active_session = None
 
 
 # Global instance

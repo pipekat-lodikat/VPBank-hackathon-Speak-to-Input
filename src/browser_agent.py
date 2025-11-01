@@ -283,7 +283,19 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             
             # Create agent với browser_session để giữ browser mở
             llm = self._get_llm()
-            task = f"Navigate to {form_url} and wait for the form to load completely. Do NOT fill anything yet, just wait."
+            task = f"""
+Navigate to {form_url} and wait for the form to load completely.
+
+CRITICAL INSTRUCTIONS:
+1. Navigate to the form URL
+2. Wait for the form to load completely
+3. Do NOT click on any fields
+4. Do NOT fill any values
+5. Do NOT interact with any form elements
+6. Just wait and confirm the form is loaded
+
+DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
+"""
             
             incremental_agent = Agent(
                 task=task,
@@ -294,7 +306,7 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
                 max_actions_per_step=10
             )
             
-            # Run initial navigation
+            # Run initial navigation - chỉ navigate, không fill gì
             await incremental_agent.run(max_steps=3)
             logger.info(f"✅ Form loaded at {form_url} for session {session_id}")
             
@@ -348,37 +360,84 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             agent = session["agent"]
             session_data = session["session_data"]
             
-            # Check if field already filled (avoid duplicate)
-            already_filled = any(f["field"] == field_name for f in session_data["fields_filled"])
-            if already_filled:
-                logger.info(f"⚠️  Field {field_name} already filled, updating value...")
-                # Update existing value
+            # Check if field already filled in session (avoid duplicate fill)
+            already_filled_in_session = any(f["field"] == field_name for f in session_data["fields_filled"])
+            
+            # Nếu đã fill trong session và giá trị giống nhau → skip
+            if already_filled_in_session:
                 for f in session_data["fields_filled"]:
                     if f["field"] == field_name:
-                        f["value"] = value
-                        break
+                        if f["value"] == value:
+                            logger.info(f"⚠️  Field {field_name} already filled with same value ({value}), skipping...")
+                            return {
+                                "success": True,
+                                "field": field_name,
+                                "value": value,
+                                "skipped": True,
+                                "fields_filled": len(session_data['fields_filled']),
+                                "message": f"Field {field_name} đã có giá trị {value}, không fill lại"
+                            }
+                        else:
+                            logger.info(f"⚠️  Field {field_name} already filled with different value, updating...")
+                            # Update existing value in session
+                            f["value"] = value
+                            break
             
             logger.info(f"📝 Filling field incrementally: {field_name} = {value} (session: {session_id})")
             
-            # Create task for this specific field
+            # Create task for this specific field với check giá trị cũ
             task = f"""
-                Fill ONLY the field with name="{field_name}" with value: {value}
+Fill ONLY the field with name="{field_name}" with value: {value}
 
-                Instructions:
-                1. Find the input/select/textarea element with name="{field_name}"
-                2. Click on it
-                3. Clear existing value if any
-                4. Fill with value: {value}
-                5. Tab away or click outside to confirm
-                6. Do NOT fill any other fields
-                7. Do NOT click submit
+CRITICAL INSTRUCTIONS:
+1. Find the input/select/textarea element with name="{field_name}"
+2. Check the CURRENT VALUE in that field FIRST:
+   - If the field already has a value (not empty):
+     * DO NOT click on it
+     * DO NOT fill anything
+     * DO NOT overwrite the existing value
+     * Just report that the field already has a value
+   - If the field is EMPTY or has DEFAULT value (like "Nhập...", "Chọn...", placeholder text):
+     * Click on the field to select it
+     * Clear the field completely (select all and delete)
+     * Fill with the new value: {value}
+     * Tab away or click outside to confirm
+3. Do NOT fill any other fields
+4. Do NOT click submit
+5. Do NOT interact with any other elements
 
-                IMPORTANT: Only fill this ONE field, nothing else!
-                """
+IMPORTANT RULES:
+- NEVER overwrite an existing user-filled value
+- ONLY fill if field is empty or has placeholder/default text
+- If field already has a value, leave it unchanged
+
+Field to fill: {field_name}
+Value to set: {value}
+"""
             
             # Add task to existing agent
             agent.add_new_task(task)
-            await agent.run(max_steps=5)
+            result = await agent.run(max_steps=5)
+            
+            # Check if agent reported that field already has value
+            result_str = str(result).lower() if result else ""
+            
+            # Check if field was actually filled (not skipped due to existing value)
+            was_skipped = any(keyword in result_str for keyword in [
+                "already has", "already filled", "existing value", "not empty",
+                "leave unchanged", "giá trị cũ", "đã có"
+            ])
+            
+            if was_skipped:
+                logger.info(f"⚠️  Field {field_name} already has value, skipped filling")
+                return {
+                    "success": True,
+                    "field": field_name,
+                    "value": value,
+                    "skipped": True,
+                    "fields_filled": len(session_data['fields_filled']),
+                    "message": f"Field {field_name} đã có giá trị, không ghi đè"
+                }
             
             # Track filled field (only if not already tracked)
             if not already_filled:
@@ -387,7 +446,7 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
                     "value": value
                 })
             
-            logger.info(f"✅ Field {field_name} filled successfully")
+            logger.info(f"✅ Field {field_name} filled successfully with value: {value}")
             logger.info(f"📊 Progress: {len(session_data['fields_filled'])} fields filled")
             
             return {
@@ -395,7 +454,7 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
                 "field": field_name,
                 "value": value,
                 "fields_filled": len(session_data['fields_filled']),
-                "message": f"Đã điền {field_name}"
+                "message": f"Đã điền {field_name} = {value}"
             }
             
         except Exception as e:

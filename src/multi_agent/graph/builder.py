@@ -49,11 +49,11 @@ async def start_incremental_form(form_type: str) -> str:
     
     # Get form URL
     urls = {
-        "loan": os.getenv("LOAN_FORM_URL", "http://host-form123.s3-website-us-west-2.amazonaws.com"),
-        "crm": os.getenv("CRM_FORM_URL", "http://hostform-2.s3-website-us-west-2.amazonaws.com"),
-        "hr": os.getenv("HR_FORM_URL", "http://hostform-3.s3-website-us-west-2.amazonaws.com"),
-        "compliance": os.getenv("COMPLIANCE_FORM_URL", "http://hostform-4.s3-website-us-west-2.amazonaws.com"),
-        "operations": os.getenv("OPERATIONS_FORM_URL", "http://hostform-5.s3-website-us-west-2.amazonaws.com")
+        "loan": os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/"),
+        "crm": os.getenv("CRM_FORM_URL", "https://case2-ten.vercel.app/"),
+        "hr": os.getenv("HR_FORM_URL", "https://case3-seven.vercel.app/"),
+        "compliance": os.getenv("COMPLIANCE_FORM_URL", "https://case4-beta.vercel.app/"),
+        "operations": os.getenv("OPERATIONS_FORM_URL", "https://case5-chi.vercel.app/")
     }
     
     form_url = urls.get(form_type)
@@ -95,7 +95,7 @@ async def fill_single_field(field_name: str, field_value: str) -> str:
         form_type = "loan"  # Default
         
         # Auto-start session
-        form_url = os.getenv("LOAN_FORM_URL", "http://host-form123.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
         start_result = await browser_agent.start_form_session(form_url, form_type, _current_session_id)
         
         if not start_result.get("success"):
@@ -224,7 +224,7 @@ def fill_loan_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("LOAN_FORM_URL", "http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
         
         # Use asyncio.run() safely
         try:
@@ -334,7 +334,7 @@ def fill_crm_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("CRM_FORM_URL", "http://use-case-2-crm-update.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("CRM_FORM_URL", "https://case2-ten.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -433,7 +433,7 @@ def fill_hr_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("HR_FORM_URL", "http://use-case-3-hr-workflow.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("HR_FORM_URL", "https://case3-seven.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -541,7 +541,7 @@ def fill_compliance_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("COMPLIANCE_FORM_URL", "http://use-case-4-compliance-reporting.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("COMPLIANCE_FORM_URL", "https://case4-beta.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -662,7 +662,7 @@ def fill_operations_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("OPERATIONS_FORM_URL", "http://use-case-5-operations-validation.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("OPERATIONS_FORM_URL", "https://case5-chi.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()

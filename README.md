@@ -119,11 +119,11 @@ OPENAI_API_KEY=your_openai_api_key
 BROWSER_SERVICE_URL=http://localhost:7863
 
 # Form URLs (optional, defaults provided)
-LOAN_FORM_URL=http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com
-CRM_FORM_URL=http://use-case-2-crm-update.s3-website-us-west-2.amazonaws.com
-HR_FORM_URL=http://use-case-3-hr-workflow.s3-website-us-west-2.amazonaws.com
-COMPLIANCE_FORM_URL=http://use-case-4-compliance-reporting.s3-website-us-west-2.amazonaws.com
-OPERATIONS_FORM_URL=http://use-case-5-operations-validation.s3-website-us-west-2.amazonaws.com
+LOAN_FORM_URL=https://vpbank-shared-form-fastdeploy.vercel.app/
+CRM_FORM_URL=https://case2-ten.vercel.app/
+HR_FORM_URL=https://case3-seven.vercel.app/
+COMPLIANCE_FORM_URL=https://case4-beta.vercel.app/
+OPERATIONS_FORM_URL=https://case5-chi.vercel.app/
 ```
 
 ### Step 6: AWS IAM Setup

@@ -297,6 +297,24 @@ CRITICAL INSTRUCTIONS:
 DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
 """
             
+            # Lifecycle hook để pause/resume agent khi cần
+            async def on_step_start_hook(agent):
+                """Hook executed at the beginning of each step"""
+                # Check if agent is paused (can be set from outside)
+                # If paused, wait for resume signal
+                if hasattr(agent, '_paused') and agent._paused:
+                    logger.debug(f"Agent paused, waiting for resume...")
+                    # Agent will stay paused until resume() is called
+                    pass
+            
+            async def on_step_end_hook(agent):
+                """Hook executed at the end of each step"""
+                # Log step completion
+                logger.debug(f"Step completed for session {session_id}")
+                # Check for pending tasks
+                if hasattr(agent, '_pending_tasks') and agent._pending_tasks:
+                    logger.debug(f"Found {len(agent._pending_tasks)} pending tasks")
+            
             incremental_agent = Agent(
                 task=task,
                 browser_session=browser,
@@ -306,8 +324,16 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
                 max_actions_per_step=10
             )
             
-            # Run initial navigation - chỉ navigate, không fill gì
-            await incremental_agent.run(max_steps=3)
+            # Initialize pause/resume flags
+            incremental_agent._paused = False
+            incremental_agent._pending_tasks = []
+            
+            # Run initial navigation với hooks - chỉ navigate, không fill gì
+            await incremental_agent.run(
+                max_steps=3,
+                on_step_start=on_step_start_hook,
+                on_step_end=on_step_end_hook
+            )
             logger.info(f"✅ Form loaded at {form_url} for session {session_id}")
             
             # Create session data
@@ -319,12 +345,39 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
                 "session_id": session_id
             }
             
-            # Store session
-            self.sessions[session_id] = {
+            # Store session với helper methods cho pause/resume
+            session_obj = {
                 "browser": browser,
                 "agent": incremental_agent,
                 "session_data": session_data
             }
+            
+            # Add helper methods to session for pause/resume control
+            def pause_agent():
+                """Pause agent execution"""
+                incremental_agent._paused = True
+                incremental_agent.pause()
+                logger.info(f"⏸️  Agent paused for session {session_id}")
+            
+            def resume_agent():
+                """Resume agent execution"""
+                incremental_agent._paused = False
+                incremental_agent.resume()
+                logger.info(f"▶️  Agent resumed for session {session_id}")
+            
+            def add_task_to_agent(new_task: str):
+                """Add new task to agent queue"""
+                incremental_agent.add_new_task(new_task)
+                if not hasattr(incremental_agent, '_pending_tasks'):
+                    incremental_agent._pending_tasks = []
+                incremental_agent._pending_tasks.append(new_task)
+                logger.info(f"📝 Added new task to agent queue: {new_task[:50]}...")
+            
+            session_obj["pause_agent"] = pause_agent
+            session_obj["resume_agent"] = resume_agent
+            session_obj["add_task"] = add_task_to_agent
+            
+            self.sessions[session_id] = session_obj
             
             return {
                 "success": True,
@@ -339,6 +392,7 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
     async def fill_field_incremental(self, field_name: str, value: str, session_id: str = "default") -> dict:
         """
         Điền 1 field cụ thể trong session
+        Sử dụng lifecycle hooks để pause/resume agent khi cần
         
         Args:
             field_name: Tên field (HTML name attribute)
@@ -359,6 +413,12 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
             session = self.sessions[session_id]
             agent = session["agent"]
             session_data = session["session_data"]
+            
+            # Initialize pause/resume flags if not exists
+            if not hasattr(agent, '_paused'):
+                agent._paused = False
+            if not hasattr(agent, '_pending_tasks'):
+                agent._pending_tasks = []
             
             # Check if field already filled in session (avoid duplicate fill)
             already_filled_in_session = any(f["field"] == field_name for f in session_data["fields_filled"])
@@ -416,9 +476,30 @@ Field to fill: {field_name}
 Value to set: {value}
 """
             
+            # Lifecycle hooks for field filling
+            async def fill_field_step_start(agent):
+                """Hook before each step when filling field"""
+                # If agent is paused, keep it paused
+                if hasattr(agent, '_paused') and agent._paused:
+                    logger.debug(f"Agent paused during field fill, waiting...")
+            
+            async def fill_field_step_end(agent):
+                """Hook after each step when filling field"""
+                # Log progress
+                logger.debug(f"Field fill step completed: {field_name}")
+            
+            # Pause agent before adding task (if needed for synchronization)
+            # Agent will be automatically unpaused when run() is called
+            
             # Add task to existing agent
             agent.add_new_task(task)
-            result = await agent.run(max_steps=5)
+            
+            # Run with hooks to enable pause/resume mechanism
+            result = await agent.run(
+                max_steps=5,
+                on_step_start=fill_field_step_start,
+                on_step_end=fill_field_step_end
+            )
             
             # Check if agent reported that field already has value
             result_str = str(result).lower() if result else ""
@@ -566,6 +647,63 @@ Submit the form:
         Public method để đóng session (wrapper cho _close_session)
         """
         await self._close_session(session_id)
+    
+    def pause_agent(self, session_id: str = "default"):
+        """
+        Pause agent execution for a session
+        
+        Args:
+            session_id: Session ID to pause
+        """
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            if "pause_agent" in session:
+                session["pause_agent"]()
+            else:
+                agent = session["agent"]
+                agent._paused = True
+                agent.pause()
+                logger.info(f"⏸️  Agent paused for session {session_id}")
+        else:
+            logger.warning(f"Session {session_id} not found for pause")
+    
+    def resume_agent(self, session_id: str = "default"):
+        """
+        Resume agent execution for a session
+        
+        Args:
+            session_id: Session ID to resume
+        """
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            if "resume_agent" in session:
+                session["resume_agent"]()
+            else:
+                agent = session["agent"]
+                agent._paused = False
+                agent.resume()
+                logger.info(f"▶️  Agent resumed for session {session_id}")
+        else:
+            logger.warning(f"Session {session_id} not found for resume")
+    
+    def add_task_to_agent(self, session_id: str, new_task: str):
+        """
+        Add a new task to agent queue for a session
+        
+        Args:
+            session_id: Session ID
+            new_task: Task description to add
+        """
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            if "add_task" in session:
+                session["add_task"](new_task)
+            else:
+                agent = session["agent"]
+                agent.add_new_task(new_task)
+                logger.info(f"📝 Added new task to agent queue: {new_task[:50]}...")
+        else:
+            logger.warning(f"Session {session_id} not found for add_task")
 
 
 # Global instance

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Task Queue Service (HTTP REST API)
   task-queue:

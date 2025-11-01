@@ -3,6 +3,7 @@ Shared Task Queue API Client
 HTTP REST API client for communication between Voice Bot and Browser Worker
 """
 import aiohttp
+import asyncio
 import os
 from typing import Optional, Dict, Any
 from loguru import logger

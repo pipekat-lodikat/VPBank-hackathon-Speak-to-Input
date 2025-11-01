@@ -97,6 +97,25 @@ docker-compose down
 
 ## 💻 Manual Setup (Development)
 
+### Option A: Use Helper Scripts (Easiest)
+
+**Windows PowerShell:**
+```powershell
+.\start_services.ps1
+```
+
+**Linux/Mac:**
+```bash
+chmod +x start_services.sh
+./start_services.sh
+```
+
+Scripts sẽ tự động mở 3 terminal windows và start các services.
+
+---
+
+### Option B: Manual Start (3 Terminals)
+
 ### Terminal 1: Task Queue Service
 
 ```bash
@@ -152,6 +171,49 @@ python main_worker.py
 ```
 🔨 Starting Browser Worker Service...
 📡 Service connects to Task Queue Service (port 7862)
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Docker Issues
+
+**Error: "Docker Desktop not running"**
+```bash
+# Start Docker Desktop manually, then retry:
+docker-compose up --build
+```
+
+**Error: "Unable to get image"**
+```bash
+# Make sure Docker Desktop is running and try:
+docker-compose down
+docker-compose up --build
+```
+
+**Prefer manual setup?**
+- Use `start_services.ps1` (Windows) or `start_services.sh` (Linux/Mac)
+- Or follow "Option B: Manual Start" above
+
+### Service Connection Issues
+
+**Task Queue Service not accessible:**
+```bash
+# Check if running:
+curl http://localhost:7862/api/health
+
+# Should return JSON with queue stats
+```
+
+**Voice Bot can't connect to Task Queue:**
+```bash
+# Make sure TASK_QUEUE_SERVICE_URL is set:
+# Windows PowerShell:
+$env:TASK_QUEUE_SERVICE_URL="http://localhost:7862"
+
+# Linux/Mac:
+export TASK_QUEUE_SERVICE_URL="http://localhost:7862"
 ```
 
 ---

@@ -13,11 +13,25 @@ from aiohttp.web import RouteTableDef
 from dotenv import load_dotenv
 from loguru import logger
 
-# Add parent to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
+# Add parent directory to path (works in both local and Docker)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '../..'))
+src_path = os.path.join(project_root, 'src')
+
+# Add paths
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 # Import shared task queue
-from src.task_queue import TaskQueue, Task, TaskType, TaskStatus
+# In Docker, working dir is /app, so src is at /app/src
+# Locally, script is at services/task_queue_service/main.py, so src is at ../../src
+try:
+    from src.task_queue import TaskQueue, Task, TaskType, TaskStatus
+except ImportError:
+    # Fallback: import directly from src path
+    from task_queue import TaskQueue, Task, TaskType, TaskStatus
 
 load_dotenv(override=True)
 

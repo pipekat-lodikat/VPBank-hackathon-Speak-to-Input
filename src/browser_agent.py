@@ -300,24 +300,35 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             # Create persistent browser session
             browser_config = BrowserConfig(_force_keep_browser_alive=True)
             browser = Browser(config=browser_config)
-            # Browser doesn't need explicit start() - it starts automatically when used
+            
+            # Explicitly start browser to ensure it's ready
+            try:
+                await browser.start()
+                logger.info(f"✅ Browser started successfully for session {session_id}")
+            except Exception as e:
+                logger.warning(f"⚠️  Browser start() not needed or failed: {e}, will start automatically")
+            
             logger.info(f"✅ Browser initialized (persistent mode) for session {session_id}")
             
-            # Create agent với browser_session để giữ browser mở
+            # Create agent với browser để giữ browser mở
             llm = self._get_llm()
             task = f"""
-                Navigate to {form_url} and wait for the form to load completely.
+Navigate to {form_url} and wait for the form to load completely.
 
-                CRITICAL INSTRUCTIONS:
-                1. Navigate to the form URL
-                2. Wait for the form to load completely
-                3. Do NOT click on any fields
-                4. Do NOT fill any values
-                5. Do NOT interact with any form elements
-                6. Just wait and confirm the form is loaded
+CRITICAL INSTRUCTIONS:
+1. Use the navigate or goto action to go to: {form_url}
+2. Wait for the page to load completely (wait until you see the form fields visible)
+3. Verify you are on the correct page by checking the URL in the address bar
+4. Do NOT click on any form fields
+5. Do NOT fill any values
+6. Do NOT interact with any form elements
+7. Just confirm the form is loaded and ready
 
-                DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
-                """
+IMPORTANT: You MUST navigate to the URL first. Do not stay on about:blank page.
+URL to navigate to: {form_url}
+
+DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
+"""
             
             # Create Agent with browser parameter (standard parameter name)
             # Note: Hooks (on_step_start/on_step_end) are not supported in browser-use 0.1.40
@@ -336,9 +347,28 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             incremental_agent._pending_tasks = []
             
             # Run initial navigation - chỉ navigate, không fill gì
+            # Tăng max_steps để đảm bảo navigation hoàn thành
             # Hooks removed - not supported in browser-use 0.1.40
-            await incremental_agent.run(max_steps=3)
-            logger.info(f"✅ Form loaded at {form_url} for session {session_id}")
+            logger.info(f"🚀 Starting navigation to {form_url}...")
+            result = await incremental_agent.run(max_steps=10)  # Tăng steps để đảm bảo navigation hoàn thành
+            
+            # Verify navigation succeeded
+            try:
+                # Try to get current URL from browser session
+                if hasattr(incremental_agent, 'browser_session'):
+                    browser_session = incremental_agent.browser_session
+                    if hasattr(browser_session, 'get_current_page_url'):
+                        current_url = await browser_session.get_current_page_url()
+                        logger.info(f"📍 Current URL after navigation: {current_url}")
+                        if 'about:blank' in current_url or form_url not in current_url:
+                            logger.warning(f"⚠️  Navigation may have failed - still on {current_url}")
+                elif hasattr(incremental_agent, 'browser'):
+                    # Try alternative method
+                    logger.debug("Browser session check via alternative method")
+            except Exception as e:
+                logger.debug(f"Could not verify navigation: {e}")
+            
+            logger.info(f"✅ Form navigation completed for session {session_id}")
             
             # Create session data
             session_data = {

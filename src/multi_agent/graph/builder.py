@@ -153,7 +153,7 @@ def fill_loan_form(
     Returns:
         Kết quả điền form
     """
-    logger.info(f"🏦 Filling LOAN form for: {customer_name}")
+    logger.info(f"🏦 [TOOL CALLED] fill_loan_form for: {customer_name}")
     
     # Auto-fill application date if not provided
     if not application_date:
@@ -182,6 +182,8 @@ def fill_loan_form(
         "relationshipManager": relationship_manager,
         "additionalNotes": additional_notes
     }
+    
+    logger.info(f"   📋 Form data prepared: {len(form_data)} fields")
     
     try:
         # Execute browser task
@@ -251,7 +253,8 @@ def fill_crm_form(
     """
     from datetime import datetime
     
-    logger.info(f"📞 Filling CRM form for: {customer_name}")
+    logger.info(f"📞 [TOOL CALLED] fill_crm_form for: {customer_name}")
+    logger.info(f"   Data: {form_data}")
     
     # Auto-fill dates
     if not interaction_date:
@@ -691,6 +694,17 @@ def build_supervisor_workflow(llm):
     
     supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL phù hợp!
 
+🚫 TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
+
+Khi user nói:
+- "Điền hồ sơ vay" / "Vay vốn" / "Đơn vay" → GỌI fill_loan_form() NGAY
+- "Cập nhật CRM" → GỌI fill_crm_form() NGAY  
+- "Nghỉ phép" / "Yêu cầu HR" → GỌI fill_hr_form() NGAY
+- "Báo cáo tuân thủ" → GỌI fill_compliance_form() NGAY
+- "Kiểm tra giao dịch" → GỌI fill_operations_form() NGAY
+
+⚠️ QUAN TRỌNG: User đã xác nhận qua Voice Agent rồi, bạn CHỈ CẦN GỌI TOOL, không cần chat hay hỏi thêm!
+
 BẠN CÓ 8 TOOLS (2 MODES):
 
 🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin):
@@ -851,6 +865,23 @@ KHI NÀO DÙNG MỖI MODE:
         - KHÔNG NHẦM LẪN giữa 2 loại số này!
 
         ✅ LUÔN GỌI TOOL với thông tin đã extract!
+        
+🚨 QUY TẮC VÀNG:
+1. Nếu user nói về vay vốn → GỌI fill_loan_form() NGAY (dùng placeholders cho fields thiếu)
+2. Nếu user nói về CRM → GỌI fill_crm_form() NGAY
+3. Nếu user nói về HR → GỌI fill_hr_form() NGAY
+4. Nếu user nói về compliance → GỌI fill_compliance_form() NGAY
+5. Nếu user nói về operations → GỌI fill_operations_form() NGAY
+
+KHÔNG BAO GIỜ:
+- Trả lời "Tôi hiểu bạn muốn..." mà không gọi tool
+- Hỏi thêm thông tin (user đã confirm rồi)
+- Chỉ nói text mà không gọi tool
+
+LUÔN LUÔN:
+- Extract thông tin từ conversation history
+- Gọi tool với thông tin đã có + placeholders cho fields thiếu
+- Trả về kết quả từ tool
 """
     
     # Create supervisor agent with react pattern

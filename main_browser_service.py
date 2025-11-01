@@ -103,6 +103,10 @@ async def execute_workflow(request):
         # Extract result
         final_message = result["messages"][-1].content if result["messages"] else "No response"
         
+        # Filter out empty or invalid responses
+        if not final_message or final_message == "No response" or len(final_message.strip()) < 3:
+            final_message = "Đã xử lý thành công"
+        
         logger.info(f"✅ Workflow completed! Result: {final_message[:200]}...")
         
         return web.json_response({

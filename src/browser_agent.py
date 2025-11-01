@@ -315,14 +315,46 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
                 if hasattr(agent, '_pending_tasks') and agent._pending_tasks:
                     logger.debug(f"Found {len(agent._pending_tasks)} pending tasks")
             
-            incremental_agent = Agent(
-                task=task,
-                browser_session=browser,
-                llm=llm,
-                use_vision=True,
-                max_failures=5,
-                max_actions_per_step=10
-            )
+            # Try different parameter names for browser session
+            # Some versions use 'browser' instead of 'browser_session'
+            try:
+                # Try with browser_session first
+                incremental_agent = Agent(
+                    task=task,
+                    browser_session=browser,
+                    llm=llm,
+                    use_vision=True,
+                    max_failures=5,
+                    max_actions_per_step=10
+                )
+            except TypeError:
+                # If browser_session fails, try with browser parameter
+                try:
+                    incremental_agent = Agent(
+                        task=task,
+                        browser=browser,
+                        llm=llm,
+                        use_vision=True,
+                        max_failures=5,
+                        max_actions_per_step=10
+                    )
+                except TypeError:
+                    # If both fail, create without browser and set it manually
+                    incremental_agent = Agent(
+                        task=task,
+                        llm=llm,
+                        use_vision=True,
+                        max_failures=5,
+                        max_actions_per_step=10
+                    )
+                    # Try to set browser after creation
+                    if hasattr(incremental_agent, 'browser_session'):
+                        incremental_agent.browser_session = browser
+                    elif hasattr(incremental_agent, 'browser'):
+                        incremental_agent.browser = browser
+                    else:
+                        # If no browser attribute, try passing to run()
+                        logger.warning("Could not set browser on Agent, will try passing to run()")
             
             # Initialize pause/resume flags
             incremental_agent._paused = False

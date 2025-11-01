@@ -320,17 +320,22 @@ async def run_bot(webrtc_connection, ws_connections):
                     full_context = "\n".join(conversation_history)
                     
                     logger.info(f"📤 Pushing request to Browser Service immediately...")
-                    logger.debug(f"   Full context ({len(all_messages)} messages) sent to Browser Service")
-                    logger.debug(f"   Latest user message: {message.content[:100]}...")
+                    logger.info(f"   Full context ({len(all_messages)} messages) sent to Browser Service")
+                    logger.info(f"   Latest user message: {message.content[:100]}...")
+                    logger.info(f"   Session ID: {session_id}")
                     
                     # Set processing flag (cho phép nhiều push - incremental mode)
                     processing_task["active"] = True
                     processing_task["task_id"] = session_id
                     
                     # Push request to Browser Service (non-blocking - mỗi message push riêng)
-                    asyncio.create_task(push_to_browser_service(
-                        full_context, ws_connections, session_id, processing_task
-                    ))
+                    try:
+                        task = asyncio.create_task(push_to_browser_service(
+                            full_context, ws_connections, session_id, processing_task
+                        ))
+                        logger.info(f"✅ Created async task for Browser Service request (task ID: {id(task)})")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to create async task: {e}", exc_info=True)
                     
                 logger.info(f"📝 [{message.role}]: {message.content}")
         except Exception as e:

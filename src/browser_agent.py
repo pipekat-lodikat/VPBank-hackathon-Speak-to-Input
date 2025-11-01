@@ -480,21 +480,26 @@ Field to fill: {field_name}
 Value to set: {value}
 """
             
+            # Resume agent nếu đang pause (để nhận task mới)
+            try:
+                if hasattr(agent, '_paused') and agent._paused:
+                    agent._paused = False
+                    agent.resume()
+                    logger.debug(f"▶️  Resumed paused agent to fill {field_name}")
+            except Exception as e:
+                logger.debug(f"Agent not paused or cannot resume: {e}")
+            
             # Add task to existing agent
             agent.add_new_task(task)
             
             # Run agent với max_steps nhỏ để chỉ fill 1 field rồi dừng
-            # Sau khi fill xong, agent sẽ pause và chờ input tiếp theo
             # Browser session vẫn được giữ lại (keep_alive=True)
+            # Agent sẽ tự dừng khi task hoàn thành hoặc hết steps
             result = await agent.run(max_steps=3)  # Giảm steps để chỉ fill 1 field
             
-            # Pause agent sau khi fill xong để chờ input tiếp theo
-            # Browser vẫn mở, chỉ agent dừng lại
-            try:
-                agent.pause()
-                logger.debug(f"⏸️  Agent paused after filling {field_name}, waiting for next input")
-            except Exception as e:
-                logger.debug(f"Could not pause agent: {e} (may already be paused)")
+            # KHÔNG pause agent sau khi fill xong - để nó sẵn sàng nhận task tiếp theo
+            # Agent sẽ tự dừng khi max_steps hết hoặc task hoàn thành
+            logger.debug(f"✅ Agent completed filling {field_name}, ready for next task")
             
             # Check if agent reported that field already has value
             result_str = str(result).lower() if result else ""

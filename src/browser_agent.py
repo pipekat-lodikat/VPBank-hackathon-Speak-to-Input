@@ -439,8 +439,8 @@ Value to set: {value}
                     "message": f"Field {field_name} đã có giá trị, không ghi đè"
                 }
             
-            # Track filled field (only if not already tracked)
-            if not already_filled:
+            # Track filled field (only if not already tracked in session)
+            if not already_filled_in_session:
                 session_data["fields_filled"].append({
                     "field": field_name,
                     "value": value

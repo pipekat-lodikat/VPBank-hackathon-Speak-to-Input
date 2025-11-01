@@ -269,26 +269,64 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
                 # Check if browser is still alive
                 if browser and agent:
                     try:
-                        # Try to check if browser is still running
-                        # If browser is dead, create new session
-                        browser_alive = True  # Assume alive, will fail if not
-                        logger.info(f"♻️  Reusing existing session for {session_id}")
+                        # Verify browser is actually alive by checking current URL
+                        browser_alive = False
+                        current_url = None
                         
-                        # Resume agent if paused
                         try:
-                            if hasattr(agent, '_paused') and agent._paused:
-                                agent.resume()
-                                logger.debug(f"▶️  Resumed paused agent for session {session_id}")
-                        except:
-                            pass
+                            # Try to get current URL from browser session
+                            if hasattr(agent, 'browser_session'):
+                                browser_session = agent.browser_session
+                                if hasattr(browser_session, 'get_current_page_url'):
+                                    current_url = await browser_session.get_current_page_url()
+                                    browser_alive = True
+                                    logger.debug(f"✅ Browser is alive, current URL: {current_url}")
+                            elif hasattr(agent, 'browser'):
+                                # Try alternative method
+                                if agent.browser == browser:
+                                    browser_alive = True
+                                    logger.debug(f"✅ Browser instance matches")
+                        except Exception as e:
+                            logger.warning(f"⚠️  Could not verify browser alive: {e}")
+                            # Assume alive if we can't check
+                            browser_alive = True
                         
-                        return {
-                            "success": True,
-                            "message": f"Đã có session cho {form_type}. Tiếp tục điền field.",
-                            "session": existing_session["session_data"]
-                        }
+                        if browser_alive:
+                            logger.info(f"♻️  Reusing existing session for {session_id}")
+                            
+                            # Verify we're on the correct URL, if not navigate there
+                            if current_url and ('about:blank' in current_url or form_url not in current_url):
+                                logger.warning(f"⚠️  Browser not on correct URL ({current_url}), navigating to {form_url}...")
+                                # Add navigation task to ensure we're on the right page
+                                nav_task = f"Navigate to {form_url} and wait for the form to load completely."
+                                agent.add_new_task(nav_task)
+                                try:
+                                    await agent.run(max_steps=5)
+                                    logger.info(f"✅ Navigated to correct URL: {form_url}")
+                                except Exception as nav_e:
+                                    logger.error(f"❌ Navigation failed: {nav_e}")
+                            
+                            # Resume agent if paused
+                            try:
+                                if hasattr(agent, '_paused') and agent._paused:
+                                    agent._paused = False
+                                    agent.resume()
+                                    logger.debug(f"▶️  Resumed paused agent for session {session_id}")
+                            except Exception as e:
+                                logger.debug(f"Could not resume agent: {e}")
+                            
+                            return {
+                                "success": True,
+                                "message": f"Đã có session cho {form_type}. Tiếp tục điền field.",
+                                "session": existing_session["session_data"]
+                            }
+                        else:
+                            logger.warning(f"⚠️  Browser session dead, creating new")
+                            # Session is dead, remove it and create new
+                            if session_id in self.sessions:
+                                del self.sessions[session_id]
                     except Exception as e:
-                        logger.warning(f"⚠️  Existing session seems dead, creating new: {e}")
+                        logger.warning(f"⚠️  Error checking existing session: {e}, creating new")
                         # Session is dead, remove it and create new
                         if session_id in self.sessions:
                             del self.sessions[session_id]
@@ -527,6 +565,22 @@ Value to set: {value}
                     "success": False,
                     "error": f"Browser session lost for {session_id}. Please restart form session."
                 }
+            
+            # Verify browser is actually alive
+            try:
+                # Try to verify browser is still working
+                if hasattr(agent, 'browser_session'):
+                    browser_session = agent.browser_session
+                    if hasattr(browser_session, 'get_current_page_url'):
+                        try:
+                            current_url = await browser_session.get_current_page_url()
+                            logger.debug(f"📍 Browser current URL before fill: {current_url}")
+                            if 'about:blank' in current_url:
+                                logger.warning(f"⚠️  Browser on blank page, may need to navigate first")
+                        except Exception as e:
+                            logger.warning(f"⚠️  Could not get current URL: {e}")
+            except Exception as e:
+                logger.debug(f"Could not verify browser URL: {e}")
             
             # Verify agent is using the same browser instance
             if hasattr(agent, 'browser') and agent.browser != browser:

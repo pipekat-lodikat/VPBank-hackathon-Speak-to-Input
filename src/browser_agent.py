@@ -228,6 +228,73 @@ INSTRUCTIONS:
             logger.error(f"❌ Error submitting form: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
     
+    async def fill_form(self, form_url: str, form_data: dict, form_type: str = "loan") -> dict:
+        """
+        One-shot mode: Fill entire form at once (legacy)
+        Pattern: Browser() -> Agent(browser=browser) -> run() -> kill()
+        """
+        try:
+            logger.info(f"🚀 Starting ONE-SHOT form fill: {form_type}")
+            
+            # Create browser (one-shot, no keep_alive needed)
+            browser_config = BrowserConfig()
+            browser = Browser(config=browser_config)
+            
+            # Create task with all form data
+            llm = self._get_llm()
+            task = self._build_one_shot_task(form_url, form_data, form_type)
+            
+            # Create Agent
+            agent = Agent(
+                task=task,
+                browser=browser,
+                llm=llm,
+                use_vision=True,
+                max_failures=5,
+                max_actions_per_step=15
+            )
+            
+            # Run agent
+            logger.info(f"🚀 Executing one-shot form fill...")
+            result = await agent.run(max_steps=50)
+            
+            # Close browser after one-shot
+            try:
+                await browser.kill()
+                logger.info(f"🔒 Browser closed after one-shot fill")
+            except:
+                pass
+            
+            return {
+                "success": True,
+                "message": "Form filled successfully",
+                "result": str(result)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error in one-shot fill: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+    
+    def _build_one_shot_task(self, form_url: str, form_data: dict, form_type: str) -> str:
+        """Build task description for one-shot form filling"""
+        fields_desc = "\n".join([f"- {k}: {v}" for k, v in form_data.items()])
+        
+        task = f"""
+Navigate to {form_url} and fill the form with the following information:
+
+{fields_desc}
+
+INSTRUCTIONS:
+1. Navigate to {form_url}
+2. Wait for the form to load completely
+3. Fill ALL fields with the provided values
+4. Do NOT submit the form (just fill all fields)
+5. Verify all fields are filled correctly
+
+Form Type: {form_type}
+"""
+        return task
+    
     async def _close_session(self, session_id: str):
         """Close browser session"""
         try:

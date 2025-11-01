@@ -489,17 +489,41 @@ Value to set: {value}
             except Exception as e:
                 logger.debug(f"Agent not paused or cannot resume: {e}")
             
-            # Add task to existing agent
-            agent.add_new_task(task)
+            # Verify browser is still alive and same browser is used
+            browser = session.get("browser")
+            if not browser:
+                logger.error(f"❌ Browser session lost for {session_id}, cannot continue")
+                return {
+                    "success": False,
+                    "error": f"Browser session lost for {session_id}. Please restart form session."
+                }
             
-            # Run agent với max_steps nhỏ để chỉ fill 1 field rồi dừng
+            # Verify agent is using the same browser instance
+            if hasattr(agent, 'browser') and agent.browser != browser:
+                logger.warning(f"⚠️  Agent browser mismatch, updating to session browser...")
+                agent.browser = browser
+            elif hasattr(agent, 'browser_session') and agent.browser_session != browser:
+                logger.warning(f"⚠️  Agent browser_session mismatch, updating to session browser...")
+                agent.browser_session = browser
+            
+            # Add task to existing agent - reuse same agent và browser
+            agent.add_new_task(task)
+            logger.debug(f"📝 Added task for {field_name} to existing agent on same browser")
+            
+            # Run agent với max_steps nhỏ để chỉ fill 1 field
             # Browser session vẫn được giữ lại (keep_alive=True)
-            # Agent sẽ tự dừng khi task hoàn thành hoặc hết steps
+            # Same browser instance được reuse cho tất cả field fills
             result = await agent.run(max_steps=3)  # Giảm steps để chỉ fill 1 field
             
-            # KHÔNG pause agent sau khi fill xong - để nó sẵn sàng nhận task tiếp theo
-            # Agent sẽ tự dừng khi max_steps hết hoặc task hoàn thành
-            logger.debug(f"✅ Agent completed filling {field_name}, ready for next task")
+            # Verify browser is still alive after run
+            if session_id not in self.sessions:
+                logger.error(f"❌ Session {session_id} was closed during fill!")
+                return {
+                    "success": False,
+                    "error": f"Session {session_id} was closed unexpectedly"
+                }
+            
+            logger.debug(f"✅ Agent completed filling {field_name}, browser still alive for next task")
             
             # Check if agent reported that field already has value
             result_str = str(result).lower() if result else ""
@@ -615,6 +639,8 @@ Submit the form:
     async def _close_session(self, session_id: str):
         """
         Đóng browser session cho session_id cụ thể
+        CHỈ GỌI KHI THỰC SỰ CẦN ĐÓNG (sau submit form hoặc explicit end_session)
+        KHÔNG GỌI GIỮA CÁC FIELD FILLS - giữ browser mở cho consistency
         """
         try:
             if session_id not in self.sessions:
@@ -624,11 +650,21 @@ Submit the form:
             
             session = self.sessions[session_id]
             browser = session.get("browser")
+            agent = session.get("agent")
+            
+            # Pause agent before closing
+            if agent:
+                try:
+                    agent.pause()
+                    logger.debug(f"⏸️  Paused agent before closing session")
+                except:
+                    pass
             
             # Kill browser session
             if browser:
                 try:
                     await browser.kill()
+                    logger.debug(f"🔒 Browser killed for session {session_id}")
                 except Exception as e:
                     logger.warning(f"Error killing browser: {e}")
             

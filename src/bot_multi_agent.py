@@ -244,9 +244,32 @@ async def run_bot(webrtc_connection, ws_connections):
                         logger.warning(f"Failed to send transcript: {e}")
                         ws_connections.discard(ws)
                 
-                # Push task to queue CHỈ KHI user đã CONFIRM
-                # Detect confirmation từ cụm từ trigger
+                # Push task to queue khi:
+                # 1. User confirmed (ONE-SHOT mode)
+                # 2. User yêu cầu incremental action
+                
+                should_push_task = False
+                
+                # Detect ONE-SHOT confirmation
                 if message.role == "assistant" and "BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" in message.content:
+                    should_push_task = True
+                
+                # Detect INCREMENTAL commands (from USER messages)
+                if message.role == "user":
+                    msg_lower = message.content.lower()
+                    incremental_keywords = [
+                        "bắt đầu điền", "mở form", "tạo form",
+                        "điền tên", "điền cccd", "điền sdt", "điền số điện thoại",
+                        "điền email", "điền địa chỉ", "điền số tiền", "điền kỳ hạn",
+                        "vay", "thu nhập", "công ty",
+                        "submit", "gửi form", "gửi đơn", "xong rồi"
+                    ]
+                    
+                    if any(keyword in msg_lower for keyword in incremental_keywords):
+                        should_push_task = True
+                        logger.info(f"🔍 Detected incremental command: {message.content[:50]}...")
+                
+                if should_push_task:
                     # Lấy TOÀN BỘ conversation history để extract thông tin
                     all_messages = transcript_data["messages"]
                     

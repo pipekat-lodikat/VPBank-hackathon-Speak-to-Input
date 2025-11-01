@@ -21,7 +21,7 @@ from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, Ice
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.aws.stt import AWSTranscribeSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
-from pipecat.services.openai.tts import OpenAITTSService
+from pipecat.services.elevenlabs import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.transcript_processor import TranscriptProcessor
@@ -36,7 +36,8 @@ load_dotenv(override=True)
 aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
 aws_region = os.getenv("AWS_REGION")
-openai_api_key = os.getenv("OPENAI_API_KEY")
+elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 
 routes = RouteTableDef()
 
@@ -192,10 +193,11 @@ async def run_bot(webrtc_connection, ws_connections):
         model=os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
     )
 
-    tts = OpenAITTSService(
-        api_key=openai_api_key,
-        voice="nova",
-        model="gpt-4o-mini-tts"
+    # Text-to-Speech - ElevenLabs Vietnamese voice "Hà My"
+    tts = ElevenLabsTTSService(
+        api_key=elevenlabs_api_key,
+        voice_id=elevenlabs_voice_id,
+        model="eleven_multilingual_v2"
     )
     
     # Start workflow worker in background (processes tasks from queue)

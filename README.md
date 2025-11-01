@@ -323,6 +323,289 @@ Create IAM policy with the following JSON:
 
 ---
 
+## Frontend Development
+
+### Frontend Overview
+
+The frontend is a modern React application built with TypeScript, Tailwind CSS, and Pipecat Voice UI Kit. It provides a beautiful user interface for voice interactions with real-time audio streaming and transcript display.
+
+### Frontend Tech Stack
+
+- **React 19** - Latest React version with modern features
+- **TypeScript** - Type-safe development
+- **Tailwind CSS 4** - Utility-first CSS framework
+- **Vite** - Fast build tool and dev server
+- **Pipecat Voice UI Kit** - Voice interface components
+- **WebRTC** - Real-time bidirectional audio streaming
+- **Lucide Icons** - Beautiful icon library
+
+### Frontend Setup
+
+#### Step 1: Navigate to Frontend Directory
+
+```bash
+cd frontend
+```
+
+#### Step 2: Install Dependencies
+
+```bash
+npm install
+```
+
+This will install all required packages including:
+- React and React DOM
+- Pipecat client libraries
+- Tailwind CSS
+- TypeScript types
+- Development tools (Vite, ESLint)
+
+#### Step 3: Configure Backend Endpoint
+
+The frontend is configured to connect to the backend at `http://localhost:7860`. If your backend runs on a different port, update the endpoint in `src/App.tsx`:
+
+```typescript
+await clientRef.current.connect("http://localhost:7860/offer");
+```
+
+#### Step 4: Run Development Server
+
+```bash
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`
+
+### Frontend Development Commands
+
+```bash
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+
+# Lint code
+npm run lint
+```
+
+### Frontend Project Structure
+
+```
+frontend/
+├── src/
+│   ├── components/          # UI components
+│   │   ├── VoiceInterface.tsx   # Main voice interface component
+│   │   └── TranscriptView.tsx   # Conversation transcript display
+│   ├── lib/                 # Utility functions
+│   │   └── utils.ts        # Helper functions (clsx, cn)
+│   ├── assets/             # Static assets
+│   ├── App.tsx             # Main app component with WebRTC
+│   ├── App.css             # App styles
+│   ├── index.css           # Tailwind CSS styles
+│   └── main.tsx            # Application entry point
+├── public/                  # Static public files
+├── index.html              # HTML template
+├── package.json            # Dependencies and scripts
+├── tsconfig.json           # TypeScript configuration
+├── vite.config.ts          # Vite configuration
+├── tailwind.config.js      # Tailwind CSS configuration
+└── postcss.config.js       # PostCSS configuration
+```
+
+### Frontend Components
+
+#### VoiceInterface Component
+
+**Location:** `src/components/VoiceInterface.tsx`
+
+**Features:**
+- Connection controls (Connect/Disconnect)
+- Real-time audio visualization
+- Mute/unmute microphone
+- Connection status indicators
+- Error handling and display
+- Beautiful gradient UI with glass morphism effects
+
+**Usage:**
+```tsx
+import VoiceInterface from './components/VoiceInterface';
+
+function App() {
+  return <VoiceInterface />;
+}
+```
+
+#### TranscriptView Component
+
+**Location:** `src/components/TranscriptView.tsx`
+
+**Features:**
+- Real-time transcript display
+- User/bot message bubbles
+- Timestamps for each message
+- Auto-scroll to latest message
+- Avatar icons
+- Smooth animations
+
+**Usage:**
+```tsx
+import TranscriptView from './components/TranscriptView';
+
+function App() {
+  return <TranscriptView messages={messages} />;
+}
+```
+
+### Frontend Features
+
+#### Voice Controls
+
+- **One-click start/stop**: Simple button to start/end conversation
+- **Mute/unmute**: Toggle microphone on/off during conversation
+- **Visual feedback**: Audio activity indicators
+- **Connection state**: Real-time connection status display
+
+#### Audio Features
+
+- **WebRTC streaming**: Bidirectional audio streaming via WebRTC
+- **Echo cancellation**: Built-in echo cancellation
+- **Noise suppression**: Automatic noise suppression
+- **Auto playback**: Automatic audio output playback
+
+#### UI Features
+
+- **Modern design**: Gradient backgrounds with glass morphism
+- **Smooth animations**: Transitions and animations
+- **Responsive**: Mobile-friendly design
+- **Real-time updates**: Live transcript and status updates
+- **Error handling**: User-friendly error messages
+
+### Frontend Styling
+
+The frontend uses Tailwind CSS 4 with custom configuration:
+
+**Theme:**
+- Blue to purple gradient theme
+- Glass morphism effects (backdrop blur)
+- Smooth transitions and animations
+- Dark mode support (optional)
+
+**Colors:**
+- Primary: Blue gradient
+- Secondary: Purple gradient
+- Accent: Green for success states
+- Error: Red for error states
+
+### Frontend Configuration
+
+#### WebRTC Endpoint
+
+Update the backend endpoint in `src/App.tsx`:
+
+```typescript
+const BACKEND_URL = "http://localhost:7860";
+await clientRef.current.connect(`${BACKEND_URL}/offer`);
+```
+
+#### Port Configuration
+
+Default port is `5173`. To change, modify `vite.config.ts`:
+
+```typescript
+export default defineConfig({
+  server: {
+    port: 3000, // Change to desired port
+  },
+});
+```
+
+### Browser Support
+
+- **Chrome/Edge** (recommended) - Full WebRTC support
+- **Firefox** - Full WebRTC support
+- **Safari** - Limited WebRTC support (some features may not work)
+
+**Requirements:**
+- Microphone permissions
+- HTTPS for production (or localhost for development)
+- Modern browser with WebRTC support
+
+### Building Frontend for Production
+
+```bash
+# Build production bundle
+npm run build
+
+# Preview production build locally
+npm run preview
+
+# The build output will be in `dist/` directory
+```
+
+**Production Build:**
+- Optimized and minified code
+- Tree-shaking for smaller bundle size
+- Code splitting for faster loading
+- Asset optimization
+
+### Frontend Troubleshooting
+
+#### Frontend Won't Start
+
+```bash
+# Check Node.js version (requires 18+)
+node --version
+
+# Clear node_modules and reinstall
+rm -rf node_modules package-lock.json
+npm install
+
+# Check for port conflicts
+# If port 5173 is in use, Vite will auto-use next available port
+```
+
+#### Cannot Connect to Backend
+
+```bash
+# Verify backend is running
+curl http://localhost:7860/health
+
+# Check CORS settings (backend should allow all origins in dev)
+# Check WebRTC endpoint configuration in App.tsx
+```
+
+#### Microphone Not Working
+
+```bash
+# Check browser permissions
+# Chrome: Settings → Privacy → Site Settings → Microphone
+# Ensure microphone is allowed for localhost:5173
+
+# Test microphone in browser console
+navigator.mediaDevices.getUserMedia({ audio: true })
+  .then(stream => console.log('Microphone working'))
+  .catch(err => console.error('Microphone error:', err));
+```
+
+#### Build Errors
+
+```bash
+# Clear build cache
+rm -rf node_modules dist
+
+# Reinstall dependencies
+npm install
+
+# Check TypeScript errors
+npm run build
+```
+
+---
+
 ## Usage
 
 ### Voice Commands

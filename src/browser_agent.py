@@ -147,15 +147,15 @@ class BrowserAgentHandler:
             
             # Create task (official pattern)
             task = f"""
-Fill the field with name="{field_name}" with value: {value}
+                Fill the field with name="{field_name}" with value: {value}
 
-INSTRUCTIONS:
-1. Find the input/select/textarea element with name="{field_name}"
-2. If field is empty or has placeholder text, fill it with: {value}
-3. If field already has a value, leave it unchanged and report that
-4. Do NOT fill any other fields
-5. Do NOT click submit
-"""
+                INSTRUCTIONS:
+                1. Find the input/select/textarea element with name="{field_name}"
+                2. If field is empty or has placeholder text, fill it with: {value}
+                3. If field already has a value, leave it unchanged and report that
+                4. Do NOT fill any other fields
+                5. Do NOT click submit
+                """
             
             # Official pattern: add_new_task() -> run()
             agent.add_new_task(task)

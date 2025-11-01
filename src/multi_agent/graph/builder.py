@@ -12,11 +12,8 @@ from loguru import logger
 
 from .state import MultiAgentState
 
-# Import browser_agent using absolute import to avoid issues
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-from browser_agent import browser_agent
+# Import browser_agent from src
+from src.browser_agent import browser_agent
 
 
 # ============================================
@@ -75,8 +72,29 @@ async def fill_single_field(field_name: str, field_value: str) -> str:
     Returns:
         Kết quả điền field
     """
+    import os
     logger.info(f"📝 Incremental fill: {field_name} = {field_value}")
     
+    # AUTO-START SESSION nếu chưa có active session
+    if not browser_agent.active_session:
+        logger.info(f"⚠️  No active session, auto-starting session...")
+        
+        # Detect form type từ field_name hoặc context
+        form_type = "loan"  # Default
+        
+        # Try to detect from context (có thể improve sau)
+        # For now, assume loan form if not specified
+        
+        # Auto-start session
+        form_url = os.getenv("LOAN_FORM_URL", "http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com")
+        start_result = await browser_agent.start_form_session(form_url, form_type)
+        
+        if not start_result.get("success"):
+            return f"❌ Không thể mở form: {start_result.get('error')}. Vui lòng thử lại."
+        
+        logger.info(f"✅ Auto-started session for {form_type} form")
+    
+    # Now fill the field
     result = await browser_agent.fill_field_incremental(field_name, field_value)
     
     if result.get("success"):
@@ -696,56 +714,73 @@ def build_supervisor_workflow(llm):
 
 🚫 TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
 
-Khi user nói:
-- "Điền hồ sơ vay" / "Vay vốn" / "Đơn vay" → GỌI fill_loan_form() NGAY
-- "Cập nhật CRM" → GỌI fill_crm_form() NGAY  
-- "Nghỉ phép" / "Yêu cầu HR" → GỌI fill_hr_form() NGAY
-- "Báo cáo tuân thủ" → GỌI fill_compliance_form() NGAY
-- "Kiểm tra giao dịch" → GỌI fill_operations_form() NGAY
+⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+- ƯU TIÊN phân tích message CUỐI CÙNG từ user
+- Nếu message chứa 1 field (tên, SĐT, CCCD, email, số tiền) → GỌI fill_single_field() NGAY
+- Nếu message chứa nhiều fields (5+) → Có thể dùng fill_loan_form() hoặc gọi fill_single_field() nhiều lần
+- KHÔNG dùng fill_loan_form() nếu chỉ có 1-2 fields
 
-⚠️ QUAN TRỌNG: User đã xác nhận qua Voice Agent rồi, bạn CHỈ CẦN GỌI TOOL, không cần chat hay hỏi thêm!
+VÍ DỤ PHÂN TÍCH MESSAGE:
+- User: "Tôi muốn vay 500 triệu" → Extract: field="loanAmount", value="500000000" → GỌI fill_single_field("loanAmount", "500000000")
+- User: "Tên là Hiếu Nghị" → Extract: field="customerName", value="Hiếu Nghị" → GỌI fill_single_field("customerName", "Hiếu Nghị")
+- User: "SĐT 0963023600" → Extract: field="phoneNumber", value="0963023600" → GỌI fill_single_field("phoneNumber", "0963023600")
+- User: "CCCD 123456789012" → Extract: field="customerId", value="123456789012" → GỌI fill_single_field("customerId", "123456789012")
 
 BẠN CÓ 8 TOOLS (2 MODES):
 
-🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin):
-1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc
+🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
+1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc (dùng khi user nói tất cả thông tin)
 2. fill_crm_form - Điền TẤT CẢ fields CRM cùng lúc
 3. fill_hr_form - Điền TẤT CẢ fields HR cùng lúc
 4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
 5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
 
-🟢 **INCREMENTAL MODE** (3 tools - khi điền TỪNG FIELD):
-6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ
-7. fill_single_field(field_name, value) - Điền 1 field (có thể gọi NHIỀU LẦN)
+🟢 **INCREMENTAL MODE** (3 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
+6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
+7. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC (có thể gọi NHIỀU LẦN, mỗi user message = 1 lần)
 8. submit_incremental_form() - Submit form sau khi điền xong
 
 KHI NÀO DÙNG MỖI MODE:
 
-📋 **Use ONE-SHOT** khi:
-- User nói 1 câu chứa NHIỀU thông tin
-- VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901..."
-- → GỌI fill_loan_form() với TẤT CẢ params
+📋 **Use ONE-SHOT** CHỈ KHI:
+- User nói 1 câu CHỨA 5+ fields cùng lúc
+- VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901... email abc@gmail.com... địa chỉ 123..."
+- → Nếu có đủ 5+ fields → GỌI fill_loan_form() với TẤT CẢ params
+- → Nếu chỉ có 1-4 fields → ƯU TIÊN dùng fill_single_field() nhiều lần (incremental)
 
 📝 **Use INCREMENTAL** khi:
-- User nói "Bắt đầu điền đơn vay" / "Mở form vay"
-  → GỌI start_incremental_form("loan")
-- User nói "Điền tên Hiếu Nghị"
-  → GỌI fill_single_field("customerName", "Hiếu Nghị")
-- User nói "Điền SĐT 0963023600"
-  → GỌI fill_single_field("phoneNumber", "0963023600")
-- User nói "Submit" / "Gửi form"
+- User nói "Bắt đầu điền đơn vay" / "Mở form vay" / "Tạo form"
+  → GỌI start_incremental_form("loan") TRƯỚC
+- User nói "Điền tên Hiếu Nghị" / "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
+  → Nếu chưa có session → GỌI start_incremental_form("loan") TRƯỚC, sau đó fill_single_field("customerName", "Hiếu Nghị")
+  → Nếu đã có session → GỌI fill_single_field("customerName", "Hiếu Nghị") NGAY
+- User nói "Điền SĐT 0963023600" / "Số điện thoại 0963023600" / "SĐT là 0963023600"
+  → GỌI fill_single_field("phoneNumber", "0963023600") NGAY
+- User nói "Điền CCCD 123456789012" / "CCCD là 123456789012"
+  → GỌI fill_single_field("customerId", "123456789012") NGAY
+- User nói "Vay 500 triệu" / "Số tiền 500 triệu"
+  → GỌI fill_single_field("loanAmount", "500000000") NGAY (convert triệu → số)
+- User nói "Submit" / "Gửi form" / "Xong rồi"
   → GỌI submit_incremental_form()
 
-⚠️ QUAN TRỌNG:
-        - Bạn nhận TOÀN BỘ conversation history (multiple user messages)
-        - User đã XÁC NHẬN thông tin qua Voice Agent
-        - Message cuối cùng chứa "[CONFIRM_AND_EXECUTE]" = User đã đồng ý
+⚠️ QUAN TRỌNG - INCREMENTAL MODE:
+- ƯU TIÊN dùng incremental tools (start_incremental_form, fill_single_field, submit_incremental_form)
+- Mỗi user message có thể là 1 field → push ngay để điền field đó
+- Nếu user nói nhiều fields trong 1 câu → extract và điền từng field
+- Nếu chưa có session → start_incremental_form TRƯỚC
 
+⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+        - ƯU TIÊN phân tích message CUỐI CÙNG (message mới nhất từ user)
+        - Extract field và value từ message đó
+        - GỌI fill_single_field() NGAY với field và value đó
+        - Nếu chưa có session, fill_single_field() sẽ tự động start session
+        
         NHIỆM VỤ:
-        1. Phân tích TOÀN BỘ conversation history
-        2. Trích xuất thông tin từ TẤT CẢ user messages
-        3. GỌI TOOL phù hợp với thông tin đã extract
-        4. Dùng PLACEHOLDER cho fields vẫn còn thiếu
+        1. Đọc message CUỐI CÙNG từ user
+        2. Extract field name và value từ message đó
+        3. GỌI fill_single_field(field_name, value) NGAY
+        4. Nếu message có nhiều fields → có thể gọi fill_single_field nhiều lần
+        5. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
 
         PLACEHOLDER CHO FIELDS THIẾU:
         - customer_name: "Khách hàng" (nếu không có)
@@ -792,15 +827,30 @@ KHI NÀO DÙNG MỖI MODE:
             ...
         )
 
-        🔍 EXTRACTION RULES (CRITICAL - Phân Biệt Rõ Ràng):
+        🔍 EXTRACTION RULES (CRITICAL - ÁP DỤNG CHO MESSAGE CUỐI CÙNG):
 
-        **Số Tiền Vay (loan_amount, monthlyIncome, collateralValue):**
-        - Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương", "tài sản"
-        - "50 triệu" → 50000000 (nhân 1,000,000)
-        - "500 triệu" → 500000000
-        - "1 tỷ" → 1000000000
-        - "25 triệu/tháng" → monthly_income = 25000000
-        - "460 nghìn" hoặc "460000" → 460000 (giữ nguyên nếu đã là số)
+        **BƯỚC 1: Đọc message CUỐI CÙNG từ user**
+        **BƯỚC 2: Extract field và value từ message đó**
+        **BƯỚC 3: GỌI fill_single_field(field_name, value) NGAY**
+
+        **MAPPING FIELD TỪ KEYWORDS:**
+        - "tên" / "họ tên" / "tên là" → field_name="customerName"
+        - "SĐT" / "số điện thoại" / "điện thoại" → field_name="phoneNumber"
+        - "CCCD" / "CMND" / "căn cước" / "chứng minh" → field_name="customerId"
+        - "email" / "e-mail" → field_name="email"
+        - "địa chỉ" / "địa chỉ thường trú" → field_name="address"
+        - "ngày sinh" / "sinh" / "date of birth" → field_name="dateOfBirth"
+        - "vay" / "số tiền" / "khoản vay" → field_name="loanAmount"
+        - "kỳ hạn" / "thời hạn" → field_name="loanTerm"
+        - "mục đích" / "mục đích vay" → field_name="loanPurpose"
+        - "thu nhập" / "lương" / "thu nhập tháng" → field_name="monthlyIncome"
+        - "công ty" / "nơi làm việc" → field_name="companyName"
+
+        **Số Tiền Vay (loan_amount):**
+        - Tìm từ khóa: "vay", "triệu", "tỷ"
+        - "50 triệu" → value="50000000" (nhân 1,000,000)
+        - "500 triệu" → value="500000000"
+        - "1 tỷ" → value="1000000000"
 
         **VALUE MAPPING (Vietnamese → English):**
 
@@ -856,7 +906,9 @@ KHI NÀO DÙNG MỖI MODE:
 
         **Họ Tên (customer_name):**
         - Tìm từ khóa: "tên", "họ tên", "tên là"
-        - Ví dụ: "Nguyễn Văn An", "Hiếu Nghị"
+        - Extract value sau keyword
+        - Ví dụ: "Tên là Hiếu Nghị" → value="Hiếu Nghị"
+        - Ví dụ: "Tên Hiếu Nghị" → value="Hiếu Nghị"
 
         ⚠️ ĐẶC BIỆT LƯU Ý:
         - PHÂN BIỆT RÕ: Số điện thoại (10 số, bắt đầu 0) ≠ Số tiền (lớn hơn nhiều)
@@ -864,24 +916,67 @@ KHI NÀO DÙNG MỖI MODE:
         - "50000000" = loan_amount (8 digits, no leading 0)
         - KHÔNG NHẦM LẪN giữa 2 loại số này!
 
-        ✅ LUÔN GỌI TOOL với thông tin đã extract!
+        ✅ QUY TRÌNH:
+        1. Đọc message CUỐI CÙNG từ user
+        2. Extract field_name và value từ message đó
+        3. GỌI fill_single_field(field_name, value) NGAY
+        4. KHÔNG dùng fill_loan_form() trừ khi message chứa 5+ fields
         
-🚨 QUY TẮC VÀNG:
-1. Nếu user nói về vay vốn → GỌI fill_loan_form() NGAY (dùng placeholders cho fields thiếu)
-2. Nếu user nói về CRM → GỌI fill_crm_form() NGAY
-3. Nếu user nói về HR → GỌI fill_hr_form() NGAY
-4. Nếu user nói về compliance → GỌI fill_compliance_form() NGAY
-5. Nếu user nói về operations → GỌI fill_operations_form() NGAY
+🚨 QUY TẮC VÀNG - ƯU TIÊN INCREMENTAL MODE:
+1. Phân tích user message cuối cùng để extract field và value
+2. Nếu user nói "bắt đầu điền", "mở form", "tạo form" → GỌI start_incremental_form() TRƯỚC
+3. Nếu user nói về field cụ thể → GỌI fill_single_field() NGAY (sẽ auto-start session nếu chưa có):
+   - "tên X" / "Tên là X" → fill_single_field("customerName", "X")
+   - "SĐT Y" / "Số điện thoại Y" → fill_single_field("phoneNumber", "Y")
+   - "CCCD Z" / "Căn cước Z" → fill_single_field("customerId", "Z")
+   - "vay X triệu" → fill_single_field("loanAmount", "X*1000000")
+   - "email X" → fill_single_field("email", "X")
+4. Nếu user nói "submit", "gửi", "xong" → GỌI submit_incremental_form()
+5. Nếu user nói TẤT CẢ thông tin trong 1 message (nhiều fields) → Có thể dùng ONE-SHOT hoặc gọi fill_single_field nhiều lần
+
+🎯 VÍ DỤ INCREMENTAL MODE REAL-TIME:
+- User: "Tôi muốn vay 500 triệu"
+  → GỌI: fill_single_field("loanAmount", "500000000") NGAY
+  → (fill_single_field sẽ tự động start session nếu chưa có)
+
+- User: "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
+  → GỌI: fill_single_field("customerName", "Hiếu Nghị") NGAY
+  → Extract: field_name="customerName", value="Hiếu Nghị"
+
+- User: "SĐT 0963023600" / "Số điện thoại 0963023600"
+  → GỌI: fill_single_field("phoneNumber", "0963023600") NGAY
+  → Extract: field_name="phoneNumber", value="0963023600"
+
+- User: "CCCD 123456789012" / "Căn cước 123456789012"
+  → GỌI: fill_single_field("customerId", "123456789012") NGAY
+  → Extract: field_name="customerId", value="123456789012"
+
+- User: "Email abc@gmail.com"
+  → GỌI: fill_single_field("email", "abc@gmail.com") NGAY
+
+- User: "Vay 500 triệu"
+  → GỌI: fill_single_field("loanAmount", "500000000") NGAY
+  → Convert: "500 triệu" → 500000000
+
+- User: "Submit" / "Gửi form" / "Xong rồi"
+  → GỌI: submit_incremental_form() NGAY
+
+⚠️ QUAN TRỌNG:
+- fill_single_field() sẽ TỰ ĐỘNG start session nếu chưa có
+- KHÔNG cần gọi start_incremental_form() trước (trừ khi user nói "bắt đầu điền")
+- ƯU TIÊN dùng fill_single_field() hơn start_incremental_form()
 
 KHÔNG BAO GIỜ:
 - Trả lời "Tôi hiểu bạn muốn..." mà không gọi tool
-- Hỏi thêm thông tin (user đã confirm rồi)
+- Hỏi thêm thông tin
 - Chỉ nói text mà không gọi tool
+- Chờ confirm - push NGAY khi user nói
 
 LUÔN LUÔN:
-- Extract thông tin từ conversation history
-- Gọi tool với thông tin đã có + placeholders cho fields thiếu
-- Trả về kết quả từ tool
+- Phân tích message cuối cùng để extract field và value
+- GỌI TOOL NGAY (start_incremental_form hoặc fill_single_field)
+- Ưu tiên INCREMENTAL MODE hơn ONE-SHOT mode
+- Mỗi user message = 1 tool call (real-time updates)
 """
     
     # Create supervisor agent with react pattern

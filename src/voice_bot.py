@@ -1,11 +1,11 @@
 """
-Bot Multi-Agent - VPBank Form Automation
-Tích hợp multi-agent workflow vào pipeline hiện tại
+Voice Bot - VPBank Form Automation
+Voice interface với WebRTC, STT, TTS, và LLM
+Gửi requests đến Browser Agent Service để thực hiện automation
 """
 import asyncio
 import os
 import json
-import uuid
 from datetime import datetime
 from aiohttp import web
 from aiohttp.web import RouteTableDef
@@ -180,7 +180,7 @@ async def run_bot(webrtc_connection, ws_connections):
     """
     Run bot with multi-agent workflow
     """
-    logger.info("🚀 Starting bot with multi-agent system...")
+    logger.info("🚀 Starting voice bot...")
     
     # Flag để track khi có workflow đang process
     processing_task = {"active": False, "task_id": None}
@@ -253,30 +253,31 @@ async def run_bot(webrtc_connection, ws_connections):
                         logger.warning(f"Failed to send transcript: {e}")
                         ws_connections.discard(ws)
                 
-                # Push task to queue khi:
-                # 1. User confirmed (ONE-SHOT mode)
-                # 2. User yêu cầu incremental action
+                # Push ngay lập tức khi user nói về form filling (incremental mode)
+                # Mỗi user message có thể là: tên, cccd, sdt, số tiền, etc. → push ngay để điền field đó
                 
                 should_push_task = False
                 
-                # Detect ONE-SHOT confirmation
-                if message.role == "assistant" and "BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" in message.content:
-                    should_push_task = True
-                
-                # Detect INCREMENTAL commands (from USER messages)
                 if message.role == "user":
                     msg_lower = message.content.lower()
-                    incremental_keywords = [
-                        "bắt đầu điền", "mở form", "tạo form",
-                        "điền tên", "điền cccd", "điền sdt", "điền số điện thoại",
-                        "điền email", "điền địa chỉ", "điền số tiền", "điền kỳ hạn",
-                        "vay", "thu nhập", "công ty",
-                        "submit", "gửi form", "gửi đơn", "xong rồi"
+                    
+                    # Detect form filling intent - push ngay lập tức (incremental hoặc one-shot)
+                    form_keywords = [
+                        # Start form keywords
+                        "bắt đầu điền", "mở form", "tạo form", "điền đơn", "làm đơn vay",
+                        # Field keywords
+                        "vay", "khoản vay", "đơn vay", "làm đơn vay", "tạo đơn vay",
+                        "cccd", "căn cước", "số điện thoại", "sdt", "email", "địa chỉ",
+                        "số tiền", "kỳ hạn", "mục đích vay", "thu nhập", "công ty",
+                        "tên", "ngày sinh", "giới tính", "mục đích", "kỳ hạn",
+                        # Submit keywords
+                        "gửi form", "gửi đơn", "submit", "xong rồi", "làm xong"
                     ]
                     
-                    if any(keyword in msg_lower for keyword in incremental_keywords):
+                    # Push ngay khi detect intent (incremental mode - mỗi message push ngay)
+                    if any(keyword in msg_lower for keyword in form_keywords):
                         should_push_task = True
-                        logger.info(f"🔍 Detected incremental command: {message.content[:50]}...")
+                        logger.info(f"🚀 Detected form intent in user message, pushing immediately to Browser Service")
                 
                 if should_push_task:
                     # Lấy TOÀN BỘ conversation history để extract thông tin
@@ -290,15 +291,15 @@ async def run_bot(webrtc_connection, ws_connections):
                     # Join tất cả messages
                     full_context = "\n".join(conversation_history)
                     
-                    logger.info(f"✅ User CONFIRMED! Pushing request to Browser Service...")
+                    logger.info(f"📤 Pushing request to Browser Service immediately...")
                     logger.debug(f"   Full context ({len(all_messages)} messages) sent to Browser Service")
+                    logger.debug(f"   Latest user message: {message.content[:100]}...")
                     
-                    # Set processing flag
+                    # Set processing flag (cho phép nhiều push - incremental mode)
                     processing_task["active"] = True
                     processing_task["task_id"] = session_id
-                    logger.info(f"🔒 Voice input PAUSED while Browser Service processing...")
                     
-                    # Push request to Browser Service
+                    # Push request to Browser Service (non-blocking - mỗi message push riêng)
                     asyncio.create_task(push_to_browser_service(
                         full_context, ws_connections, session_id, processing_task
                     ))
@@ -361,11 +362,11 @@ async def run_bot(webrtc_connection, ws_connections):
             5️⃣ **KIỂM TRA GIAO DỊCH** (Use Case 5)
             - ONE-SHOT hoặc INCREMENTAL (tương tự)
 
-            📝 QUY TRÌNH ONE-SHOT:
+            📝 QUY TRÌNH ONE-SHOT (AUTO MODE):
 
             ⚡ **USER NÓI 1 CÂU DUY NHẤT** chứa TẤT CẢ thông tin
-            ⚡ **BOT XÁC NHẬN** lại thông tin đã nghe
-            ⚡ **USER CONFIRM** → Thực thi ngay
+            ⚡ **BOT GHI NHẬN** và nói "Đang xử lý..."
+            ⚡ **HỆ THỐNG TỰ ĐỘNG** push vào Browser Service → Xử lý ngay
 
             📝 QUY TRÌNH INCREMENTAL (MỚI!):
 
@@ -410,59 +411,35 @@ async def run_bot(webrtc_connection, ws_connections):
 
             **Use Case 1 - Loan:**
             User: "Tạo đơn vay cho khách hàng Nguyễn Văn An, CCCD 012345678901, sinh 15/03/1985, địa chỉ 123 Lê Lợi Quận 1, SĐT 0901234567, email abc@gmail.com, vay 500 triệu mua nhà kỳ hạn 24 tháng, kỹ sư phần mềm FPT thu nhập 30 triệu/tháng"
-            Bot: "Xác nhận: Nguyễn Văn An, CCCD 012345678901, 500 triệu, 24 tháng... [đọc lại tất cả]. Đúng không?"
-            User: "Đúng"
-            Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            Bot: "Dạ, tôi đã ghi nhận: Nguyễn Văn An, CCCD 012345678901, 500 triệu, 24 tháng. Đang xử lý..."
+            (Hệ thống tự động push ngay - không cần confirm)
 
             **Use Case 2 - CRM:**
             User: "Cập nhật CRM khách Trần Văn B mã CUS002 khiếu nại thẻ bị khóa đã xử lý nhân viên Phạm Nam"
-            Bot: "Xác nhận: KH Trần Văn B, mã CUS002, khiếu nại thẻ... Đúng không?"
-            User: "OK"
-            Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            Bot: "Dạ, tôi đã ghi nhận: KH Trần Văn B, mã CUS002, khiếu nại thẻ. Đang xử lý..."
 
             **Use Case 3 - HR:**
             User: "Đơn nghỉ phép nhân viên Trần Thị Cúc NV001 từ 22 đến 24/10 việc gia đình phòng Kinh Doanh quản lý Lê Hoàng"
-            Bot: "Xác nhận: Trần Thị Cúc, nghỉ 22-24/10... Đúng không?"
-            User: "Đúng"
-            Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            Bot: "Dạ, tôi đã ghi nhận: Trần Thị Cúc, nghỉ 22-24/10. Đang xử lý..."
 
             **Use Case 4 - Compliance:**
             User: "Báo cáo AML tháng 9 nhân viên Lê Văn Cường không vi phạm"
-            Bot: "Xác nhận: Báo cáo AML tháng 9, Lê Văn Cường, 0 vi phạm. Đúng không?"
-            User: "Đúng"
-            Bot: "Tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            Bot: "Dạ, tôi đã ghi nhận: Báo cáo AML tháng 9, Lê Văn Cường, 0 vi phạm. Đang xử lý..."
 
             **Use Case 5 - Operations:**
             User: "Kiểm tra GD TXN12345 số tiền 10 triệu khách Nguyễn Văn A"
-            Bot: "Xác nhận: Mã giao dịch TXN12345, số tiền 10 triệu đồng, khách hàng Nguyễn Văn A. Đúng không?"
-            User: "Đúng"
-            Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            Bot: "Dạ, tôi đã ghi nhận: Mã TXN12345, 10 triệu đồng, KH Nguyễn Văn A. Đang xử lý..."
 
             ---
 
             QUY TRÌNH THỐNG NHẤT (2 BƯỚC):
 
-            BƯỚC 1: User nói 1 câu duy nhất (có thể dài)
-
-                        BƯỚC 2: XÁC NHẬN (BẮT BUỘC!)
-                        - Đọc lại TẤT CẢ thông tin đã thu thập theo format chuẩn:
-
-                        **Format xác nhận:**
-                        ```
-                        Để tôi xác nhận lại:
-                        - Họ tên: [Tên đầy đủ]
-                        - Số CCCD: [12 chữ số] (ví dụ: 123456789012)
-                        - Ngày sinh: [dd/mm/yyyy] (ví dụ: 15/03/2005)
-                        - Số điện thoại: [10 chữ số bắt đầu bằng 0] (ví dụ: 0963023600)
-                        - Email: [địa chỉ email]
-                        - Địa chỉ: [địa chỉ đầy đủ]
-                        - Số tiền vay: [X triệu VNĐ] (ví dụ: 50 triệu VNĐ)
-                        - Kỳ hạn: [X tháng] (ví dụ: 24 tháng)
-                        - Công việc: [nghề nghiệp]
-                        - Thu nhập: [X triệu VNĐ/tháng]
-
-                        Anh/chị xác nhận thông tin trên ĐÚNG không?
-                        ```
+            CHẾ ĐỘ TỰ ĐỘNG - KHÔNG CẦN XÁC NHẬN:
+            
+            - User nói thông tin (1 câu hoặc nhiều câu)
+            - Bot ghi nhận và tự động xử lý ngay khi có đủ thông tin
+            - Bot chỉ nói ngắn gọn: "Dạ, tôi đã ghi nhận: [tóm tắt]. Đang xử lý..."
+            - Hệ thống tự động push vào Browser Service để điền form
 
             ⚠️ RÀNG BUỘC FORMAT & PHÁT ÂM (QUAN TRỌNG):
 
@@ -501,59 +478,37 @@ async def run_bot(webrtc_connection, ws_connections):
             - "Quận 1" đọc là "Quận một" (không phải "Quận một số một")
             - "TP.HCM" đọc là "Thành Phố Hồ Chí Minh"
 
-            BƯỚC 3: Thực thi
-            - Chỉ khi user XÁC NHẬN (nói "Đúng" hoặc "OK" hoặc "Xác nhận" hoặc "Chính xác") 
-            - Nói: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            ⚠️ QUAN TRỌNG - XỬ LÝ TỰ ĐỘNG:
+            - KHÔNG cần xác nhận từ user
+            - Khi đã thu thập đủ thông tin từ user, hệ thống sẽ TỰ ĐỘNG xử lý
+            - Bot chỉ cần nói: "Dạ, tôi đã ghi nhận thông tin và đang xử lý..."
+            - KHÔNG nói "BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" nữa (đã bỏ confirm mode)
             
-            ⚠️ QUAN TRỌNG - CỤM TỪ TRIGGER:
-            - Phải nói CHÍNH XÁC: "tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" (viết hoa)
-            - Đây là trigger để hệ thống thực thi
-            - Không thay đổi cụm từ này!
-
             ⚠️ CẤM:
-            - KHÔNG thực thi mà chưa xác nhận!
-            - KHÔNG thay đổi cụm từ trigger
-            - Phải đọc lại đúng format: số điện thoại vs số tiền phân biệt rõ
+            - KHÔNG hỏi xác nhận "Đúng không?"
+            - KHÔNG chờ user xác nhận
+            - Thu thập đủ thông tin → Tự động xử lý ngay
 
             VÍ DỤ CHUẨN:
 
-            User: "Tôi muốn vay 500 triệu"
-            Bot: "Dạ, để tôi hỗ trợ anh. Cho tôi biết:
-                - Họ tên đầy đủ?
-                - Số CCCD?"
-                
-            User: "Tên Nguyễn Văn An, CCCD 001234567890"
-            Bot: "Dạ, để tôi xác nhận lại:
-                - Họ tên: Nguyễn Văn An
-                - Số Căn Cước Công Dân: không không một hai ba bốn năm sáu bảy tám chín không
-                - Số tiền vay: 500 triệu đồng
-                Anh xác nhận thông tin trên ĐÚNG không?"
-                            
-                        User: "Đúng rồi"
-                        Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+            User: "Tôi muốn vay 500 triệu, tên Nguyễn Văn An, CCCD 001234567890"
+            Bot: "Dạ, tôi đã ghi nhận: Nguyễn Văn An, CCCD 001234567890, 500 triệu. Đang xử lý..."
+            (Hệ thống tự động push ngay khi có đủ thông tin)
 
-                        **VÍ DỤ ONE-SHOT MODE (Use Case 5):**
+                        **VÍ DỤ AUTO MODE (Use Case 5):**
 
-                        User: "Kiểm tra giao dịch"
-                        Bot: "Dạ, cho tôi biết:
-                            - Mã giao dịch?
-                            - Số tiền?
-                            - Tên khách hàng?"
-                            
-                        User: "Mã TXN12345, số tiền 10 triệu, khách hàng Nguyễn Văn A"
-                        Bot: "Xác nhận: Mã TXN12345, 10 triệu VNĐ, KH Nguyễn Văn A. Đúng không?"
-
-                        User: "Đúng"
-                        Bot: "Dạ, tôi sẽ BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ."
+                        User: "Kiểm tra giao dịch TXN12345 số tiền 10 triệu khách hàng Nguyễn Văn A"
+                        Bot: "Dạ, tôi đã ghi nhận: Mã TXN12345, 10 triệu đồng, KH Nguyễn Văn A. Đang xử lý..."
+                        (Hệ thống tự động push ngay)
                         (Các fields khác như ngày GD, người kiểm tra sẽ auto-fill)
 
             🚫 TUYỆT ĐỐI KHÔNG:
-            - Thực thi ngay mà chưa xác nhận
-            - Nói cụm trigger trước khi user confirm
-            - Bỏ qua bước đọc lại thông tin
-            - Thay đổi cụm trigger thành câu khác
+            - Hỏi xác nhận "Đúng không?"
+            - Chờ user xác nhận
+            - Nói cụm "BẮT ĐẦU XỬ LÝ NGAY BÂY GIỜ" (đã bỏ mode này)
+            - Trì hoãn xử lý khi đã có đủ thông tin
 
-            ⏳ KHI ĐANG XỬ LÝ FORM (sau khi nói "BẮT ĐẦU XỬ LÝ"):
+            ⏳ KHI ĐANG XỬ LÝ FORM (sau khi push vào Browser Service):
             - Nếu user nói bất cứ gì → Trả lời: "Dạ, hệ thống đang xử lý form, vui lòng đợi trong giây lát. Anh/chị sẽ nhận được thông báo khi hoàn tất."
             - KHÔNG bắt đầu conversation mới
             - KHÔNG hỏi thêm thông tin

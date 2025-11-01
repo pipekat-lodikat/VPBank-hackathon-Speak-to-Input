@@ -20,6 +20,7 @@ services:
     ports:
       - "7860:7860"
     environment:
+      - USE_TASK_QUEUE_API=true
       - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
@@ -40,6 +41,7 @@ services:
     build: .
     command: python main_worker.py
     environment:
+      - USE_TASK_QUEUE_API=true
       - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}

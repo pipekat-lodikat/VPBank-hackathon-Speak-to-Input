@@ -115,8 +115,8 @@ BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
 # OpenAI API Key
 OPENAI_API_KEY=your_openai_api_key
 
-# Task Queue Service URL (for microservices mode)
-TASK_QUEUE_SERVICE_URL=http://localhost:7862
+# Browser Agent Service URL (optional, default: http://localhost:7863)
+BROWSER_SERVICE_URL=http://localhost:7863
 
 # Form URLs (optional, defaults provided)
 LOAN_FORM_URL=http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com
@@ -180,57 +180,93 @@ Create an IAM user with the following permissions:
 
 ## Running the Application
 
-### Option 1: Monolithic Mode (Single Process)
+### Prerequisites
 
-Run all services in a single process:
+Đảm bảo đã:
+1. Activate virtual environment: `venv\Scripts\activate` (Windows) hoặc `source venv/bin/activate` (Linux/macOS)
+2. Install dependencies: `pip install -r requirements.txt`
+3. Config `.env` file với AWS và OpenAI credentials
+4. Install Playwright browsers: `playwright install chromium`
+
+### Quick Start
+
+Run both services separately (recommended):
+
+#### Step 1: Start Browser Agent Service
+
+Open Terminal 1:
 
 ```bash
-python main.py
+python main_browser_service.py
 ```
 
-The server will start on `http://localhost:7860`
+Service starts on `http://localhost:7863`
 
-### Option 2: Microservices Mode (Recommended for Production)
-
-Run services separately for better scalability and fault isolation.
-
-#### Terminal 1: Task Queue Service
-
-```bash
-python services/task_queue_service/main.py
+You should see:
+```
+🌐 Starting Browser Agent Service...
+📡 Service runs on port 7863
+🔗 Endpoints:
+   POST   /api/execute - Execute workflow
+   GET    /api/health - Health check
+✅ Workflow initialized (model: ...)
 ```
 
-Service starts on `http://localhost:7862`
+#### Step 2: Start Voice Bot Service
 
-#### Terminal 2: Voice Bot Service
+Open Terminal 2:
 
 ```bash
 # Windows PowerShell:
-$env:TASK_QUEUE_SERVICE_URL="http://localhost:7862"
 python main_voice.py
 
 # Linux/macOS:
-export TASK_QUEUE_SERVICE_URL="http://localhost:7862"
+python main_voice.py
+```
+
+**Note:** Nếu Browser Service chạy trên port/ host khác, set environment variable:
+```bash
+# Windows PowerShell:
+$env:BROWSER_SERVICE_URL="http://localhost:7863"
+python main_voice.py
+
+# Linux/macOS:
+export BROWSER_SERVICE_URL="http://localhost:7863"
 python main_voice.py
 ```
 
 Service starts on `http://localhost:7860`
 
-#### Terminal 3: Browser Worker Service
-
-```bash
-# Windows PowerShell:
-$env:TASK_QUEUE_SERVICE_URL="http://localhost:7862"
-python main_worker.py
-
-# Linux/macOS:
-export TASK_QUEUE_SERVICE_URL="http://localhost:7862"
-python main_worker.py
+You should see:
+```
+🎤 Starting Voice Bot Service...
+📡 Service runs on port 7860
+🚀 Voice bot ready - workflow will execute directly when needed
 ```
 
-Service runs in background, polling tasks from Task Queue Service.
+### How It Works
 
-### Option 3: Docker Compose
+1. **Voice Bot** receives voice input from user
+2. User confirms → Voice Bot sends HTTP POST to Browser Service
+3. **Browser Service** executes multi-agent workflow → browser automation
+4. Browser Service returns result → Voice Bot notifies user via WebSocket
+
+### Important Notes
+
+1. **Service Order**: 
+   - Always start Browser Agent Service first
+   - Then start Voice Bot Service
+   - Voice Bot will push requests to Browser Service
+
+2. **Environment Variable `BROWSER_SERVICE_URL`**: 
+   - Default: `http://localhost:7863`
+   - Set this if Browser Service runs on different host/port
+
+3. **Service Health**: 
+   - Check Browser Service: `curl http://localhost:7863/api/health`
+   - Check Voice Bot: Open `http://localhost:7860` in browser
+
+### Docker Compose (Optional)
 
 Build and run all services using Docker:
 
@@ -250,12 +286,9 @@ docker-compose down
 
 ## API Endpoints
 
-### Task Queue Service (Port 7862)
+### Browser Agent Service (Port 7863)
 
-- `POST /api/tasks/push` - Push a new task to queue
-- `GET /api/tasks/pop` - Pop next task (long polling, 30s timeout)
-- `PATCH /api/tasks/{task_id}` - Update task status
-- `GET /api/tasks/{task_id}` - Get task by ID
+- `POST /api/execute` - Execute workflow (takes user_message and session_id)
 - `GET /api/health` - Health check endpoint
 
 ### Voice Bot Service (Port 7860)
@@ -276,7 +309,7 @@ All services share the same `.env` file. Key variables:
 | `AWS_REGION` | AWS region (default: us-east-1) | Yes |
 | `BEDROCK_MODEL_ID` | Bedrock model identifier | Yes |
 | `OPENAI_API_KEY` | OpenAI API key | Yes |
-| `TASK_QUEUE_SERVICE_URL` | Task queue service URL (microservices mode) | No |
+| `BROWSER_SERVICE_URL` | Browser Agent Service URL (microservices mode) | No (default: http://localhost:7863) |
 
 ### Logging
 
@@ -292,23 +325,14 @@ $env:LOG_LEVEL="DEBUG"  # Windows PowerShell
 ```
 VPBankHackathon/
 ├── src/                          # Backend source code
-│   ├── bot_multi_agent.py        # Voice bot service (WebRTC/STT/TTS/LLM)
-│   ├── workflow_worker.py       # Browser worker service
-│   ├── browser_agent.py          # Browser automation handler
-│   ├── task_queue.py             # Task queue implementation
+│   ├── voice_bot.py             # Voice bot service (WebRTC/STT/TTS/LLM)
+│   ├── browser_agent.py         # Browser automation handler
 │   └── multi_agent/              # Multi-agent system
 │       └── graph/
 │           ├── builder.py        # Supervisor workflow builder
 │           └── state.py          # LangGraph state definition
-├── services/                      # Microservices
-│   ├── task_queue_service/       # Task queue HTTP API server
-│   │   └── main.py
-│   └── shared/                   # Shared utilities
-│       ├── task_queue_api.py    # HTTP API client
-│       └── task_queue_wrapper.py # Wrapper (local/API modes)
-├── main.py                       # Monolithic entry point
 ├── main_voice.py                 # Voice bot service entry point
-├── main_worker.py                # Browser worker entry point
+├── main_browser_service.py       # Browser agent service entry point (HTTP API)
 ├── requirements.txt               # Python dependencies
 ├── docker-compose.yml             # Docker orchestration
 ├── Dockerfile                     # Docker image definition

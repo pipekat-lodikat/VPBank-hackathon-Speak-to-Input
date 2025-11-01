@@ -108,7 +108,12 @@ async def fill_single_field(field_name: str, field_value: str) -> str:
     
     if result.get("success"):
         fields_count = result.get("fields_filled", 0)
-        return f"✅ Đã điền {field_name}. Tổng đã điền: {fields_count} fields. Tiếp tục điền hoặc nói 'Submit' để gửi."
+        skipped = result.get("skipped", False)
+        
+        if skipped:
+            return f"✅ Field {field_name} đã có giá trị, không ghi đè. Tổng đã điền: {fields_count} fields."
+        else:
+            return f"✅ Đã điền {field_name} = {field_value}. Tổng đã điền: {fields_count} fields. Tiếp tục điền hoặc nói 'Submit' để gửi."
     else:
         return f"❌ Lỗi điền field: {result.get('error')}"
 

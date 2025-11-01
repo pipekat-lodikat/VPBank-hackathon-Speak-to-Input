@@ -88,13 +88,31 @@ async def push_to_browser_service(user_message: str, ws_connections: set, sessio
                     
                     if result.get("success"):
                         final_message = result.get("result", "Completed")
+                        
+                        # Filter JSON from response (avoid TTS reading JSON)
+                        if isinstance(final_message, str):
+                            # Remove JSON code blocks
+                            import re
+                            # Remove ```json blocks
+                            final_message = re.sub(r'```json\s*\{[^}]*\}\s*```', '', final_message, flags=re.DOTALL)
+                            # Remove ``` blocks
+                            final_message = re.sub(r'```[^`]*```', '', final_message, flags=re.DOTALL)
+                            # Remove { } blocks
+                            final_message = re.sub(r'\{[^}]*\}', '', final_message)
+                            # Clean up extra whitespace
+                            final_message = final_message.strip()
+                        
+                        # If empty after filtering, use default message
+                        if not final_message or len(final_message) < 5:
+                            final_message = "Đã điền thành công"
+                        
                         logger.info(f"✅ Browser Service completed! Result: {final_message[:200]}...")
                         
                         # Notify via WebSocket
                         notification = {
                             "type": "task_completed",
                             "result": final_message,
-                            "message": "✅ Form đã được điền và submit thành công!"
+                            "message": f"✅ {final_message}"
                         }
                         
                         for ws in list(ws_connections):

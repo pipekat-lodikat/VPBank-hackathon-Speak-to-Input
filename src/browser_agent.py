@@ -278,8 +278,8 @@ CRITICAL INSTRUCTIONS FOR DROPDOWNS & DATE FIELDS:
             # Create persistent browser session
             browser_config = BrowserConfig(_force_keep_browser_alive=True)
             browser = Browser(config=browser_config)
-            await browser.start()
-            logger.info(f"✅ Browser started (persistent mode) for session {session_id}")
+            # Browser doesn't need explicit start() - it starts automatically when used
+            logger.info(f"✅ Browser initialized (persistent mode) for session {session_id}")
             
             # Create agent với browser_session để giữ browser mở
             llm = self._get_llm()
@@ -378,12 +378,13 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
                                 "message": f"Field {field_name} đã có giá trị {value}, không fill lại"
                             }
                         else:
-                            logger.info(f"⚠️  Field {field_name} already filled with different value, updating...")
-                            # Update existing value in session
-                            f["value"] = value
+                            logger.info(f"⚠️  Field {field_name} already filled with different value, will update...")
+                            # Remove old entry để fill lại với giá trị mới
+                            session_data["fields_filled"] = [f for f in session_data["fields_filled"] if f["field"] != field_name]
                             break
             
             logger.info(f"📝 Filling field incrementally: {field_name} = {value} (session: {session_id})")
+            logger.debug(f"   Current filled fields: {[f['field'] for f in session_data['fields_filled']]}")
             
             # Create task for this specific field với check giá trị cũ
             task = f"""

@@ -315,56 +315,15 @@ DO NOT TOUCH ANY FORM FIELDS OR INPUTS - JUST NAVIGATE AND WAIT!
                 if hasattr(agent, '_pending_tasks') and agent._pending_tasks:
                     logger.debug(f"Found {len(agent._pending_tasks)} pending tasks")
             
-            # Try different parameter names for browser session
-            # Some versions use 'browser' instead of 'browser_session'
-            # In browser-use 0.1.40, browser_session may not be supported in __init__
-            incremental_agent = None
-            try:
-                # Try with browser_session first (as per documentation)
-                incremental_agent = Agent(
-                    task=task,
-                    browser_session=browser,
-                    llm=llm,
-                    use_vision=True,
-                    max_failures=5,
-                    max_actions_per_step=10
-                )
-                logger.debug("✅ Created Agent with browser_session parameter")
-            except TypeError as e:
-                logger.debug(f"⚠️  browser_session parameter failed: {e}, trying 'browser' parameter")
-                # If browser_session fails, try with browser parameter
-                try:
-                    incremental_agent = Agent(
-                        task=task,
-                        browser=browser,
-                        llm=llm,
-                        use_vision=True,
-                        max_failures=5,
-                        max_actions_per_step=10
-                    )
-                    logger.debug("✅ Created Agent with browser parameter")
-                except TypeError as e2:
-                    logger.debug(f"⚠️  browser parameter failed: {e2}, creating Agent without browser")
-                    # If both fail, create without browser and set it manually
-                    incremental_agent = Agent(
-                        task=task,
-                        llm=llm,
-                        use_vision=True,
-                        max_failures=5,
-                        max_actions_per_step=10
-                    )
-                    # Try to set browser after creation
-                    if hasattr(incremental_agent, 'browser_session'):
-                        incremental_agent.browser_session = browser
-                        logger.debug("✅ Set browser_session attribute after creation")
-                    elif hasattr(incremental_agent, 'browser'):
-                        incremental_agent.browser = browser
-                        logger.debug("✅ Set browser attribute after creation")
-                    else:
-                        logger.warning("⚠️  Could not set browser on Agent - browser may be auto-created")
-                        # Browser will be created automatically by Agent if not provided
-                        # This means we can't share the persistent browser session
-                        # But the browser with keep_alive=True should still work
+            # Create Agent with browser parameter (standard parameter name)
+            incremental_agent = Agent(
+                task=task,
+                browser=browser,  # Use 'browser' parameter (standard)
+                llm=llm,
+                use_vision=True,
+                max_failures=5,
+                max_actions_per_step=10
+            )
             
             # Initialize pause/resume flags
             incremental_agent._paused = False

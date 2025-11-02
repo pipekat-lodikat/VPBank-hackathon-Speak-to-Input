@@ -84,6 +84,7 @@ async def fill_multiple_fields(fields_json: str) -> str:
         Kết quả điền fields
     """
     import json
+    import os
     global _current_session_id
     
     try:
@@ -781,9 +782,10 @@ def build_supervisor_workflow(llm):
         fill_compliance_form,
         fill_operations_form,
         
-        # Incremental mode (3 tools - NEW!)
+        # Incremental mode (4 tools - ƯU TIÊN DÙNG)
         start_incremental_form,
         fill_single_field,
+        fill_multiple_fields,  # NEW: Fill nhiều fields cùng lúc
         submit_incremental_form
     ]
     
@@ -844,13 +846,13 @@ KHI NÀO DÙNG MỖI MODE:
   → Nếu đủ: GỌI submit_incremental_form()
   → Nếu thiếu: BÁO LỖI field nào còn thiếu, KHÔNG submit
 
-⚠️ QUAN TRỌNG - INCREMENTAL MODE:
+ QUAN TRỌNG - INCREMENTAL MODE:
 - ƯU TIÊN dùng incremental tools (start_incremental_form, fill_single_field, submit_incremental_form)
 - Mỗi user message có thể là 1 field → push ngay để điền field đó
 - Nếu user nói nhiều fields trong 1 câu → extract và điền từng field
 - Nếu chưa có session → start_incremental_form TRƯỚC
 
-⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+ QUAN TRỌNG - INCREMENTAL MODE FIRST:
         - ƯU TIÊN phân tích message CUỐI CÙNG (message mới nhất từ user)
         - Extract field và value từ message đó
         - GỌI fill_single_field() NGAY với field và value đó
@@ -880,13 +882,13 @@ KHI NÀO DÙNG MỖI MODE:
         5. KHÔNG BAO GIỜ BỎ QUA FIELD NÀO!
         6. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
         
-        ⚠️ QUAN TRỌNG - KHÔNG BỎ QUA:
+         QUAN TRỌNG - KHÔNG BỎ QUA:
         - LUÔN scan TOÀN BỘ conversation history, không chỉ message cuối
         - Extract TẤT CẢ fields từ TẤT CẢ messages
         - GỌI fill_single_field() cho TẤT CẢ fields tìm thấy
         - Xử lý tuần tự: field 1 → field 2 → field 3 (không bỏ qua)
         
-        ⚠️ QUAN TRỌNG - MEMORY CHECK VÀ XỬ LÝ TẤT CẢ MESSAGES:
+         QUAN TRỌNG - MEMORY CHECK VÀ XỬ LÝ TẤT CẢ MESSAGES:
         - LUÔN scan TOÀN BỘ conversation history từ đầu đến cuối
         - Extract TẤT CẢ fields từ TẤT CẢ messages, không chỉ message cuối
         - GỌI fill_single_field() cho TẤT CẢ fields tìm thấy (KHÔNG BỎ QUA!)

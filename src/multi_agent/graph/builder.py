@@ -123,19 +123,36 @@ async def submit_incremental_form() -> str:
     """
     Submit form đang được điền incremental và đóng browser sau khi xong.
     
+    TRƯỚC KHI SUBMIT: Agent sẽ tự động check xem đã đủ required fields chưa.
+    Nếu thiếu fields, sẽ báo lỗi và KHÔNG submit.
+    
     Returns:
-        Kết quả submit
+        Kết quả submit hoặc thông báo fields còn thiếu
     """
     global _current_session_id
     logger.info(f"🚀 Submitting incremental form... (session_id: {_current_session_id})")
     
+    # Check session exists
+    if _current_session_id not in browser_agent.sessions:
+        return f"❌ Không có active session. Vui lòng bắt đầu form trước khi submit."
+    
+    # Get filled fields count
+    session = browser_agent.sessions[_current_session_id]
+    fields_filled = session["session_data"].get("fields_filled", [])
+    fields_count = len(fields_filled)
+    
+    logger.info(f"📋 Checking form completion: {fields_count} fields filled")
+    
     result = await browser_agent.submit_form_incremental(_current_session_id)
     
     if result.get("success"):
-        fields_count = result.get("fields_filled", 0)
         return f"✅ Form đã được submit thành công! Đã điền {fields_count} fields. Browser đã đóng."
     else:
-        return f"❌ Lỗi submit form: {result.get('error')}"
+        error_msg = result.get("error", "Unknown error")
+        # Check if error is about missing fields
+        if "missing" in error_msg.lower() or "required" in error_msg.lower():
+            return f"⚠️ {error_msg} Vui lòng điền đầy đủ thông tin trước khi submit."
+        return f"❌ Lỗi submit form: {error_msg}"
 
 
 # ============================================
@@ -776,7 +793,9 @@ KHI NÀO DÙNG MỖI MODE:
 - User nói "Vay 500 triệu" / "Số tiền 500 triệu"
   → GỌI fill_single_field("loanAmount", "500000000") NGAY (convert triệu → số)
 - User nói "Submit" / "Gửi form" / "Xong rồi"
-  → GỌI submit_incremental_form()
+  → TRƯỚC KHI submit: Check conversation history xem đã đủ required fields chưa
+  → Nếu đủ: GỌI submit_incremental_form()
+  → Nếu thiếu: BÁO LỖI field nào còn thiếu, KHÔNG submit
 
 ⚠️ QUAN TRỌNG - INCREMENTAL MODE:
 - ƯU TIÊN dùng incremental tools (start_incremental_form, fill_single_field, submit_incremental_form)
@@ -791,11 +810,25 @@ KHI NÀO DÙNG MỖI MODE:
         - Nếu chưa có session, fill_single_field() sẽ tự động start session
         
         NHIỆM VỤ:
-        1. Đọc message CUỐI CÙNG từ user
-        2. Extract field name và value từ message đó
-        3. GỌI fill_single_field(field_name, value) NGAY
-        4. Nếu message có nhiều fields → có thể gọi fill_single_field nhiều lần
-        5. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
+        1. Đọc TOÀN BỘ conversation history để track memory
+        2. Identify which fields đã được điền trong conversation:
+           - Customer name: Có trong history không? → GỌI fill_single_field("customerName", value) nếu có
+           - SĐT: Có trong history không? → GỌI fill_single_field("phoneNumber", value) nếu có
+           - CCCD: Có trong history không? → GỌI fill_single_field("customerId", value) nếu có
+           - Email: Có trong history không? → GỌI fill_single_field("email", value) nếu có
+           - Số tiền vay: Có trong history không? → GỌI fill_single_field("loanAmount", value) nếu có
+        3. Extract field name và value từ message CUỐI CÙNG
+        4. GỌI fill_single_field(field_name, value) NGAY cho field mới
+        5. Nếu message có nhiều fields → extract và gọi fill_single_field nhiều lần
+        6. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
+        
+        ⚠️ QUAN TRỌNG - MEMORY CHECK:
+        - LUÔN check conversation history để xem fields nào ĐÃ ĐIỀN
+        - Nếu user nói lại field đã điền → VẪN gọi fill_single_field() để update (có thể user muốn thay đổi)
+        - Trước khi submit, phải đảm bảo TẤT CẢ required fields đã được điền:
+          * Loan form: customerName, customerId, phoneNumber, email, loanAmount
+          * CRM form: customerName, customerId, interactionType, issueDescription
+        - Nếu thiếu required fields → BÁO LỖI, KHÔNG submit
 
         PLACEHOLDER CHO FIELDS THIẾU:
         - customer_name: "Khách hàng" (nếu không có)

@@ -145,16 +145,41 @@ class BrowserAgentHandler:
             
             logger.info(f"📝 Filling field: {field_name} = {value}")
             
-            # Create task (official pattern)
+            # Get list of already filled fields for context
+            filled_fields_info = ", ".join([f"{f['field']}={f['value']}" for f in session_data["fields_filled"]])
+            filled_fields_list = [f['field'] for f in session_data["fields_filled"]]
+            
+            # Create task with memory check
             task = f"""
                 Fill the field with name="{field_name}" with value: {value}
-
+                
+                MEMORY CHECK - Fields already filled: {filled_fields_info if filled_fields_info else "None"}
+                
                 INSTRUCTIONS:
-                1. Find the input/select/textarea element with name="{field_name}"
-                2. If field is empty or has placeholder text, fill it with: {value}
-                3. If field already has a value, leave it unchanged and report that
-                4. Do NOT fill any other fields
-                5. Do NOT click submit
+                1. FIRST, check if field name="{field_name}" is already filled:
+                   - If already has value, VERIFY it matches: {value}
+                   - If value is different, UPDATE it to: {value}
+                   - If field is empty, fill it with: {value}
+                
+                2. Find the input/select/textarea element with name="{field_name}" on the page
+                
+                3. Check field state:
+                   - If field is EMPTY or has placeholder → Fill with: {value}
+                   - If field already has a VALUE:
+                     * If value = "{value}" → Leave unchanged, report "already filled"
+                     * If value ≠ "{value}" → Update to: {value}
+                
+                4. VERIFY after filling:
+                   - Confirm the field now contains: {value}
+                   - Take screenshot/verify visually if needed
+                
+                5. IMPORTANT:
+                   - Do NOT fill any other fields (only {field_name})
+                   - Do NOT click submit button
+                   - Do NOT navigate away from form
+                
+                Field to fill: {field_name}
+                Value to set: {value}
                 """
             
             # Official pattern: add_new_task() -> run()
@@ -208,11 +233,52 @@ class BrowserAgentHandler:
             }
             button_text = submit_buttons.get(form_type, "Gửi")
             
+            # Get list of filled fields for verification
+            filled_fields_list = [f['field'] for f in session_data["fields_filled"]]
+            filled_fields_info = ", ".join([f"{f['field']}={f['value']}" for f in session_data["fields_filled"]])
+            
+            # Create submit task with field verification
+            required_fields = {
+                "loan": ["customerName", "customerId", "phoneNumber", "email", "loanAmount"],
+                "crm": ["customerName", "customerId", "interactionType", "issueDescription"],
+                "hr": ["employeeName", "employeeId", "leaveType", "startDate", "endDate"],
+                "compliance": ["employeeName", "reportMonth", "violationCount"],
+                "operations": ["transactionId", "amount", "customerName"]
+            }
+            
+            required_for_type = required_fields.get(form_type, [])
+            missing_fields = [f for f in required_for_type if f not in filled_fields_list]
+            
             # Official pattern: add_new_task() -> run()
-            task = f"Submit the form by clicking the button with text '{button_text}', then click 'Xác Nhận' in the modal."
+            task = f"""
+                Submit the form ONLY if all required fields are filled.
+                
+                MEMORY - Fields already filled ({len(filled_fields_list)}): {filled_fields_info}
+                {'⚠️ MISSING REQUIRED FIELDS: ' + ', '.join(missing_fields) if missing_fields else '✅ All required fields are filled'}
+                
+                VERIFICATION BEFORE SUBMIT:
+                1. CHECK all required fields are filled:
+                   - Required fields: {', '.join(required_for_type) if required_for_type else 'None specified'}
+                   - Filled fields: {', '.join(filled_fields_list) if filled_fields_list else 'None'}
+                   {'⚠️ DO NOT SUBMIT - Missing fields: ' + ', '.join(missing_fields) if missing_fields else '✅ All required fields present'}
+                
+                2. If all required fields are filled:
+                   - Click the submit button with text: '{button_text}'
+                   - Wait for confirmation modal
+                   - Click 'Xác Nhận' or 'OK' in the modal
+                   - Wait for success message
+                
+                3. If required fields are missing:
+                   - DO NOT click submit
+                   - Report which fields are missing: {', '.join(missing_fields) if missing_fields else 'None'}
+                
+                Form Type: {form_type}
+                Submit Button Text: {button_text}
+                """
+            
             agent.add_new_task(task)
             
-            logger.info(f"🚀 Submitting form...")
+            logger.info(f"🚀 Submitting form... (filled: {len(filled_fields_list)}, missing: {len(missing_fields)})")
             await agent.run(max_steps=10)
             
             # Close session after submit

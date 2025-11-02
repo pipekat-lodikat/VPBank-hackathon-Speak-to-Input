@@ -55,21 +55,47 @@ class BrowserAgentHandler:
                 
                 if browser and agent:
                     logger.info(f"♻️  Reusing existing session for {session_id}")
-                    # Ensure we're on correct URL by adding navigation task if needed
-                    nav_task = f"Navigate to {form_url} if not already there, wait for page to load completely."
-                    agent.add_new_task(nav_task)
-                    await agent.run(max_steps=5)
+                    logger.debug(f"   Browser object: {browser}, Agent object: {agent}")
                     
-                    return {
-                        "success": True,
-                        "message": f"Reusing session for {form_type}",
-                        "session": session.get("session_data", {})
-                    }
+                    # Check if browser is still alive (for 0.1.40)
+                    try:
+                        # Try to get browser state to verify it's alive
+                        if hasattr(browser, 'is_alive'):
+                            if not browser.is_alive():
+                                logger.warning(f"⚠️  Browser session {session_id} is dead, creating new one...")
+                                # Remove dead session
+                                del self.sessions[session_id]
+                                # Continue to create new session below
+                            else:
+                                logger.debug(f"✅ Browser {session_id} is alive, reusing...")
+                                # Ensure we're on correct URL by adding navigation task if needed
+                                nav_task = f"Navigate to {form_url} if not already there, wait for page to load completely."
+                                agent.add_new_task(nav_task)
+                                await agent.run(max_steps=5)
+                                
+                                return {
+                                    "success": True,
+                                    "message": f"Reusing session for {form_type}",
+                                    "session": session.get("session_data", {})
+                                }
+                    except Exception as e:
+                        logger.warning(f"⚠️  Error checking browser state: {e}, creating new session...")
+                        # Remove corrupted session
+                        if session_id in self.sessions:
+                            del self.sessions[session_id]
+                        # Continue to create new session below
+                else:
+                    logger.warning(f"⚠️  Session {session_id} exists but browser/agent is None, creating new one...")
+                    # Remove invalid session
+                    del self.sessions[session_id]
             
-            # Create NEW browser with keep_alive=True (official pattern)
+            # Create NEW browser with keep_alive=True (official pattern for 0.1.40)
             browser_config = BrowserConfig(_force_keep_browser_alive=True)
             browser = Browser(config=browser_config)
-            logger.info(f"✅ Browser created (keep_alive=True)")
+            
+            # Explicitly start browser to keep it alive (for 0.1.40)
+            await browser.start()
+            logger.info(f"✅ Browser created and started (keep_alive=True)")
             
             # Create Agent with browser parameter (official pattern)
             llm = self._get_llm()
@@ -77,7 +103,7 @@ class BrowserAgentHandler:
             
             agent = Agent(
                 task=initial_task,
-                browser=browser,  # Official parameter name
+                browser=browser,  # Pass browser instance
                 llm=llm,
                 use_vision=True,
                 max_failures=5,
@@ -87,7 +113,7 @@ class BrowserAgentHandler:
             # Run initial navigation (official pattern)
             logger.info(f"🧭 Navigating to {form_url}...")
             await agent.run(max_steps=10)
-            logger.info(f"✅ Navigation completed")
+            logger.info(f"✅ Navigation completed - Browser should remain open")
             
             # Store session
             session_data = {
@@ -182,13 +208,23 @@ class BrowserAgentHandler:
                 Value to set: {value}
                 """
             
+            # Verify browser is still alive before adding task
+            browser = session.get("browser")
+            if not browser:
+                return {
+                    "success": False,
+                    "error": "Browser session lost. Please restart form session."
+                }
+            
             # Official pattern: add_new_task() -> run()
+            # IMPORTANT: Reuse same agent and browser - do NOT create new ones
             agent.add_new_task(task)
-            logger.debug(f"📝 Added task: Fill {field_name}")
+            logger.debug(f"📝 Added task: Fill {field_name} (reusing browser session)")
             
             # Run agent (official pattern - reuse same agent and browser)
+            # Browser should stay alive after run() completes (keep_alive=True)
             result = await agent.run(max_steps=5)
-            logger.debug(f"✅ Agent completed fill task")
+            logger.debug(f"✅ Agent completed fill task - Browser should still be open")
             
             # Track filled field
             session_data["fields_filled"].append({
@@ -281,7 +317,10 @@ class BrowserAgentHandler:
             logger.info(f"🚀 Submitting form... (filled: {len(filled_fields_list)}, missing: {len(missing_fields)})")
             await agent.run(max_steps=10)
             
-            # Close session after submit
+            # Wait a bit for submit to complete
+            await asyncio.sleep(2)
+            
+            # Close session after submit (only after successful submit)
             await self._close_session(session_id)
             
             return {

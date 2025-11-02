@@ -86,15 +86,21 @@ async def execute_workflow(request):
         workflow = get_workflow()
         
         # Create initial state
+        # Note: user_message chứa TOÀN BỘ conversation history (format: "user: msg1\nuser: msg2\n...")
+        # Supervisor sẽ parse TẤT CẢ messages để extract TẤT CẢ fields
         initial_state: MultiAgentState = {
-            "messages": [("user", user_message)],
+            "messages": [("user", user_message)],  # Full conversation history as single message
             "next": "supervisor",
             "task_id": session_id,
             "metadata": {
                 "session_id": session_id,
-                "created_at": asyncio.get_event_loop().time()
+                "created_at": asyncio.get_event_loop().time(),
+                "message_count": len(user_message.split("\n"))  # Count of messages in history
             }
         }
+        
+        logger.debug(f"   Conversation history contains {len(user_message.split('\n'))} lines")
+        logger.debug(f"   Full context length: {len(user_message)} chars")
         
         # Execute workflow
         logger.info(f"🔄 Running workflow...")

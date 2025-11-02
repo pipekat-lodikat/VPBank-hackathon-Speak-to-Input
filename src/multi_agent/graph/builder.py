@@ -809,25 +809,38 @@ KHI NÀO DÙNG MỖI MODE:
         - GỌI fill_single_field() NGAY với field và value đó
         - Nếu chưa có session, fill_single_field() sẽ tự động start session
         
-        NHIỆM VỤ:
-        1. Đọc TOÀN BỘ conversation history để track memory
-        2. Identify which fields đã được điền trong conversation:
-           - Customer name: Có trong history không? → GỌI fill_single_field("customerName", value) nếu có
-           - SĐT: Có trong history không? → GỌI fill_single_field("phoneNumber", value) nếu có
-           - CCCD: Có trong history không? → GỌI fill_single_field("customerId", value) nếu có
-           - Email: Có trong history không? → GỌI fill_single_field("email", value) nếu có
-           - Số tiền vay: Có trong history không? → GỌI fill_single_field("loanAmount", value) nếu có
-        3. Extract field name và value từ message CUỐI CÙNG
-        4. GỌI fill_single_field(field_name, value) NGAY cho field mới
-        5. Nếu message có nhiều fields → extract và gọi fill_single_field nhiều lần
-        6. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
+        NHIỆM VỤ - QUAN TRỌNG: XỬ LÝ TẤT CẢ MESSAGES, KHÔNG BỎ QUA!
+        1. Đọc TOÀN BỘ conversation history từ ĐẦU ĐẾN CUỐI
+        2. Extract TẤT CẢ fields từ TẤT CẢ messages (KHÔNG CHỈ message cuối):
+           - Scan từ message đầu tiên đến message cuối cùng
+           - Tìm TẤT CẢ các fields: customerName, customerId, phoneNumber, email, loanAmount, etc.
+           - Mỗi field tìm thấy → GỌI fill_single_field() NGAY (KHÔNG BỎ QUA!)
+        3. Xử lý tuần tự từng field để tránh conflict:
+           - Nếu message 1: "Tên Hiếu Nghị" → fill_single_field("customerName", "Hiếu Nghị")
+           - Nếu message 2: "CCCD 012345678901" → fill_single_field("customerId", "012345678901")
+           - Nếu message 3: "SĐT 0963023600" → fill_single_field("phoneNumber", "0963023600")
+           - GỌI TẤT CẢ, KHÔNG BỎ QUA BẤT KỲ FIELD NÀO!
+        4. Nếu 1 message có nhiều fields → extract và gọi fill_single_field nhiều lần cho tất cả
+        5. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
         
-        ⚠️ QUAN TRỌNG - MEMORY CHECK:
-        - LUÔN check conversation history để xem fields nào ĐÃ ĐIỀN
-        - Nếu user nói lại field đã điền → VẪN gọi fill_single_field() để update (có thể user muốn thay đổi)
-        - Trước khi submit, phải đảm bảo TẤT CẢ required fields đã được điền:
-          * Loan form: customerName, customerId, phoneNumber, email, loanAmount
-          * CRM form: customerName, customerId, interactionType, issueDescription
+        ⚠️ QUAN TRỌNG - KHÔNG BỎ QUA:
+        - LUÔN scan TOÀN BỘ conversation history, không chỉ message cuối
+        - Extract TẤT CẢ fields từ TẤT CẢ messages
+        - GỌI fill_single_field() cho TẤT CẢ fields tìm thấy
+        - Xử lý tuần tự: field 1 → field 2 → field 3 (không bỏ qua)
+        
+        ⚠️ QUAN TRỌNG - MEMORY CHECK VÀ XỬ LÝ TẤT CẢ MESSAGES:
+        - LUÔN scan TOÀN BỘ conversation history từ đầu đến cuối
+        - Extract TẤT CẢ fields từ TẤT CẢ messages, không chỉ message cuối
+        - GỌI fill_single_field() cho TẤT CẢ fields tìm thấy (KHÔNG BỎ QUA!)
+        - Nếu user nói nhiều fields trong nhiều messages → xử lý TẤT CẢ
+        - Ví dụ: 
+          * Message 1: "Tên Hiếu Nghị" → GỌI fill_single_field("customerName", "Hiếu Nghị")
+          * Message 2: "CCCD 012345678901" → GỌI fill_single_field("customerId", "012345678901")
+          * Message 3: "SĐT 0963023600" → GỌI fill_single_field("phoneNumber", "0963023600")
+          * PHẢI GỌI TẤT CẢ, KHÔNG CHỈ FIELD CUỐI!
+        - Nếu user nói lại field đã điền → VẪN gọi fill_single_field() để update
+        - Trước khi submit, phải đảm bảo TẤT CẢ required fields đã được điền
         - Nếu thiếu required fields → BÁO LỖI, KHÔNG submit
 
         PLACEHOLDER CHO FIELDS THIẾU:

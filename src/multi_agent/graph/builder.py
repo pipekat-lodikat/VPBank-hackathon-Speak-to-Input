@@ -744,7 +744,7 @@ def build_supervisor_workflow(llm):
     
     supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL phù hợp!
 
-🚫 TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
+ BẠN TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
 
 ⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
 - ƯU TIÊN phân tích message CUỐI CÙNG từ user

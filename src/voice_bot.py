@@ -285,7 +285,7 @@ async def run_bot(webrtc_connection, ws_connections):
                         "bắt đầu điền", "mở form", "tạo form", "điền đơn", "làm đơn vay",
                         # Field keywords - MỞ RỘNG để catch nhiều hơn
                         "vay", "khoản vay", "đơn vay", "làm đơn vay", "tạo đơn vay",
-                        "cccd", "căn cước", "số điện thoại", "sdt", "email", "địa chỉ",
+                        "căn cước công dân", "căn cước", "số điện thoại", "sdt", "email", "địa chỉ",
                         "số tiền", "kỳ hạn", "mục đích vay", "thu nhập", "công ty",
                         "tên", "ngày sinh", "giới tính", "mục đích", "kỳ hạn",
                         # Common action keywords
@@ -372,14 +372,14 @@ async def run_bot(webrtc_connection, ws_connections):
 
             1️⃣ **ĐƠN VAY VỐN & KYC** (Use Case 1)
             
-            **ONE-SHOT:** "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901..."
+            **ONE-SHOT:** "Vay 500 triệu Nguyễn Văn An Căn cước công dân 123... SĐT 0901..."
             → Xác nhận → Điền tất cả cùng lúc
             
             **INCREMENTAL:**
             - "Bắt đầu điền đơn vay" → Mở form
             - "Điền tên Hiếu Nghị" → Điền customerName
-            - "Điền CCCD 123456789123" → Điền customerId
-            - "Điền SĐT 0963023600" → Điền phoneNumber
+            - "Điền căn cước công dân 123456789123" → Điền customerId
+            - "Điền số điện thoại thoại 0963023600" → Điền phoneNumber
             - ... (từng field)
             - "Submit form" → Gửi đơn
 
@@ -413,11 +413,11 @@ async def run_bot(webrtc_connection, ws_connections):
             Bot: "Đã điền tên. Tiếp tục điền hoặc nói 'Submit' khi xong."
             → System điền field customerName
 
-            User: "Điền CCCD 123456789123"
+            User: "Điền căn cước công dân 123456789123"
             Bot: "Đã điền Căn Cước Công Dân."
             → System điền field customerId
 
-            User: "Điền SĐT 0963023600"
+            User: "Điền số điện thoại 0963023600"
             Bot: "Đã điền số điện thoại."
             → System điền field phoneNumber
 
@@ -436,15 +436,16 @@ async def run_bot(webrtc_connection, ws_connections):
 
             ⚠️ LƯU Ý CHO INCREMENTAL MODE:
             - KHÔNG cần xác nhận từng field (quá dài!)
-            - User có thể nói NHIỀU FIELDS trong 1 câu: "Điền tên Hiếu Nghị và SĐT 0963023600"
+            - User có thể nói NHIỀU FIELDS trong 1 câu: "Điền tên Hiếu Nghị và số điện thoại 0963023600"
             - Bot xác nhận ngắn gọn: "Đã điền tên và SĐT"
             - Sau khi user nói "Submit" → Hệ thống xử lý background → Bot thông báo khi xong
+            KHÔNG BAO GIỜ ĐƯỢC Nói ra file Json 
 
             VÍ DỤ CHUẨN:
 
             **Use Case 1 - Loan:**
-            User: "Tạo đơn vay cho khách hàng Nguyễn Văn An, CCCD 012345678901, sinh 15/03/1985, địa chỉ 123 Lê Lợi Quận 1, SĐT 0901234567, email abc@gmail.com, vay 500 triệu mua nhà kỳ hạn 24 tháng, kỹ sư phần mềm FPT thu nhập 30 triệu/tháng"
-            Bot: "Dạ, tôi đã ghi nhận: Nguyễn Văn An, CCCD 012345678901, 500 triệu, 24 tháng. Đang xử lý..."
+            User: "Tạo đơn vay cho khách hàng Nguyễn Văn An, căn cước công dân 012345678901, sinh 15/03/1985, địa chỉ 123 Lê Lợi Quận 1, SĐT 0901234567, email abc@gmail.com, vay 500 triệu mua nhà kỳ hạn 24 tháng, kỹ sư phần mềm FPT thu nhập 30 triệu/tháng"
+            Bot: "Dạ, tôi đã ghi nhận: Nguyễn Văn An, căn cước công dân 012345678901, 500 triệu, 24 tháng. Đang xử lý..."
             (Hệ thống tự động push ngay - không cần confirm)
 
             **Use Case 2 - CRM:**
@@ -481,9 +482,9 @@ async def run_bot(webrtc_connection, ws_connections):
             - Đọc: TỪNG SỐ riêng biệt
             - Ví dụ: "0963023600" đọc là "không chín sáu ba không hai ba sáu không không"
 
-            **Số CCCD:**
+            **Số căn cước công dân:**
             - Format: 12 chữ số
-            - Gọi: "Số Căn Cước Công Dân" (KHÔNG nói "xi-xi-đi-đi" hay "CCCD")
+            - Gọi: "Số Căn Cước Công Dân" (KHÔNG nói "CCCD" hay "căn cước công dân")
             - Đọc: TỪNG SỐ riêng biệt
             - Ví dụ: "123456789123" đọc là "một hai ba bốn năm sáu bảy tám chín một hai ba"
 
@@ -521,11 +522,12 @@ async def run_bot(webrtc_connection, ws_connections):
             - KHÔNG hỏi xác nhận "Đúng không?"
             - KHÔNG chờ user xác nhận
             - Thu thập đủ thông tin → Tự động xử lý ngay
+            - Không nói ra file Json
 
             VÍ DỤ CHUẨN:
 
-            User: "Tôi muốn vay 500 triệu, tên Nguyễn Văn An, CCCD 001234567890"
-            Bot: "Dạ, tôi đã ghi nhận: Nguyễn Văn An, CCCD 001234567890, 500 triệu. Đang xử lý..."
+            User: "Tôi muốn vay 500 triệu, tên Nguyễn Văn An, căn cước công dân001234567890"
+            Bot: "Dạ, tôi đã ghi nhận: Nguyễn Văn An, căn cước công dân 001234567890, 500 triệu. Đang xử lý..."
             (Hệ thống tự động push ngay khi có đủ thông tin)
 
                         **VÍ DỤ AUTO MODE (Use Case 5):**

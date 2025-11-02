@@ -90,12 +90,10 @@ class BrowserAgentHandler:
                     del self.sessions[session_id]
             
             # Create NEW browser with keep_alive=True (official pattern for 0.1.40)
+            # Note: Browser in 0.1.40 auto-starts when Agent uses it, no need for explicit start()
             browser_config = BrowserConfig(_force_keep_browser_alive=True)
             browser = Browser(config=browser_config)
-            
-            # Explicitly start browser to keep it alive (for 0.1.40)
-            await browser.start()
-            logger.info(f"✅ Browser created and started (keep_alive=True)")
+            logger.info(f"✅ Browser created (keep_alive=True, will auto-start with Agent)")
             
             # Create Agent with browser parameter (official pattern)
             llm = self._get_llm()

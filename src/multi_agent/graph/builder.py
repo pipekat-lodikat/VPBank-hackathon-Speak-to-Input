@@ -1,7 +1,6 @@
 """
 LangGraph Multi-Agent Workflow - Supervisor Pattern
 Sử dụng Supervisor Agent với tools để điều phối 5 use cases
-Ref: https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/
 """
 from typing import Annotated, Literal
 from datetime import datetime
@@ -13,15 +12,134 @@ from loguru import logger
 
 from .state import MultiAgentState
 
-# Import browser_agent using absolute import to avoid issues
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-from browser_agent import browser_agent
+# Import browser_agent from src
+from src.browser_agent import browser_agent
 
 
 # ============================================
 # BROWSER TOOLS - Các tools để điền form
+# ============================================
+
+# ============================================
+# INCREMENTAL MODE TOOLS (NEW!)
+# ============================================
+
+# Store current session_id from state (accessed via closure)
+_current_session_id = "default"
+
+def set_session_id(session_id: str):
+    """Set current session_id for tools"""
+    global _current_session_id
+    _current_session_id = session_id
+
+@tool
+async def start_incremental_form(form_type: str) -> str:
+    """
+    Bắt đầu session điền form incremental - Mở browser và giữ mở.
+    Reuses existing session if available for this session_id.
+    
+    Args:
+        form_type: Loại form (loan/crm/hr/compliance/operations)
+        
+    Returns:
+        Kết quả mở form
+    """
+    import os
+    global _current_session_id
+    
+    # Get form URL
+    urls = {
+        "loan": os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/"),
+        "crm": os.getenv("CRM_FORM_URL", "https://case2-ten.vercel.app/"),
+        "hr": os.getenv("HR_FORM_URL", "https://case3-seven.vercel.app/"),
+        "compliance": os.getenv("COMPLIANCE_FORM_URL", "https://case4-beta.vercel.app/"),
+        "operations": os.getenv("OPERATIONS_FORM_URL", "https://case5-chi.vercel.app/")
+    }
+    
+    form_url = urls.get(form_type)
+    if not form_url:
+        return f"❌ Invalid form type: {form_type}"
+    
+    logger.info(f"🚀 Starting incremental form: {form_type} (session_id: {_current_session_id})")
+    
+    result = await browser_agent.start_form_session(form_url, form_type, _current_session_id)
+    
+    if result.get("success"):
+        return f"✅ Đã mở form {form_type}. Bạn có thể bắt đầu điền từng field bằng cách nói: 'Điền tên là X', 'Điền SĐT là Y'..."
+    else:
+        return f"❌ Lỗi mở form: {result.get('error')}"
+
+
+@tool
+async def fill_single_field(field_name: str, field_value: str) -> str:
+    """
+    Điền 1 field cụ thể trong form đang mở (incremental mode).
+    Reuses existing session for this session_id.
+    
+    Args:
+        field_name: Tên field HTML (customerName, phoneNumber, email, loanAmount, etc.)
+        field_value: Giá trị cần điền
+        
+    Returns:
+        Kết quả điền field
+    """
+    import os
+    global _current_session_id
+    logger.info(f"📝 Incremental fill: {field_name} = {field_value} (session_id: {_current_session_id})")
+    
+    # AUTO-START SESSION nếu chưa có active session cho session_id này
+    if _current_session_id not in browser_agent.sessions:
+        logger.info(f"⚠️  No active session for {_current_session_id}, auto-starting session...")
+        
+        # Detect form type từ field_name hoặc context
+        form_type = "loan"  # Default
+        
+        # Auto-start session
+        form_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
+        start_result = await browser_agent.start_form_session(form_url, form_type, _current_session_id)
+        
+        if not start_result.get("success"):
+            return f"❌ Không thể mở form: {start_result.get('error')}. Vui lòng thử lại."
+        
+        logger.info(f"✅ Auto-started session for {form_type} form (session_id: {_current_session_id})")
+    
+    # Now fill the field
+    result = await browser_agent.fill_field_incremental(field_name, field_value, _current_session_id)
+    
+    if result.get("success"):
+        fields_count = result.get("fields_filled", 0)
+        skipped = result.get("skipped", False)
+        
+        if skipped:
+            return f"✅ Field {field_name} đã có giá trị, không ghi đè. Tổng đã điền: {fields_count} fields."
+        else:
+            return f"✅ Đã điền {field_name} = {field_value}. Tổng đã điền: {fields_count} fields. Tiếp tục điền hoặc nói 'Submit' để gửi."
+    else:
+        return f"❌ Lỗi điền field: {result.get('error')}"
+
+
+@tool
+async def submit_incremental_form() -> str:
+    """
+    Submit form đang được điền incremental và đóng browser sau khi xong.
+    
+    Returns:
+        Kết quả submit
+    """
+    global _current_session_id
+    logger.info(f"🚀 Submitting incremental form... (session_id: {_current_session_id})")
+    
+    result = await browser_agent.submit_form_incremental(_current_session_id)
+    
+    if result.get("success"):
+        fields_count = result.get("fields_filled", 0)
+        return f"✅ Form đã được submit thành công! Đã điền {fields_count} fields. Browser đã đóng."
+    else:
+        return f"❌ Lỗi submit form: {result.get('error')}"
+
+
+# ============================================
+# ONE-SHOT MODE TOOLS (Legacy)
 # ============================================
 
 @tool
@@ -38,7 +156,14 @@ def fill_loan_form(
     employment_status: str,
     company_name: str,
     monthly_income: int,
-    gender: str = "male"
+    gender: str = "male",
+    application_date: str = None,
+    work_address: str = "",
+    collateral_type: str = "none",
+    collateral_value: int = 0,
+    collateral_description: str = "",
+    relationship_manager: str = "",
+    additional_notes: str = ""
 ) -> str:
     """
     Điền form đơn vay vốn & KYC (Use Case 1).
@@ -61,7 +186,11 @@ def fill_loan_form(
     Returns:
         Kết quả điền form
     """
-    logger.info(f"🏦 Filling LOAN form for: {customer_name}")
+    logger.info(f"🏦 [TOOL CALLED] fill_loan_form for: {customer_name}")
+    
+    # Auto-fill application date if not provided
+    if not application_date:
+        application_date = datetime.now().strftime("%Y-%m-%d")
     
     # Map field names to match HTML form
     form_data = {
@@ -75,12 +204,19 @@ def fill_loan_form(
         "loanAmount": str(loan_amount),
         "loanPurpose": loan_purpose,
         "loanTerm": str(loan_term),
-        "applicationDate": datetime.now().strftime("%Y-%m-%d"),
+        "applicationDate": application_date,
         "employmentStatus": employment_status,
         "companyName": company_name,
         "monthlyIncome": str(monthly_income),
-        "collateralType": "none"  # Default value
+        "workAddress": work_address,
+        "collateralType": collateral_type,
+        "collateralValue": str(collateral_value),
+        "collateralDescription": collateral_description,
+        "relationshipManager": relationship_manager,
+        "additionalNotes": additional_notes
     }
+    
+    logger.info(f"   📋 Form data prepared: {len(form_data)} fields")
     
     try:
         # Execute browser task
@@ -88,7 +224,7 @@ def fill_loan_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("LOAN_FORM_URL", "http://use-case-1-loan-origination.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
         
         # Use asyncio.run() safely
         try:
@@ -120,39 +256,77 @@ def fill_crm_form(
     customer_name: str,
     customer_id: str,
     interaction_type: str,
-    interaction_date: str,
     issue_description: str,
-    resolution: str,
     agent_name: str,
-    satisfaction_rating: int
+    phone_number: str = "0000000000",
+    email: str = "temp@vpbank.com",
+    address: str = "Chưa cập nhật",
+    interaction_date: str = None,
+    interaction_time: str = "09:00",
+    duration: int = 10,
+    issue_category: str = "other",
+    resolution_status: str = "resolved",
+    resolution_details: str = "Đã xử lý",
+    satisfaction_rating: str = "good",
+    follow_up_required: str = "no",
+    follow_up_date: str = None,
+    notes: str = "Cập nhật qua voice bot",
+    tags: str = ""
 ) -> str:
     """
-    Cập nhật thông tin CRM (Use Case 2).
+    Cập nhật thông tin CRM (Use Case 2) - FULL MODE.
     
-    Args:
-        customer_name: Tên khách hàng
-        customer_id: Mã khách hàng
-        interaction_type: Loại tương tác (Call/Email/Visit)
-        interaction_date: Ngày tương tác
-        issue_description: Mô tả vấn đề
-        resolution: Cách giải quyết
-        agent_name: Tên nhân viên xử lý
-        satisfaction_rating: Đánh giá hài lòng (1-5)
-        
-    Returns:
-        Kết quả cập nhật CRM
+    Chỉ cần 4-5 fields chính từ user:
+    - customer_name, customer_id
+    - interaction_type (call/email/visit)
+    - issue_description
+    - agent_name
+    
+    Các fields khác có defaults!
     """
-    logger.info(f"📞 Filling CRM form for: {customer_name}")
+    from datetime import datetime
     
+    logger.info(f"📞 [TOOL CALLED] fill_crm_form for: {customer_name}")
+    logger.info(f"   Data: {form_data}")
+    
+    # Auto-fill dates
+    if not interaction_date:
+        interaction_date = datetime.now().strftime("%Y-%m-%d")
+    if not follow_up_date:
+        follow_up_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-2-crm-update)
     form_data = {
+        # Customer info
         "customerName": customer_name,
         "customerId": customer_id,
+        "phoneNumber": phone_number,
+        "email": email,
+        "address": address,
+        
+        # Interaction details
         "interactionType": interaction_type,
         "interactionDate": interaction_date,
-        "issueDescription": issue_description,
-        "resolution": resolution,
+        "interactionTime": interaction_time,
+        "duration": str(duration),
         "agentName": agent_name,
-        "satisfactionRating": satisfaction_rating
+        
+        # Issue
+        "issueCategory": issue_category,
+        "issueDescription": issue_description,
+        
+        # Resolution
+        "resolutionStatus": resolution_status,
+        "resolutionDetails": resolution_details,
+        
+        # Feedback
+        "satisfactionRating": satisfaction_rating,
+        "followUpRequired": follow_up_required,
+        "followUpDate": follow_up_date,
+        
+        # Notes
+        "notes": notes,
+        "tags": tags
     }
     
     try:
@@ -160,7 +334,7 @@ def fill_crm_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("CRM_FORM_URL", "http://use-case-2-crm-update.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("CRM_FORM_URL", "https://case2-ten.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -191,35 +365,67 @@ def fill_hr_form(
     end_date: str,
     reason: str,
     manager_name: str,
-    department: str
+    department: str = "Operations",
+    position: str = "Nhân viên",
+    email: str = "employee@vpbank.com",
+    phone_number: str = "0000000000",
+    leave_type: str = "annual",
+    duration: int = 1,
+    manager_email: str = "manager@vpbank.com",
+    approval_status: str = "pending",
+    rejection_reason: str = "",
+    submission_date: str = None,
+    contact_during_absence: str = "",
+    work_handover: str = "",
+    notes: str = "Đơn tạo qua voice bot"
 ) -> str:
     """
-    Điền form HR workflow (Use Case 3).
+    Điền form HR workflow (Use Case 3) - MEDIUM MODE.
     
-    Args:
-        employee_name: Tên nhân viên
-        employee_id: Mã nhân viên
-        request_type: Loại yêu cầu (Leave/Training/Other)
-        start_date: Ngày bắt đầu
-        end_date: Ngày kết thúc
-        reason: Lý do
-        manager_name: Tên quản lý
-        department: Phòng ban
-        
-    Returns:
-        Kết quả điền form HR
+    Chỉ cần 6-7 fields chính từ user:
+    - employee_name, employee_id
+    - request_type, start_date, end_date
+    - reason, manager_name
+    
+    Các fields khác có defaults!
     """
+    from datetime import datetime
+    
     logger.info(f"👤 Filling HR form for: {employee_name}")
     
+    # Auto-fill submission date
+    if not submission_date:
+        submission_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-3-hr-workflow)
     form_data = {
+        # Employee info
         "employeeName": employee_name,
         "employeeId": employee_id,
+        "department": department,
+        "position": position,
+        "email": email,
+        "phoneNumber": phone_number,
+        
+        # Request details
         "requestType": request_type,
+        "leaveType": leave_type,
         "startDate": start_date,
         "endDate": end_date,
+        "duration": str(duration),
         "reason": reason,
+        
+        # Approval
         "managerName": manager_name,
-        "department": department
+        "managerEmail": manager_email,
+        "approvalStatus": approval_status,
+        "rejectionReason": rejection_reason,
+        
+        # Additional
+        "submissionDate": submission_date,
+        "contactDuringAbsence": contact_during_absence,
+        "workHandover": work_handover,
+        "notes": notes
     }
     
     try:
@@ -227,7 +433,7 @@ def fill_hr_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("HR_FORM_URL", "http://use-case-3-hr-workflow.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("HR_FORM_URL", "https://case3-seven.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -252,41 +458,82 @@ def fill_hr_form(
 @tool
 def fill_compliance_form(
     report_type: str,
-    report_period: str,
-    submitted_by: str,
-    submission_date: str,
-    violations_found: int,
-    risk_level: str,
-    compliance_status: str,
-    notes: str
+    compliance_officer: str,
+    report_id: str = "BC-AUTO-001",
+    reporting_period: str = None,
+    submission_date: str = None,
+    report_title: str = "Báo cáo tự động qua voice bot",
+    officer_email: str = "compliance@vpbank.com",
+    officer_position: str = "Nhân viên tuân thủ",
+    department: str = "Risk & Compliance",
+    status: str = "in-progress",
+    cases_reviewed: int = 0,
+    high_risk_cases: int = 0,
+    violations_found: str = "none",
+    violation_details: str = "",
+    actions_taken: str = "Đang thực hiện kiểm tra",
+    preventive_measures: str = "Theo dõi định kỳ",
+    follow_up_required: str = "no",
+    overall_risk: str = "low",
+    risk_analysis: str = "Không phát hiện rủi ro",
+    executive_summary: str = "Báo cáo tự động",
+    additional_notes: str = "Được tạo tự động qua voice bot",
+    recommendations: str = "Tiếp tục theo dõi"
 ) -> str:
     """
-    Điền form báo cáo tuân thủ (Use Case 4).
+    Điền form báo cáo tuân thủ (Use Case 4) - MEDIUM MODE.
     
-    Args:
-        report_type: Loại báo cáo (AML/KYC/GDPR)
-        report_period: Kỳ báo cáo
-        submitted_by: Người nộp
-        submission_date: Ngày nộp
-        violations_found: Số vi phạm phát hiện
-        risk_level: Mức độ rủi ro (Low/Medium/High)
-        compliance_status: Trạng thái (Compliant/Non-Compliant)
-        notes: Ghi chú
-        
-    Returns:
-        Kết quả điền form compliance
+    Chỉ cần 2-3 fields chính từ user:
+    - report_type (AML/KYC/audit/etc.)
+    - compliance_officer (tên người nộp)
+    
+    Các fields khác có defaults!
     """
+    from datetime import datetime
+    
     logger.info(f"📋 Filling COMPLIANCE form: {report_type}")
     
+    # Auto-fill dates
+    if not reporting_period:
+        reporting_period = datetime.now().strftime("%Y-%m")
+    if not submission_date:
+        submission_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-4-compliance-reporting)
     form_data = {
+        # Report info
+        "reportId": report_id,
         "reportType": report_type,
-        "reportPeriod": report_period,
-        "submittedBy": submitted_by,
+        "reportingPeriod": reporting_period,
         "submissionDate": submission_date,
+        "reportTitle": report_title,
+        
+        # Officer info
+        "complianceOfficer": compliance_officer,
+        "officerEmail": officer_email,
+        "officerPosition": officer_position,
+        "department": department,
+        
+        # Status & Statistics
+        "status": status,
+        "casesReviewed": str(cases_reviewed),
+        "highRiskCases": str(high_risk_cases),
         "violationsFound": violations_found,
-        "riskLevel": risk_level,
-        "complianceStatus": compliance_status,
-        "notes": notes
+        "violationDetails": violation_details,
+        
+        # Actions
+        "actionsTaken": actions_taken,
+        "preventiveMeasures": preventive_measures,
+        "followUpRequired": follow_up_required,
+        
+        # Risk assessment
+        "overallRisk": overall_risk,
+        "riskAnalysis": risk_analysis,
+        
+        # Notes
+        "executiveSummary": executive_summary,
+        "additionalNotes": additional_notes,
+        "recommendations": recommendations
     }
     
     try:
@@ -294,7 +541,7 @@ def fill_compliance_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("COMPLIANCE_FORM_URL", "http://use-case-4-compliance-reporting.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("COMPLIANCE_FORM_URL", "https://case4-beta.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -319,50 +566,95 @@ def fill_compliance_form(
 @tool
 def fill_operations_form(
     transaction_id: str,
-    transaction_date: str,
     customer_name: str,
     transaction_amount: int,
-    transaction_type: str,
-    beneficiary_name: str,
-    beneficiary_account: str,
-    transaction_status: str,
-    verified_by: str,
-    fraud_score: int,
-    notes: str
+    customer_id: str = "CUS00000",
+    account_number: str = "0000000000",
+    phone_number: str = "0000000000",
+    transaction_date: str = None,
+    transaction_time: str = "09:00",
+    transaction_type: str = "transfer",
+    channel: str = "online",
+    processing_system: str = "core-banking",
+    transaction_description: str = "Kiểm tra tự động qua voice bot",
+    beneficiary_name: str = "Chưa rõ",
+    beneficiary_account: str = "0000000000",
+    beneficiary_bank: str = "VPBank",
+    status: str = "completed",
+    validation_result: str = "valid",
+    reviewer_name: str = "Hệ thống Voice Bot",
+    review_date: str = None,
+    balance_before: int = 0,
+    balance_after: int = 0,
+    balance_status: str = "matched",
+    fraud_score: int = 0,
+    fraud_indicators: str = "none",
+    notes: str = "Kiểm tra tự động",
+    action_required: str = "Không có"
 ) -> str:
     """
-    Điền form kiểm tra giao dịch (Use Case 5).
+    Điền form kiểm tra giao dịch (Use Case 5) - ONE-SHOT MODE.
     
-    Args:
-        transaction_id: Mã giao dịch
-        transaction_date: Ngày giao dịch
-        customer_name: Tên khách hàng
-        transaction_amount: Số tiền (VNĐ)
-        transaction_type: Loại giao dịch
-        beneficiary_name: Tên người thụ hưởng
-        beneficiary_account: Tài khoản người thụ hưởng
-        transaction_status: Trạng thái (Pending/Completed/Failed)
-        verified_by: Người xác minh
-        fraud_score: Điểm nghi ngờ gian lận (0-100)
-        notes: Ghi chú
-        
-    Returns:
-        Kết quả điền form operations
+    Chỉ cần 3 fields bắt buộc từ user:
+    - transaction_id
+    - customer_name  
+    - transaction_amount
+    
+    Tất cả fields khác có default values!
     """
-    logger.info(f"� Filling OPERATIONS form: {transaction_id}")
+    from datetime import datetime
     
+    logger.info(f"💳 Filling OPERATIONS form (ONE-SHOT): {transaction_id}")
+    
+    # Auto-fill dates nếu không có
+    if not transaction_date:
+        transaction_date = datetime.now().strftime("%Y-%m-%d")
+    if not review_date:
+        review_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Map to HTML form fields (theo vpbank-forms/use-case-5-operations-validation)
     form_data = {
+        # Customer info
+        "customerName": customer_name,
+        "customerId": customer_id,
+        "accountNumber": account_number,
+        "phoneNumber": phone_number,
+        
+        # Transaction info
         "transactionId": transaction_id,
         "transactionDate": transaction_date,
-        "customerName": customer_name,
-        "transactionAmount": transaction_amount,
+        "transactionTime": transaction_time,
+        "transactionAmount": str(transaction_amount),
         "transactionType": transaction_type,
+        "channel": channel,
+        "transactionDescription": transaction_description,
+        
+        # Beneficiary (for transfers)
         "beneficiaryName": beneficiary_name,
         "beneficiaryAccount": beneficiary_account,
-        "transactionStatus": transaction_status,
-        "verifiedBy": verified_by,
-        "fraudScore": fraud_score,
-        "notes": notes
+        "beneficiaryBank": beneficiary_bank,
+        
+        # Status
+        "status": status,
+        "processingSystem": processing_system,
+        
+        # Validation
+        "validationResult": validation_result,
+        "reviewerName": reviewer_name,
+        "reviewDate": review_date,
+        
+        # Balance
+        "balanceBefore": str(balance_before),
+        "balanceAfter": str(balance_after),
+        "balanceStatus": balance_status,
+        
+        # Fraud
+        "fraudScore": str(fraud_score),
+        "fraudIndicators": fraud_indicators,
+        
+        # Notes
+        "notes": notes,
+        "actionRequired": action_required
     }
     
     try:
@@ -370,7 +662,7 @@ def fill_operations_form(
         import os
         
         # Get form URL from environment
-        form_url = os.getenv("OPERATIONS_FORM_URL", "http://use-case-5-operations-validation.s3-website-us-west-2.amazonaws.com")
+        form_url = os.getenv("OPERATIONS_FORM_URL", "https://case5-chi.vercel.app/")
         
         try:
             loop = asyncio.get_running_loop()
@@ -420,121 +712,286 @@ def build_supervisor_workflow(llm):
     # ============================================
     
     tools = [
+        # One-shot mode (5 tools - legacy)
         fill_loan_form,
         fill_crm_form,
         fill_hr_form,
         fill_compliance_form,
-        fill_operations_form
+        fill_operations_form,
+        
+        # Incremental mode (3 tools - NEW!)
+        start_incremental_form,
+        fill_single_field,
+        submit_incremental_form
     ]
     
-    supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL khi ĐỦ ĐIỀU KIỆN!
+    supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL phù hợp!
 
-BẠN CÓ 5 TOOLS:
-1. fill_loan_form - Đơn vay vốn & KYC
-2. fill_crm_form - CRM update
-3. fill_hr_form - HR workflow  
-4. fill_compliance_form - Báo cáo tuân thủ
-5. fill_operations_form - Kiểm tra giao dịch
+🚫 TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
+
+⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+- ƯU TIÊN phân tích message CUỐI CÙNG từ user
+- Nếu message chứa 1 field (tên, SĐT, CCCD, email, số tiền) → GỌI fill_single_field() NGAY
+- Nếu message chứa nhiều fields (5+) → Có thể dùng fill_loan_form() hoặc gọi fill_single_field() nhiều lần
+- KHÔNG dùng fill_loan_form() nếu chỉ có 1-2 fields
+
+VÍ DỤ PHÂN TÍCH MESSAGE:
+- User: "Tôi muốn vay 500 triệu" → Extract: field="loanAmount", value="500000000" → GỌI fill_single_field("loanAmount", "500000000")
+- User: "Tên là Hiếu Nghị" → Extract: field="customerName", value="Hiếu Nghị" → GỌI fill_single_field("customerName", "Hiếu Nghị")
+- User: "SĐT 0963023600" → Extract: field="phoneNumber", value="0963023600" → GỌI fill_single_field("phoneNumber", "0963023600")
+- User: "CCCD 123456789012" → Extract: field="customerId", value="123456789012" → GỌI fill_single_field("customerId", "123456789012")
+
+BẠN CÓ 8 TOOLS (2 MODES):
+
+🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
+1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc (dùng khi user nói tất cả thông tin)
+2. fill_crm_form - Điền TẤT CẢ fields CRM cùng lúc
+3. fill_hr_form - Điền TẤT CẢ fields HR cùng lúc
+4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
+5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
+
+🟢 **INCREMENTAL MODE** (3 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
+6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
+7. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC (có thể gọi NHIỀU LẦN, mỗi user message = 1 lần)
+8. submit_incremental_form() - Submit form sau khi điền xong
+
+KHI NÀO DÙNG MỖI MODE:
+
+📋 **Use ONE-SHOT** CHỈ KHI:
+- User nói 1 câu CHỨA 5+ fields cùng lúc
+- VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901... email abc@gmail.com... địa chỉ 123..."
+- → Nếu có đủ 5+ fields → GỌI fill_loan_form() với TẤT CẢ params
+- → Nếu chỉ có 1-4 fields → ƯU TIÊN dùng fill_single_field() nhiều lần (incremental)
+
+📝 **Use INCREMENTAL** khi:
+- User nói "Bắt đầu điền đơn vay" / "Mở form vay" / "Tạo form"
+  → GỌI start_incremental_form("loan") TRƯỚC
+- User nói "Điền tên Hiếu Nghị" / "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
+  → Nếu chưa có session → GỌI start_incremental_form("loan") TRƯỚC, sau đó fill_single_field("customerName", "Hiếu Nghị")
+  → Nếu đã có session → GỌI fill_single_field("customerName", "Hiếu Nghị") NGAY
+- User nói "Điền SĐT 0963023600" / "Số điện thoại 0963023600" / "SĐT là 0963023600"
+  → GỌI fill_single_field("phoneNumber", "0963023600") NGAY
+- User nói "Điền CCCD 123456789012" / "CCCD là 123456789012"
+  → GỌI fill_single_field("customerId", "123456789012") NGAY
+- User nói "Vay 500 triệu" / "Số tiền 500 triệu"
+  → GỌI fill_single_field("loanAmount", "500000000") NGAY (convert triệu → số)
+- User nói "Submit" / "Gửi form" / "Xong rồi"
+  → GỌI submit_incremental_form()
+
+⚠️ QUAN TRỌNG - INCREMENTAL MODE:
+- ƯU TIÊN dùng incremental tools (start_incremental_form, fill_single_field, submit_incremental_form)
+- Mỗi user message có thể là 1 field → push ngay để điền field đó
+- Nếu user nói nhiều fields trong 1 câu → extract và điền từng field
+- Nếu chưa có session → start_incremental_form TRƯỚC
+
+⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+        - ƯU TIÊN phân tích message CUỐI CÙNG (message mới nhất từ user)
+        - Extract field và value từ message đó
+        - GỌI fill_single_field() NGAY với field và value đó
+        - Nếu chưa có session, fill_single_field() sẽ tự động start session
+        
+        NHIỆM VỤ:
+        1. Đọc message CUỐI CÙNG từ user
+        2. Extract field name và value từ message đó
+        3. GỌI fill_single_field(field_name, value) NGAY
+        4. Nếu message có nhiều fields → có thể gọi fill_single_field nhiều lần
+        5. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
+
+        PLACEHOLDER CHO FIELDS THIẾU:
+        - customer_name: "Khách hàng" (nếu không có)
+        - customer_id: "000000000000" (12 số 0)
+        - phone_number: "0000000000" (10 số 0)
+        - email: "temp@vpbank.com"
+        - address: "Chưa cập nhật"
+        - date_of_birth: "1990-01-01"
+        - employment_status: "employed"
+        - company_name: "Chưa cập nhật"
+        - gender: "male"
+        - monthly_income: 0
+
+        VÍ DỤ EXTRACTION:
+
+        Input conversation history:
+        ```
+        user: Tôi muốn vay 50 triệu
+        assistant: Cho tôi biết họ tên và CCCD?
+        user: Tên Hiếu Nghị, CCCD 123456789012
+        assistant: Số điện thoại và email?
+        user: SĐT 0963023600, email abc@gmail.com
+        assistant: Xác nhận: Hiếu Nghị, 50 triệu, 24 tháng. Đúng không?
+        user: Đúng
+        assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
+        ```
+
+        → Extract từ TOÀN BỘ conversation:
+        - customer_name: "Hiếu Nghị" (từ message thứ 3)
+        - customer_id: "123456789012" (từ message thứ 3)
+        - phone_number: "0963023600" (từ message thứ 5)
+        - email: "abc@gmail.com" (từ message thứ 5)
+        - loan_amount: 50000000 (từ message thứ 1)
+        - loan_term: 24 (từ assistant confirmation)
+
+        → GỌI: fill_loan_form(
+            customer_name="Hiếu Nghị",
+            customer_id="123456789012",
+            phone_number="0963023600",
+            email="abc@gmail.com",
+            loan_amount=50000000,
+            loan_term=24,
+            address="Chưa cập nhật",  # Placeholder
+            ...
+        )
+
+        🔍 EXTRACTION RULES (CRITICAL - ÁP DỤNG CHO MESSAGE CUỐI CÙNG):
+
+        **BƯỚC 1: Đọc message CUỐI CÙNG từ user**
+        **BƯỚC 2: Extract field và value từ message đó**
+        **BƯỚC 3: GỌI fill_single_field(field_name, value) NGAY**
+
+        **MAPPING FIELD TỪ KEYWORDS:**
+        - "tên" / "họ tên" / "tên là" → field_name="customerName"
+        - "SĐT" / "số điện thoại" / "điện thoại" → field_name="phoneNumber"
+        - "CCCD" / "CMND" / "căn cước" / "chứng minh" → field_name="customerId"
+        - "email" / "e-mail" → field_name="email"
+        - "địa chỉ" / "địa chỉ thường trú" → field_name="address"
+        - "ngày sinh" / "sinh" / "date of birth" → field_name="dateOfBirth"
+        - "vay" / "số tiền" / "khoản vay" → field_name="loanAmount"
+        - "kỳ hạn" / "thời hạn" → field_name="loanTerm"
+        - "mục đích" / "mục đích vay" → field_name="loanPurpose"
+        - "thu nhập" / "lương" / "thu nhập tháng" → field_name="monthlyIncome"
+        - "công ty" / "nơi làm việc" → field_name="companyName"
+
+        **Số Tiền Vay (loan_amount):**
+        - Tìm từ khóa: "vay", "triệu", "tỷ"
+        - "50 triệu" → value="50000000" (nhân 1,000,000)
+        - "500 triệu" → value="500000000"
+        - "1 tỷ" → value="1000000000"
+
+        **VALUE MAPPING (Vietnamese → English):**
+
+        **loan_purpose:**
+        - "mua nhà" / "nhà" → "home"
+        - "kinh doanh" → "business"
+        - "học tập" / "du học" → "education"
+        - "mua xe" / "xe" → "vehicle"
+        - "sửa nhà" → "renovation"
+        - "tiêu dùng" / "cá nhân" → "personal"
+        - Khác → "other"
+
+        **gender:**
+        - "nam" → "male"
+        - "nữ" → "female"
+        - "khác" → "other"
+
+        **employment_status:**
+        - "đang làm việc" / "có việc" → "employed"
+        - "tự kinh doanh" / "chủ doanh nghiệp" → "self-employed"
+        - "chưa có việc" / "thất nghiệp" → "unemployed"
+        - "nghỉ hưu" → "retired"
+
+        **collateral_type:**
+        - "bất động sản" / "nhà đất" → "real-estate"
+        - "xe" / "ô tô" / "xe máy" → "vehicle"
+        - "chứng khoán" / "cổ phiếu" → "securities"
+        - "tiền gửi" / "tiết kiệm" → "deposit"
+        - "không có" / "không" → "none"
+
+        **Số Điện Thoại (phone_number):**
+        - Tìm từ khóa: "điện thoại", "SĐT", "phone", "gọi"
+        - LUÔN 10 chữ số
+        - LUÔN BẮT ĐẦU bằng 0
+        - Ví dụ: "0963023600", "0901234567"
+        - KHÔNG phải số tiền!
+
+        **Số CCCD (customer_id):**
+        - Tìm từ khóa: "CCCD", "CMND", "chứng minh"
+        - LUÔN 12 chữ số
+        - Ví dụ: "123456789012"
+        - KHÔNG bắt đầu bằng 0
+
+        **Ngày Sinh (date_of_birth):**
+        - Tìm từ khóa: "sinh", "ngày sinh", "date of birth"
+        - Format input: "15 tháng 3 năm 2005" hoặc "15/03/2005"
+        - Convert to: "2005-03-15" (YYYY-MM-DD)
+
+        **Kỳ Hạn (loan_term):**
+        - Tìm từ khóa: "kỳ hạn", "thời hạn", "tháng"
+        - "24 tháng" → 24
+        - Allowed values: 6, 12, 18, 24, 36, 48, 60
+
+        **Họ Tên (customer_name):**
+        - Tìm từ khóa: "tên", "họ tên", "tên là"
+        - Extract value sau keyword
+        - Ví dụ: "Tên là Hiếu Nghị" → value="Hiếu Nghị"
+        - Ví dụ: "Tên Hiếu Nghị" → value="Hiếu Nghị"
+
+        ⚠️ ĐẶC BIỆT LƯU Ý:
+        - PHÂN BIỆT RÕ: Số điện thoại (10 số, bắt đầu 0) ≠ Số tiền (lớn hơn nhiều)
+        - "0963023600" = phone_number (10 digits, starts with 0)
+        - "50000000" = loan_amount (8 digits, no leading 0)
+        - KHÔNG NHẦM LẪN giữa 2 loại số này!
+
+        ✅ QUY TRÌNH:
+        1. Đọc message CUỐI CÙNG từ user
+        2. Extract field_name và value từ message đó
+        3. GỌI fill_single_field(field_name, value) NGAY
+        4. KHÔNG dùng fill_loan_form() trừ khi message chứa 5+ fields
+        
+🚨 QUY TẮC VÀNG - ƯU TIÊN INCREMENTAL MODE:
+1. Phân tích user message cuối cùng để extract field và value
+2. Nếu user nói "bắt đầu điền", "mở form", "tạo form" → GỌI start_incremental_form() TRƯỚC
+3. Nếu user nói về field cụ thể → GỌI fill_single_field() NGAY (sẽ auto-start session nếu chưa có):
+   - "tên X" / "Tên là X" → fill_single_field("customerName", "X")
+   - "SĐT Y" / "Số điện thoại Y" → fill_single_field("phoneNumber", "Y")
+   - "CCCD Z" / "Căn cước Z" → fill_single_field("customerId", "Z")
+   - "vay X triệu" → fill_single_field("loanAmount", "X*1000000")
+   - "email X" → fill_single_field("email", "X")
+4. Nếu user nói "submit", "gửi", "xong" → GỌI submit_incremental_form()
+5. Nếu user nói TẤT CẢ thông tin trong 1 message (nhiều fields) → Có thể dùng ONE-SHOT hoặc gọi fill_single_field nhiều lần
+
+🎯 VÍ DỤ INCREMENTAL MODE REAL-TIME:
+- User: "Tôi muốn vay 500 triệu"
+  → GỌI: fill_single_field("loanAmount", "500000000") NGAY
+  → (fill_single_field sẽ tự động start session nếu chưa có)
+
+- User: "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
+  → GỌI: fill_single_field("customerName", "Hiếu Nghị") NGAY
+  → Extract: field_name="customerName", value="Hiếu Nghị"
+
+- User: "SĐT 0963023600" / "Số điện thoại 0963023600"
+  → GỌI: fill_single_field("phoneNumber", "0963023600") NGAY
+  → Extract: field_name="phoneNumber", value="0963023600"
+
+- User: "CCCD 123456789012" / "Căn cước 123456789012"
+  → GỌI: fill_single_field("customerId", "123456789012") NGAY
+  → Extract: field_name="customerId", value="123456789012"
+
+- User: "Email abc@gmail.com"
+  → GỌI: fill_single_field("email", "abc@gmail.com") NGAY
+
+- User: "Vay 500 triệu"
+  → GỌI: fill_single_field("loanAmount", "500000000") NGAY
+  → Convert: "500 triệu" → 500000000
+
+- User: "Submit" / "Gửi form" / "Xong rồi"
+  → GỌI: submit_incremental_form() NGAY
 
 ⚠️ QUAN TRỌNG:
-- Bạn nhận TOÀN BỘ conversation history (multiple user messages)
-- User đã XÁC NHẬN thông tin qua Voice Agent
-- Message cuối cùng chứa "[CONFIRM_AND_EXECUTE]" = User đã đồng ý
+- fill_single_field() sẽ TỰ ĐỘNG start session nếu chưa có
+- KHÔNG cần gọi start_incremental_form() trước (trừ khi user nói "bắt đầu điền")
+- ƯU TIÊN dùng fill_single_field() hơn start_incremental_form()
 
-NHIỆM VỤ:
-1. Phân tích TOÀN BỘ conversation history
-2. Trích xuất thông tin từ TẤT CẢ user messages
-3. GỌI TOOL phù hợp với thông tin đã extract
-4. Dùng PLACEHOLDER cho fields vẫn còn thiếu
+KHÔNG BAO GIỜ:
+- Trả lời "Tôi hiểu bạn muốn..." mà không gọi tool
+- Hỏi thêm thông tin
+- Chỉ nói text mà không gọi tool
+- Chờ confirm - push NGAY khi user nói
 
-PLACEHOLDER CHO FIELDS THIẾU:
-- customer_name: "Khách hàng" (nếu không có)
-- customer_id: "000000000000" (12 số 0)
-- phone_number: "0000000000" (10 số 0)
-- email: "temp@vpbank.com"
-- address: "Chưa cập nhật"
-- date_of_birth: "1990-01-01"
-- employment_status: "employed"
-- company_name: "Chưa cập nhật"
-- gender: "male"
-- monthly_income: 0
-
-VÍ DỤ EXTRACTION:
-
-Input conversation history:
-```
-user: Tôi muốn vay 50 triệu
-assistant: Cho tôi biết họ tên và CCCD?
-user: Tên Hiếu Nghị, CCCD 123456789012
-assistant: Số điện thoại và email?
-user: SĐT 0963023600, email abc@gmail.com
-assistant: Xác nhận: Hiếu Nghị, 50 triệu, 24 tháng. Đúng không?
-user: Đúng
-assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
-```
-
-→ Extract từ TOÀN BỘ conversation:
-  - customer_name: "Hiếu Nghị" (từ message thứ 3)
-  - customer_id: "123456789012" (từ message thứ 3)
-  - phone_number: "0963023600" (từ message thứ 5)
-  - email: "abc@gmail.com" (từ message thứ 5)
-  - loan_amount: 50000000 (từ message thứ 1)
-  - loan_term: 24 (từ assistant confirmation)
-
-→ GỌI: fill_loan_form(
-    customer_name="Hiếu Nghị",
-    customer_id="123456789012",
-    phone_number="0963023600",
-    email="abc@gmail.com",
-    loan_amount=50000000,
-    loan_term=24,
-    address="Chưa cập nhật",  # Placeholder
-    ...
-)
-
-🔍 EXTRACTION RULES (CRITICAL - Phân Biệt Rõ Ràng):
-
-**Số Tiền Vay (loan_amount, monthlyIncome):**
-- Tìm từ khóa: "vay", "triệu", "tỷ", "thu nhập", "lương"
-- "50 triệu" → 50000000 (nhân 1,000,000)
-- "500 triệu" → 500000000
-- "1 tỷ" → 1000000000
-- "25 triệu/tháng" → monthly_income = 25000000
-
-**Số Điện Thoại (phone_number):**
-- Tìm từ khóa: "điện thoại", "SĐT", "phone", "gọi"
-- LUÔN 10 chữ số
-- LUÔN BẮT ĐẦU bằng 0
-- Ví dụ: "0963023600", "0901234567"
-- KHÔNG phải số tiền!
-
-**Số CCCD (customer_id):**
-- Tìm từ khóa: "CCCD", "CMND", "chứng minh"
-- LUÔN 12 chữ số
-- Ví dụ: "123456789012"
-- KHÔNG bắt đầu bằng 0
-
-**Ngày Sinh (date_of_birth):**
-- Tìm từ khóa: "sinh", "ngày sinh", "date of birth"
-- Format input: "15 tháng 3 năm 2005" hoặc "15/03/2005"
-- Convert to: "2005-03-15" (YYYY-MM-DD)
-
-**Kỳ Hạn (loan_term):**
-- Tìm từ khóa: "kỳ hạn", "thời hạn", "tháng"
-- "24 tháng" → 24
-- Allowed values: 6, 12, 18, 24, 36, 48, 60
-
-**Họ Tên (customer_name):**
-- Tìm từ khóa: "tên", "họ tên", "tên là"
-- Ví dụ: "Nguyễn Văn An", "Hiếu Nghị"
-
-⚠️ ĐẶC BIỆT LƯU Ý:
-- PHÂN BIỆT RÕ: Số điện thoại (10 số, bắt đầu 0) ≠ Số tiền (lớn hơn nhiều)
-- "0963023600" = phone_number (10 digits, starts with 0)
-- "50000000" = loan_amount (8 digits, no leading 0)
-- KHÔNG NHẦM LẪN giữa 2 loại số này!
-
-✅ LUÔN GỌI TOOL với thông tin đã extract!
+LUÔN LUÔN:
+- Phân tích message cuối cùng để extract field và value
+- GỌI TOOL NGAY (start_incremental_form hoặc fill_single_field)
+- Ưu tiên INCREMENTAL MODE hơn ONE-SHOT mode
+- Mỗi user message = 1 tool call (real-time updates)
 """
     
     # Create supervisor agent with react pattern
@@ -548,10 +1005,20 @@ assistant: Tôi sẽ thực hiện điền form. [CONFIRM_AND_EXECUTE]
     # Build Graph
     # ============================================
     
+    async def supervisor_with_session_id(state: MultiAgentState):
+        """Supervisor node với session_id setup"""
+        # Set session_id từ state vào global variable cho tools
+        session_id = state.get("task_id") or state.get("metadata", {}).get("session_id", "default")
+        set_session_id(session_id)
+        logger.debug(f"🔑 Set session_id for tools: {session_id}")
+        
+        # Call supervisor agent
+        return await supervisor_agent.ainvoke(state)
+    
     workflow = StateGraph(MultiAgentState)
     
-    # Add supervisor node
-    workflow.add_node("supervisor", supervisor_agent)
+    # Add supervisor node với session_id setup
+    workflow.add_node("supervisor", supervisor_with_session_id)
     
     # Set entry point
     workflow.add_edge(START, "supervisor")

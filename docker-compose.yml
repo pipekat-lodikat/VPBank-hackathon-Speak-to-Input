@@ -1,0 +1,66 @@
+services:
+  # Task Queue Service (HTTP REST API)
+  task-queue:
+    build: .
+    command: python services/task_queue_service/main.py
+    ports:
+      - "7862:7862"
+    environment:
+      - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
+    volumes:
+      - .:/app
+    working_dir: /app
+    networks:
+      - vpbank-network
+
+  # Voice Bot Service (WebRTC + STT/TTS/LLM)
+  voice-bot:
+    build: .
+    command: python main_voice.py
+    ports:
+      - "7860:7860"
+    environment:
+      - USE_TASK_QUEUE_API=true
+      - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - .:/app
+      - ./transcripts:/app/transcripts
+    working_dir: /app
+    depends_on:
+      - task-queue
+    networks:
+      - vpbank-network
+
+  # Browser Worker Service (Workflow + Browser Automation)
+  browser-worker:
+    build: .
+    command: python main_worker.py
+    environment:
+      - USE_TASK_QUEUE_API=true
+      - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - LOAN_FORM_URL=${LOAN_FORM_URL}
+      - CRM_FORM_URL=${CRM_FORM_URL}
+      - HR_FORM_URL=${HR_FORM_URL}
+      - COMPLIANCE_FORM_URL=${COMPLIANCE_FORM_URL}
+      - OPERATIONS_FORM_URL=${OPERATIONS_FORM_URL}
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      - task-queue
+    networks:
+      - vpbank-network
+
+networks:
+  vpbank-network:
+    driver: bridge
+

@@ -71,6 +71,51 @@ async def start_incremental_form(form_type: str) -> str:
 
 
 @tool
+async def fill_multiple_fields(fields_json: str) -> str:
+    """
+    Điền NHIỀU fields cùng lúc từ conversation history.
+    Sử dụng khi supervisor extract được nhiều fields từ conversation.
+    
+    Args:
+        fields_json: JSON string chứa dict các fields cần điền
+                    VD: '{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}'
+    
+    Returns:
+        Kết quả điền fields
+    """
+    import json
+    global _current_session_id
+    
+    try:
+        fields_dict = json.loads(fields_json)
+        logger.info(f"📝 Filling multiple fields: {list(fields_dict.keys())} (session_id: {_current_session_id})")
+        
+        results = []
+        for field_name, field_value in fields_dict.items():
+            # Auto-start session nếu chưa có
+            if _current_session_id not in browser_agent.sessions:
+                logger.info(f"⚠️  No active session, auto-starting...")
+                form_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
+                start_result = await browser_agent.start_form_session(form_url, "loan", _current_session_id)
+                if not start_result.get("success"):
+                    return f"❌ Không thể mở form: {start_result.get('error')}"
+            
+            # Fill từng field
+            result = await browser_agent.fill_field_incremental(field_name, str(field_value), _current_session_id)
+            if result.get("success"):
+                results.append(f"{field_name}={field_value}")
+            else:
+                results.append(f"{field_name}=ERROR: {result.get('error')}")
+        
+        return f"✅ Đã điền {len(results)} fields: {', '.join(results)}"
+    except json.JSONDecodeError as e:
+        return f"❌ Lỗi parse JSON: {e}"
+    except Exception as e:
+        logger.error(f"Error in fill_multiple_fields: {e}", exc_info=True)
+        return f"❌ Lỗi: {str(e)}"
+
+
+@tool
 async def fill_single_field(field_name: str, field_value: str) -> str:
     """
     Điền 1 field cụ thể trong form đang mở (incremental mode).
@@ -758,7 +803,7 @@ VÍ DỤ PHÂN TÍCH MESSAGE:
 - User: "SĐT 0963023600" → Extract: field="phoneNumber", value="0963023600" → GỌI fill_single_field("phoneNumber", "0963023600")
 - User: "CCCD 123456789012" → Extract: field="customerId", value="123456789012" → GỌI fill_single_field("customerId", "123456789012")
 
-BẠN CÓ 8 TOOLS (2 MODES):
+BẠN CÓ 9 TOOLS (2 MODES):
 
 🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
 1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc (dùng khi user nói tất cả thông tin)
@@ -767,10 +812,12 @@ BẠN CÓ 8 TOOLS (2 MODES):
 4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
 5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
 
-🟢 **INCREMENTAL MODE** (3 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
+🟢 **INCREMENTAL MODE** (4 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
 6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
-7. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC (có thể gọi NHIỀU LẦN, mỗi user message = 1 lần)
-8. submit_incremental_form() - Submit form sau khi điền xong
+7. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC
+8. fill_multiple_fields(fields_json) - Điền NHIỀU fields cùng lúc từ conversation history (KHÔNG BỎ QUA!)
+   - VD: fill_multiple_fields('{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}')
+9. submit_incremental_form() - Submit form sau khi điền xong
 
 KHI NÀO DÙNG MỖI MODE:
 
@@ -810,18 +857,28 @@ KHI NÀO DÙNG MỖI MODE:
         - Nếu chưa có session, fill_single_field() sẽ tự động start session
         
         NHIỆM VỤ - QUAN TRỌNG: XỬ LÝ TẤT CẢ MESSAGES, KHÔNG BỎ QUA!
-        1. Đọc TOÀN BỘ conversation history từ ĐẦU ĐẾN CUỐI
-        2. Extract TẤT CẢ fields từ TẤT CẢ messages (KHÔNG CHỈ message cuối):
-           - Scan từ message đầu tiên đến message cuối cùng
-           - Tìm TẤT CẢ các fields: customerName, customerId, phoneNumber, email, loanAmount, etc.
-           - Mỗi field tìm thấy → GỌI fill_single_field() NGAY (KHÔNG BỎ QUA!)
-        3. Xử lý tuần tự từng field để tránh conflict:
-           - Nếu message 1: "Tên Hiếu Nghị" → fill_single_field("customerName", "Hiếu Nghị")
-           - Nếu message 2: "CCCD 012345678901" → fill_single_field("customerId", "012345678901")
-           - Nếu message 3: "SĐT 0963023600" → fill_single_field("phoneNumber", "0963023600")
-           - GỌI TẤT CẢ, KHÔNG BỎ QUA BẤT KỲ FIELD NÀO!
-        4. Nếu 1 message có nhiều fields → extract và gọi fill_single_field nhiều lần cho tất cả
-        5. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
+        
+        CÁCH 1 (KHUYẾN NGHỊ - HIỆU QUẢ HƠN):
+        - Đọc TOÀN BỘ conversation history từ ĐẦU ĐẾN CUỐI
+        - Extract TẤT CẢ fields từ TẤT CẢ messages vào 1 JSON object
+        - GỌI fill_multiple_fields() 1 LẦN với TẤT CẢ fields
+        - VD: Nếu conversation có:
+            * Message 1: "Tên Hiếu Nghị"
+            * Message 2: "CCCD 012345678901"
+            * Message 3: "SĐT 0963023600"
+          → GỌI: fill_multiple_fields('{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}')
+        
+        CÁCH 2 (Nếu chỉ có 1 field):
+        - Extract field từ message CUỐI CÙNG
+        - GỌI fill_single_field(field_name, value)
+        
+        QUY TẮC:
+        1. LUÔN scan TOÀN BỘ conversation history, không chỉ message cuối
+        2. Extract TẤT CẢ fields từ TẤT CẢ messages
+        3. Nếu có NHIỀU fields → dùng fill_multiple_fields() (HIỆU QUẢ HƠN)
+        4. Nếu chỉ có 1 field → dùng fill_single_field()
+        5. KHÔNG BAO GIỜ BỎ QUA FIELD NÀO!
+        6. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
         
         ⚠️ QUAN TRỌNG - KHÔNG BỎ QUA:
         - LUÔN scan TOÀN BỘ conversation history, không chỉ message cuối

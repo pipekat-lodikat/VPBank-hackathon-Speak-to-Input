@@ -20,29 +20,55 @@ load_dotenv(override=True)
 
 
 def _get_real_browser_kwargs() -> dict:
-    """Build kwargs for Browser() to attach a real Chrome profile if provided."""
-    executable_path = os.getenv("BROWSER_EXECUTABLE_PATH", "").strip()
-    user_data_dir = os.getenv("BROWSER_USER_DATA_DIR", "").strip()
-    profile_directory = os.getenv("BROWSER_PROFILE_DIR", "").strip() or "Default"
+    """Build kwargs for Browser() to attach a real Chrome profile if provided.
+
+    Lưu ý: Một số phiên bản browser-use (ví dụ 0.1.40) KHÔNG hỗ trợ tham số profile_directory.
+    Thay vào đó, ta nối trực tiếp profile vào user_data_dir: user_data_dir = <User Data>\\<ProfileName>.
+    """
+    raw_exec = os.getenv("BROWSER_EXECUTABLE_PATH", "").strip()
+    raw_user = os.getenv("BROWSER_USER_DATA_DIR", "").strip()
+    profile   = (os.getenv("BROWSER_PROFILE_DIR", "Default") or "Default").strip()
+
+    exec_path = os.path.expandvars(os.path.expanduser(raw_exec)) if raw_exec else ""
+    user_dir  = os.path.expandvars(os.path.expanduser(raw_user)) if raw_user else ""
+
+    # Auto-detect defaults on Windows if not provided
+    if not exec_path and os.name == "nt":
+        candidate = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        if os.path.exists(candidate):
+            exec_path = candidate
+    if not user_dir and os.name == "nt":
+        localappdata = os.environ.get("LOCALAPPDATA", "")
+        if localappdata:
+            candidate = os.path.join(localappdata, "Google", "Chrome", "User Data")
+            if os.path.exists(candidate):
+                user_dir = candidate
+
+    # Nếu có profile, nối trực tiếp vào user_data_dir (tránh dùng profile_directory)
+    if user_dir and profile:
+        user_dir = os.path.join(user_dir, profile)
 
     kwargs: dict = {}
-    if executable_path:
-        kwargs["executable_path"] = executable_path
-    if user_data_dir:
-        kwargs["user_data_dir"] = user_data_dir
-    if profile_directory:
-        kwargs["profile_directory"] = profile_directory
+    if exec_path:
+        if not os.path.exists(exec_path):
+            logger.error(f"❌ BROWSER_EXECUTABLE_PATH không tồn tại: {exec_path}")
+        else:
+            kwargs["executable_path"] = exec_path
+    if user_dir:
+        if not os.path.exists(user_dir):
+            logger.error(f"❌ BROWSER_USER_DATA_DIR (đã nối profile) không tồn tại: {user_dir}")
+        else:
+            kwargs["user_data_dir"] = user_dir
 
     if kwargs:
         logger.info(
-            "🧩 Using REAL BROWSER profile: exec='{}', user_data='{}', profile='{}'".format(
+            "🧩 Using REAL BROWSER: exec='{}', user_data='{}'".format(
                 kwargs.get("executable_path", "(default)"),
-                kwargs.get("user_data_dir", "(default)"),
-                kwargs.get("profile_directory", "(default)")
+                kwargs.get("user_data_dir", "(default)")
             )
         )
     else:
-        logger.warning("⚠️ Real browser paths not set. Running with default browser-use profile.")
+        logger.warning("⚠️ Real browser paths not set or invalid. Running with default browser-use profile.")
 
     return kwargs
 
@@ -220,6 +246,175 @@ class BrowserAgentHandler:
         except Exception as e:
             logger.error(f"❌ Error filling field {field_name}: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+
+    def _upsert_session_field(self, session_data: dict, field_name: str, value: str) -> None:
+        """Add or update a field value in session_data["fields_filled"]."""
+        updated = False
+        for f in session_data["fields_filled"]:
+            if f.get("field") == field_name:
+                f["value"] = value
+                updated = True
+                break
+        if not updated:
+            session_data["fields_filled"].append({"field": field_name, "value": value})
+
+    def _remove_session_field(self, session_data: dict, field_name: str) -> None:
+        """Remove a field from session_data["fields_filled"]."""
+        session_data["fields_filled"] = [f for f in session_data["fields_filled"] if f.get("field") != field_name]
+
+    async def upsert_field_incremental(self, field_name: str, value: str, session_id: str = "default") -> dict:
+        """Force add/update a field value on the page and in session memory."""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
+
+            filled_fields_info = ", ".join([f"{f['field']}={f['value']}" for f in session_data["fields_filled"]])
+
+            task = f"""
+                UPDATE the field with name="{field_name}" to the value: {value}
+
+                MEMORY CHECK - Fields already filled: {filled_fields_info if filled_fields_info else "None"}
+
+                INSTRUCTIONS:
+                1. Locate input/select/textarea with name="{field_name}"
+                2. If input/textarea:
+                   - Select all and replace content with: {value}
+                3. If select:
+                   - Choose the option that best matches: {value}
+                4. VERIFY after update: confirm the field now shows: {value}
+                5. Only modify this field. Do NOT touch others.
+            """
+
+            agent.add_new_task(task)
+            await agent.run(max_steps=5)
+
+            # Update memory (add or replace)
+            self._upsert_session_field(session_data, field_name, value)
+
+            return {"success": True, "field": field_name, "value": value, "message": "Field upserted"}
+
+        except Exception as e:
+            logger.error(f"❌ Error upserting field {field_name}: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    async def remove_field_incremental(self, field_name: str, session_id: str = "default") -> dict:
+        """Clear a field value on the page and remove it from session memory."""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
+
+            task = f"""
+                CLEAR the field with name="{field_name}".
+
+                INSTRUCTIONS:
+                1. Locate input/select/textarea with name="{field_name}"
+                2. If input/textarea:
+                   - Focus the field, select all, delete content until EMPTY
+                3. If select/dropdown:
+                   - Reset to placeholder (e.g., '-- Chọn --', '-- Chọn kỳ hạn --', or empty value)
+                4. VERIFY after clearing: the field is empty or at default placeholder
+                5. Only modify this field. Do NOT touch others.
+            """
+
+            agent.add_new_task(task)
+            await agent.run(max_steps=5)
+
+            # Update memory (remove)
+            self._remove_session_field(session_data, field_name)
+
+            return {"success": True, "field": field_name, "message": "Field cleared and removed from memory"}
+
+        except Exception as e:
+            logger.error(f"❌ Error removing field {field_name}: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    async def remove_fields_incremental(self, field_names: list[str], session_id: str = "default") -> dict:
+        """Clear multiple fields on the page and remove them from session memory."""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
+
+            fields_str = ", ".join(field_names)
+            task = f"""
+                CLEAR the following fields: {fields_str}
+
+                INSTRUCTIONS FOR EACH FIELD:
+                - Locate input/select/textarea by name
+                - If input/textarea: select all and delete content until EMPTY
+                - If select/dropdown: reset to placeholder (e.g., '-- Chọn --', '-- Chọn kỳ hạn --')
+                - VERIFY each field is empty or at placeholder before moving to the next
+                - Only modify the listed fields
+            """
+
+            agent.add_new_task(task)
+            await agent.run(max_steps=10)
+
+            # Remove from memory
+            for fname in field_names:
+                self._remove_session_field(session_data, fname)
+
+            return {"success": True, "fields": list(field_names), "message": "Fields cleared and removed from memory"}
+
+        except Exception as e:
+            logger.error(f"❌ Error removing fields {field_names}: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    async def clear_all_fields_incremental(self, session_id: str = "default") -> dict:
+        """Attempt to clear all known fields on the current form (fallback to 'Xóa Form' if visible)."""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
+
+            known_fields = [f['field'] for f in session_data.get("fields_filled", [])]
+            known_fields_str = ", ".join(known_fields) if known_fields else "(none)"
+
+            task = f"""
+                TRY to click a button that resets the form (labels like 'Xóa Form', 'Clear Form', 'Reset').
+                If reset button is NOT found, CLEAR ALL fields that are visible on the page.
+
+                HINT (from memory): Known fields: {known_fields_str}
+
+                CLEAR RULES:
+                - For input/textarea: select all and delete content until empty
+                - For select: choose placeholder option (e.g., '-- Chọn --')
+                - VERIFY after clearing the entire form
+            """
+
+            agent.add_new_task(task)
+            await agent.run(max_steps=15)
+
+            # Reset memory
+            session_data["fields_filled"] = []
+
+            return {"success": True, "message": "All fields cleared and memory reset"}
+
+        except Exception as e:
+            logger.error(f"❌ Error clearing all fields: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    def get_filled_fields(self, session_id: str = "default") -> dict:
+        """Return current fields in memory for a session."""
+        if session_id not in self.sessions:
+            return {"success": False, "error": f"No active session for {session_id}"}
+        session = self.sessions[session_id]
+        session_data = session["session_data"]
+        return {"success": True, "fields": list(session_data.get("fields_filled", []))}
 
     async def submit_form_incremental(self, session_id: str = "default") -> dict:
         """Submit the form and close the session after success."""
@@ -619,7 +814,7 @@ class BrowserAgentHandler:
         try:
             if session_id not in self.sessions:
                 return {
-                    "success": False,
+                "success": False,
                     "error": f"No active session for {session_id}"
                 }
             

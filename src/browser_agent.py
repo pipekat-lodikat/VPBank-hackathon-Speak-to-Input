@@ -383,19 +383,19 @@ class BrowserAgentHandler:
         fields_desc = "\n".join([f"- {k}: {v}" for k, v in form_data.items()])
         
         task = f"""
-Navigate to {form_url} and fill the form with the following information:
+            Navigate to {form_url} and fill the form with the following information:
 
-{fields_desc}
+            {fields_desc}
 
-INSTRUCTIONS:
-1. Navigate to {form_url}
-2. Wait for the form to load completely
-3. Fill ALL fields with the provided values
-4. Do NOT submit the form (just fill all fields)
-5. Verify all fields are filled correctly
+            INSTRUCTIONS:
+            1. Navigate to {form_url}
+            2. Wait for the form to load completely
+            3. Fill ALL fields with the provided values
+            4. Do NOT submit the form (just fill all fields)
+            5. Verify all fields are filled correctly
 
-Form Type: {form_type}
-"""
+            Form Type: {form_type}
+            """
         return task
     
     async def _close_session(self, session_id: str):

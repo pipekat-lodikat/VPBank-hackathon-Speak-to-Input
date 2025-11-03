@@ -71,6 +71,35 @@ async def start_incremental_form(form_type: str) -> str:
 
 
 @tool
+async def go_to_next_step() -> str:
+    """
+    Nhấn nút "Tiếp tục" để chuyển sang bước tiếp theo trong wizard (Use case 1).
+    - Giữ nguyên browser/session đang mở.
+    - Chỉ thực hiện thao tác click và chờ trang chuyển bước.
+    """
+    global _current_session_id
+    logger.info(f"➡️  Go to next step (session_id: {_current_session_id})")
+
+    # Check session exists
+    if _current_session_id not in browser_agent.sessions:
+        return "❌ Không có active session. Hãy start_incremental_form trước."
+
+    session = browser_agent.sessions[_current_session_id]
+    agent = session["agent"]
+
+    task = (
+        "Click nút có text 'Tiếp tục' ở cuối trang để chuyển sang bước tiếp theo. "
+        "Sau khi click, chờ trang tải xong (đợi tiêu đề phần kế tiếp xuất hiện), "
+        "tuyệt đối không đóng trình duyệt."
+    )
+
+    agent.add_new_task(task)
+    await agent.run(max_steps=8)
+
+    return "✅ Đã chuyển sang bước tiếp theo"
+
+
+@tool
 async def fill_multiple_fields(fields_json: str) -> str:
     """
     Điền NHIỀU fields cùng lúc từ conversation history.
@@ -782,8 +811,9 @@ def build_supervisor_workflow(llm):
         fill_compliance_form,
         fill_operations_form,
         
-        # Incremental mode (4 tools - ƯU TIÊN DÙNG)
+        # Incremental mode (5 tools - ƯU TIÊN DÙNG)
         start_incremental_form,
+        go_to_next_step,
         fill_single_field,
         fill_multiple_fields,  # NEW: Fill nhiều fields cùng lúc
         submit_incremental_form
@@ -791,68 +821,69 @@ def build_supervisor_workflow(llm):
     
     supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL phù hợp!
 
- BẠN TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
+        BẠN TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
 
-⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
-- ƯU TIÊN phân tích message CUỐI CÙNG từ user
-- Nếu message chứa 1 field (tên, SĐT, CCCD, email, số tiền) → GỌI fill_single_field() NGAY
-- Nếu message chứa nhiều fields (5+) → Có thể dùng fill_loan_form() hoặc gọi fill_single_field() nhiều lần
-- KHÔNG dùng fill_loan_form() nếu chỉ có 1-2 fields
+        ⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+        - ƯU TIÊN phân tích message CUỐI CÙNG từ user
+        - Nếu message chứa 1 field (tên, SĐT, CCCD, email, số tiền) → GỌI fill_single_field() NGAY
+        - Nếu message chứa nhiều fields (5+) → Có thể dùng fill_loan_form() hoặc gọi fill_single_field() nhiều lần
+        - KHÔNG dùng fill_loan_form() nếu chỉ có 1-2 fields
 
-VÍ DỤ PHÂN TÍCH MESSAGE:
-- User: "Tôi muốn vay 500 triệu" → Extract: field="loanAmount", value="500000000" → GỌI fill_single_field("loanAmount", "500000000")
-- User: "Tên là Hiếu Nghị" → Extract: field="customerName", value="Hiếu Nghị" → GỌI fill_single_field("customerName", "Hiếu Nghị")
-- User: "SĐT 0963023600" → Extract: field="phoneNumber", value="0963023600" → GỌI fill_single_field("phoneNumber", "0963023600")
-- User: "CCCD 123456789012" → Extract: field="customerId", value="123456789012" → GỌI fill_single_field("customerId", "123456789012")
+        VÍ DỤ PHÂN TÍCH MESSAGE:
+        - User: "Tôi muốn vay 500 triệu" → Extract: field="loanAmount", value="500000000" → GỌI fill_single_field("loanAmount", "500000000")
+        - User: "Tên là Hiếu Nghị" → Extract: field="customerName", value="Hiếu Nghị" → GỌI fill_single_field("customerName", "Hiếu Nghị")
+        - User: "SĐT 0963023600" → Extract: field="phoneNumber", value="0963023600" → GỌI fill_single_field("phoneNumber", "0963023600")
+        - User: "CCCD 123456789012" → Extract: field="customerId", value="123456789012" → GỌI fill_single_field("customerId", "123456789012")
 
-BẠN CÓ 9 TOOLS (2 MODES):
+        BẠN CÓ 10 TOOLS (2 MODES):
 
-🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
-1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc (dùng khi user nói tất cả thông tin)
-2. fill_crm_form - Điền TẤT CẢ fields CRM cùng lúc
-3. fill_hr_form - Điền TẤT CẢ fields HR cùng lúc
-4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
-5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
+        🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
+        1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc (dùng khi user nói tất cả thông tin)
+        2. fill_crm_form - Điền TẤT CẢ fields CRM cùng lúc
+        3. fill_hr_form - Điền TẤT CẢ fields HR cùng lúc
+        4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
+        5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
 
-🟢 **INCREMENTAL MODE** (4 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
-6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
-7. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC
-8. fill_multiple_fields(fields_json) - Điền NHIỀU fields cùng lúc từ conversation history (KHÔNG BỎ QUA!)
-   - VD: fill_multiple_fields('{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}')
-9. submit_incremental_form() - Submit form sau khi điền xong
+        🟢 **INCREMENTAL MODE** (5 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
+        6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
+        7. go_to_next_step() - Nhấn nút "Tiếp tục" để chuyển bước trong wizard
+        8. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC
+        9. fill_multiple_fields(fields_json) - Điền NHIỀU fields cùng lúc từ conversation history (KHÔNG BỎ QUA!)
+        - VD: fill_multiple_fields('{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}')
+        10. submit_incremental_form() - Nhấn "Gửi Đơn" để gửi toàn bộ đơn
 
-KHI NÀO DÙNG MỖI MODE:
+        KHI NÀO DÙNG MỖI MODE:
 
-📋 **Use ONE-SHOT** CHỈ KHI:
-- User nói 1 câu CHỨA 5+ fields cùng lúc
-- VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901... email abc@gmail.com... địa chỉ 123..."
-- → Nếu có đủ 5+ fields → GỌI fill_loan_form() với TẤT CẢ params
-- → Nếu chỉ có 1-4 fields → ƯU TIÊN dùng fill_single_field() nhiều lần (incremental)
+        📋 **Use ONE-SHOT** CHỈ KHI:
+        - User nói 1 câu CHỨA 5+ fields cùng lúc
+        - VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901... email abc@gmail.com... địa chỉ 123..."
+        - → Nếu có đủ 5+ fields → GỌI fill_loan_form() với TẤT CẢ params
+        - → Nếu chỉ có 1-4 fields → ƯU TIÊN dùng fill_single_field() nhiều lần (incremental)
 
-📝 **Use INCREMENTAL** khi:
-- User nói "Bắt đầu điền đơn vay" / "Mở form vay" / "Tạo form"
-  → GỌI start_incremental_form("loan") TRƯỚC
-- User nói "Điền tên Hiếu Nghị" / "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
-  → Nếu chưa có session → GỌI start_incremental_form("loan") TRƯỚC, sau đó fill_single_field("customerName", "Hiếu Nghị")
-  → Nếu đã có session → GỌI fill_single_field("customerName", "Hiếu Nghị") NGAY
-- User nói "Điền SĐT 0963023600" / "Số điện thoại 0963023600" / "SĐT là 0963023600"
-  → GỌI fill_single_field("phoneNumber", "0963023600") NGAY
-- User nói "Điền CCCD 123456789012" / "CCCD là 123456789012"
-  → GỌI fill_single_field("customerId", "123456789012") NGAY
-- User nói "Vay 500 triệu" / "Số tiền 500 triệu"
-  → GỌI fill_single_field("loanAmount", "500000000") NGAY (convert triệu → số)
-- User nói "Submit" / "Gửi form" / "Xong rồi"
-  → TRƯỚC KHI submit: Check conversation history xem đã đủ required fields chưa
-  → Nếu đủ: GỌI submit_incremental_form()
-  → Nếu thiếu: BÁO LỖI field nào còn thiếu, KHÔNG submit
+        📝 **Use INCREMENTAL** khi:
+        - User nói "Bắt đầu điền đơn vay" / "Mở form vay" / "Tạo form"
+        → GỌI start_incremental_form("loan") TRƯỚC
+        - User nói "Điền tên Hiếu Nghị" / "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
+        → Nếu chưa có session → GỌI start_incremental_form("loan") TRƯỚC, sau đó fill_single_field("customerName", "Hiếu Nghị")
+        → Nếu đã có session → GỌI fill_single_field("customerName", "Hiếu Nghị") NGAY
+        - User nói "Điền SĐT 0963023600" / "Số điện thoại 0963023600" / "SĐT là 0963023600"
+        → GỌI fill_single_field("phoneNumber", "0963023600") NGAY
+        - User nói "Điền CCCD 123456789012" / "CCCD là 123456789012"
+        → GỌI fill_single_field("customerId", "123456789012") NGAY
+        - User nói "Vay 500 triệu" / "Số tiền 500 triệu"
+        → GỌI fill_single_field("loanAmount", "500000000") NGAY (convert triệu → số)
+        - User nói "Submit" / "Gửi form" / "Xong rồi"
+        → TRƯỚC KHI submit: Check conversation history xem đã đủ required fields chưa
+        → Nếu đủ: GỌI submit_incremental_form()
+        → Nếu thiếu: BÁO LỖI field nào còn thiếu, KHÔNG submit
 
- QUAN TRỌNG - INCREMENTAL MODE:
-- ƯU TIÊN dùng incremental tools (start_incremental_form, fill_single_field, submit_incremental_form)
-- Mỗi user message có thể là 1 field → push ngay để điền field đó
-- Nếu user nói nhiều fields trong 1 câu → extract và điền từng field
-- Nếu chưa có session → start_incremental_form TRƯỚC
+        QUAN TRỌNG - INCREMENTAL MODE:
+        - ƯU TIÊN dùng incremental tools (start_incremental_form, fill_single_field, submit_incremental_form)
+        - Mỗi user message có thể là 1 field → push ngay để điền field đó
+        - Nếu user nói nhiều fields trong 1 câu → extract và điền từng field
+        - Nếu chưa có session → start_incremental_form TRƯỚC
 
- QUAN TRỌNG - INCREMENTAL MODE FIRST:
+        QUAN TRỌNG - INCREMENTAL MODE FIRST:
         - ƯU TIÊN phân tích message CUỐI CÙNG (message mới nhất từ user)
         - Extract field và value từ message đó
         - GỌI fill_single_field() NGAY với field và value đó
@@ -866,7 +897,7 @@ KHI NÀO DÙNG MỖI MODE:
         - GỌI fill_multiple_fields() 1 LẦN với TẤT CẢ fields
         - VD: Nếu conversation có:
             * Message 1: "Tên Hiếu Nghị"
-            * Message 2: "CCCD 012345678901"
+            * Message 2: "Căn cước công dân 012345678901"
             * Message 3: "SĐT 0963023600"
           → GỌI: fill_multiple_fields('{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}')
         
@@ -881,6 +912,17 @@ KHI NÀO DÙNG MỖI MODE:
         4. Nếu chỉ có 1 field → dùng fill_single_field()
         5. KHÔNG BAO GIỜ BỎ QUA FIELD NÀO!
         6. Chỉ dùng ONE-SHOT mode (fill_loan_form) khi user nói TẤT CẢ fields trong 1 message dài
+
+        TRÌNH TỰ USE CASE 1 (3 BƯỚC - BẮT BUỘC):
+        1) Ở màn "Khách hàng & Thu nhập":
+           - Điền đủ các trường liên quan khách hàng và thu nhập
+           - SAU KHI ĐỦ → GỌI go_to_next_step() để sang bước 2
+        2) Ở màn "Khoản vay & TSDB":
+           - Điền các trường khoản vay và tài sản đảm bảo
+           - SAU KHI ĐỦ → GỌI go_to_next_step() để sang bước 3
+        3) Ở màn "Bổ sung & Gửi":
+           - Nếu có thông tin bổ sung thì điền
+           - CUỐI CÙNG → GỌI submit_incremental_form() để nhấn "Gửi Đơn"
         
          QUAN TRỌNG - KHÔNG BỎ QUA:
         - LUÔN scan TOÀN BỘ conversation history, không chỉ message cuối

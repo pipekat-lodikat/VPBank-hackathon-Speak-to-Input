@@ -95,11 +95,13 @@ async def execute_workflow(request):
             "metadata": {
                 "session_id": session_id,
                 "created_at": asyncio.get_event_loop().time(),
-                "message_count": len(user_message.split("\n"))  # Count of messages in history
+                # Avoid backslash in f-string expressions → use splitlines()
+                "message_count": len(user_message.splitlines())  # Count of messages in history
             }
         }
         
-        logger.debug(f"   Conversation history contains {len(user_message.split('\n'))} lines")
+        # Avoid backslash inside f-string expression (SyntaxError in some Python versions)
+        logger.debug(f"   Conversation history contains {len(user_message.splitlines())} lines")
         logger.debug(f"   Full context length: {len(user_message)} chars")
         
         # Execute workflow

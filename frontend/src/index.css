@@ -49,9 +49,17 @@
 
 /* Global page theme per design */
 body {
-  background: linear-gradient(180deg, #F8FCFB 0%, #ECF7F4 100%);
+  /* Subtle brand-tinted gradient using the updated colors */
+  background: linear-gradient(90deg, #0EA96D1A 0%, #0EA96D0D 100%);
   color: #2E3A35;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+/* VPBank brand colors */
+:root {
+  --vp-red: #E31F26;   /* VPBank Red */
+  --vp-green: #0EA96D; /* Updated Green */
+  --vp-blue: #0EA96D;  /* Updated Blue (same as green per request) */
 }
 
 /* Sections */
@@ -89,4 +97,14 @@ body {
 .btn-soft:hover {
   background-color: #D3F0E3;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Brand helpers */
+.chip-selected {
+  background-color: var(--vp-green);
+  color: #fff;
+}
+
+.vp-gradient {
+  background: linear-gradient(135deg, var(--vp-green) 0%, var(--vp-blue) 100%);
 }

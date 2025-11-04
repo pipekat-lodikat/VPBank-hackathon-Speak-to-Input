@@ -426,13 +426,13 @@ function MainApp() {
   // Removed old dropdown outside click handler
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-white">
-      {/* Animated background */}
-          <div className="absolute inset-0 overflow-hidden">
+    <div className="min-h-screen bg-transparent">
+      {/* Animated background - use brand color */}
+      <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -inset-[10px] opacity-30">
-          <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-green-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
-          <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-700"></div>
-          <div className="absolute bottom-1/3 left-1/2 w-96 h-96 bg-teal-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-1000"></div>
+          <div className="absolute top-1/2 left-1/4 w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-pulse" style={{backgroundColor: 'var(--vp-green)'}}></div>
+          <div className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-700" style={{backgroundColor: 'var(--vp-blue)'}}></div>
+          <div className="absolute bottom-1/3 left-1/2 w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-1000" style={{backgroundColor: 'var(--vp-green)'}}></div>
         </div>
       </div>
 
@@ -442,7 +442,7 @@ function MainApp() {
           {/* Header centered */}
           <div className="mb-4 flex flex-col items-center gap-2">
             <img src={Logo} alt="Logo" className="h-8 md:h-9 opacity-95 select-none" />
-            <h1 className="text-base md:text-lg font-semibold text-emerald-800">VPBank Hackathon Voice Agent</h1>
+            <h1 className="text-base md:text-lg font-semibold" style={{color: 'var(--vp-green)'}}>VPBank Hackathon Voice Agent</h1>
           </div>
 
           {/* Main Content Grid */}
@@ -454,7 +454,12 @@ function MainApp() {
                 <div className="relative voice-section voice-circle overflow-hidden w-[520px] h-[520px] max-w-full">
                   {micTrack ? (
                     <Plasma
-                      initialConfig={plasmaConfig}
+                      initialConfig={{
+                        ...plasmaConfig,
+                        color1: '#0EA96D',
+                        color2: '#0EA96D',
+                        color3: '#E31F26',
+                      }}
                       audioTrack={micTrack}
                       className="plasma-wrap absolute inset-0"
                     />
@@ -474,7 +479,7 @@ function MainApp() {
                   {/* Meet-like round controls */}
                   <button
                     onClick={handleToggleMute}
-                    className={`w-11 h-11 grid place-items-center rounded-full border ${isMuted ? 'bg-rose-600 text-white border-rose-600' : 'bg-gray-800 text-white border-gray-800'} shadow-sm`}
+                    className={`w-11 h-11 grid place-items-center rounded-full border text-white shadow-sm`} style={{backgroundColor: isMuted ? 'var(--vp-red)' : '#111827', borderColor: isMuted ? 'var(--vp-red)' : '#111827'}}
                     title={isMuted ? 'Unmute' : 'Mute'}
                   >
                     {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
@@ -482,7 +487,8 @@ function MainApp() {
                   <button
                     onClick={isConnected ? handleDisconnect : handleConnect}
                     disabled={isConnecting}
-                    className={`w-11 h-11 grid place-items-center rounded-full shadow-sm ${isConnected ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'} ${isConnecting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    className={`w-11 h-11 grid place-items-center rounded-full shadow-sm text-white ${isConnecting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    style={{backgroundColor: isConnected ? 'var(--vp-red)' : 'var(--vp-green)'}}
                     title={isConnected ? 'End' : 'Start'}
                   >
                     {isConnected ? <PhoneOff className="w-5 h-5" /> : <Phone className="w-5 h-5" />}
@@ -502,14 +508,14 @@ function MainApp() {
                           {/* Gender */}
                           <div className="flex items-center gap-3">
                             <span className="text-gray-600 text-sm min-w-[92px]">Voice Gender</span>
-                            <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-white">
+                          <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-white">
                               <button
                                 onClick={() => setVoiceGender('male')}
-                                className={`px-3 h-8 rounded-lg text-sm ${voiceGender==='male' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              className={`px-3 h-8 rounded-lg text-sm ${voiceGender==='male' ? 'chip-selected' : 'text-gray-700'}`}
                               >Male</button>
                               <button
                                 onClick={() => setVoiceGender('female')}
-                                className={`px-3 h-8 rounded-lg text-sm ${voiceGender==='female' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              className={`px-3 h-8 rounded-lg text-sm ${voiceGender==='female' ? 'chip-selected' : 'text-gray-700'}`}
                               >Female</button>
                             </div>
                           </div>
@@ -519,15 +525,15 @@ function MainApp() {
                             <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-white">
                               <button
                                 onClick={() => setVoiceRegion('north')}
-                                className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='north' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='north' ? 'chip-selected' : 'text-gray-700'}`}
                               >North</button>
                               <button
                                 onClick={() => setVoiceRegion('central')}
-                                className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='central' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='central' ? 'chip-selected' : 'text-gray-700'}`}
                               >Central</button>
                               <button
                                 onClick={() => setVoiceRegion('south')}
-                                className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='south' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='south' ? 'chip-selected' : 'text-gray-700'}`}
                               >South</button>
                             </div>
                           </div>
@@ -589,7 +595,7 @@ function MainApp() {
                   {transcript.map((message, index) => (
                     message.role === 'user' ? (
                       <div key={index} className="flex justify-end">
-                        <div className="max-w-[70%] bg-emerald-50 text-emerald-900 rounded-2xl rounded-tr-sm px-4 py-2 shadow-sm whitespace-pre-wrap">
+                        <div className="max-w-[70%] rounded-2xl rounded-tr-sm px-4 py-2 shadow-sm whitespace-pre-wrap" style={{backgroundColor:'#EAF7F0', color:'#0B3D2E'}}>
                           {formatMessageLines(message.content).map((line, i) => (
                             <div key={i} className="mb-1 last:mb-0">{line}</div>
                           ))}
@@ -597,7 +603,7 @@ function MainApp() {
                       </div>
                     ) : (
                       <div key={index} className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full grid place-items-center bg-gradient-to-br from-emerald-500 to-cyan-400 text-white shadow-sm flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full grid place-items-center vp-gradient text-white shadow-sm flex-shrink-0">
                           <Sparkles className="w-4 h-4" />
                         </div>
                         <div className="max-w-[80%] bg-white text-gray-900 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 whitespace-pre-wrap">

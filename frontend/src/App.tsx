@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plasma } from "@pipecat-ai/voice-ui-kit/webgl";
 import Logo from "../Logo.svg";
-import { Mic, MicOff, Phone, PhoneOff, Settings } from 'lucide-react';
+import { Mic, MicOff, Phone, PhoneOff, Settings, Headphones } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 
 class WebRTCClient {
@@ -498,6 +498,7 @@ function MainApp() {
                     {devicesOpen && (
                       <div className="absolute left-0 top-full mt-2 z-50 w-[520px] max-w-[80vw] bg-white/90 border border-gray-200 rounded-xl shadow-md p-3 backdrop-blur">
                         <div className="space-y-2">
+                          <p className="text-xs text-gray-500 mb-1">Customize the user's input audio settings.</p>
                           {/* Gender */}
                           <div className="flex items-center gap-3">
                             <span className="text-gray-600 text-sm min-w-[92px]">Voice Gender</span>
@@ -531,7 +532,9 @@ function MainApp() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 min-w-0">
-                            <label className="text-gray-600 min-w-[48px] text-sm">Input</label>
+                            <label className="text-gray-600 min-w-[24px] inline-flex items-center justify-center" title="Input">
+                              <Mic className="w-4 h-4" aria-hidden="true" />
+                            </label>
                             <select
                               value={selectedInputDevice}
                               onChange={async (e) => {
@@ -546,7 +549,9 @@ function MainApp() {
                             </select>
                           </div>
                           <div className="flex items-center gap-2 min-w-0">
-                            <label className="text-gray-600 min-w-[48px] text-sm">Output</label>
+                            <label className="text-gray-600 min-w-[24px] inline-flex items-center justify-center" title="Output">
+                              <Headphones className="w-4 h-4" aria-hidden="true" />
+                            </label>
                             <select
                               value={selectedOutputDevice}
                               onChange={async (e) => {

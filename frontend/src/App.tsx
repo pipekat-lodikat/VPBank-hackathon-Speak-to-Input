@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plasma } from "@pipecat-ai/voice-ui-kit/webgl";
-import Logo from "../Logo.svg";
 import { Mic, MicOff, Phone, PhoneOff, Settings } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
+import Header from './components/Header';
 
 class WebRTCClient {
   private pc: RTCPeerConnection | null = null;
@@ -427,8 +427,11 @@ function MainApp() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-white">
+      {/* Header */}
+      <Header />
+      
       {/* Animated background */}
-          <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -inset-[10px] opacity-30">
           <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-green-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
           <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-700"></div>
@@ -436,15 +439,9 @@ function MainApp() {
         </div>
       </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen pt-20 p-4">
         {/* Main Container */}
         <div className="w-full max-w-6xl mx-auto">
-          {/* Header centered */}
-          <div className="mb-4 flex flex-col items-center gap-2">
-            <img src={Logo} alt="Logo" className="h-8 md:h-9 opacity-95 select-none" />
-            <h1 className="text-base md:text-lg font-semibold text-emerald-800">VPBank Hackathon Voice Agent</h1>
-          </div>
-
           {/* Main Content Grid */}
           <div className="grid grid-cols-12 gap-6 items-start">
 

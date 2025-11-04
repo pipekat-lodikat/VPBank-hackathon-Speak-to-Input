@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Headphones, Wifi, WifiOff, Bot, Sparkles, Globe, Shield, Mic, MicOff, Phone, PhoneOff, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plasma } from "@pipecat-ai/voice-ui-kit/webgl";
+import Logo from "../Logo.svg";
+import { Sparkles } from 'lucide-react';
 
 class WebRTCClient {
   private pc: RTCPeerConnection | null = null;
@@ -7,6 +9,7 @@ class WebRTCClient {
   private remoteAudio: HTMLAudioElement | null = null;
   public connected = false;
   public onStateChange?: (state: string) => void;
+  public onLocalAudioTrack?: (track: MediaStreamTrack) => void;
 
   constructor() {
     this.pc = new RTCPeerConnection({
@@ -61,6 +64,11 @@ class WebRTCClient {
       };
       
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      const localAudioTrack = this.localStream.getAudioTracks()[0];
+      if (localAudioTrack) {
+        this.onLocalAudioTrack?.(localAudioTrack);
+      }
 
       const transceiver = this.pc?.addTransceiver("audio", {
         direction: "sendrecv"
@@ -206,9 +214,53 @@ function MainApp() {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedInputDevice, setSelectedInputDevice] = useState<string>('');
   const [selectedOutputDevice, setSelectedOutputDevice] = useState<string>('');
-  const [inputDropdownOpen, setInputDropdownOpen] = useState(false);
-  const [outputDropdownOpen, setOutputDropdownOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
+
+  const formatMessageLines = (text: string): string[] => {
+    if (!text) return [];
+    let t = text.replace(/\r\n/g, "\n");
+    // Insert newline before inline bullets or numbered items
+    t = t.replace(/([^\n])\s-\s/g, "$1\n• ");
+    t = t.replace(/([^\n])\s•\s/g, "$1\n• ");
+    t = t.replace(/([^\n])\s(\d+)\.\s/g, "$1\n$2. ");
+    return t.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  };
+
+  const plasmaConfig = {
+    intensity: 1.9,
+    radius: 1.6,
+    effectScale: 0.58,
+    ringCount: 3,
+    ringVisibility: 0.6,
+    ringDistance: 0.07,
+    ringBounce: 0.28,
+    ringThickness: 14,
+    ringVariance: 0.55,
+    ringAmplitude: 0.045,
+    ringSpeed: 1.8,
+    ringSegments: 6,
+    colorCycleSpeed: 0.9,
+    plasmaSpeed: 1.5,
+    useCustomColors: true,
+    color1: '#16a34a',
+    color2: '#10b981',
+    color3: '#22d3ee',
+    backgroundColor: 'transparent',
+    glowFalloff: 1.15,
+    glowThreshold: 0.07,
+    audioEnabled: true,
+    audioSensitivity: 1.3,
+    audioSmoothing: 0.82,
+    frequencyBands: 32,
+    bassResponse: 1.3,
+    midResponse: 1.15,
+    trebleResponse: 0.95,
+    plasmaVolumeReactivity: 2.3,
+    volumeThreshold: 0.07,
+  } as const;
 
 
   useEffect(() => {
@@ -222,11 +274,14 @@ function MainApp() {
         setIsConnecting(false);
       }
     };
+    client.onLocalAudioTrack = (track) => {
+      setMicTrack(track);
+    };
   }, []);
 
 
   useEffect(() => {
-    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     
     const connectWebSocket = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -365,25 +420,12 @@ function MainApp() {
   };
 
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.dropdown-container')) {
-        setInputDropdownOpen(false);
-        setOutputDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  // Removed old dropdown outside click handler
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-green-50 to-white">
       {/* Animated background */}
-      <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -inset-[10px] opacity-30">
           <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-green-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
           <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-700"></div>
@@ -394,262 +436,143 @@ function MainApp() {
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
         {/* Main Container */}
         <div className="w-full max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8 animate-slide-up">
-            <div className="inline-flex items-center gap-2 bg-green-100 backdrop-blur-xl rounded-full px-4 py-2 mb-4">
-              <Shield className="w-4 h-4 text-green-600" />
-              <span className="text-xs text-green-700">Secure WebRTC Connection</span>
-            </div>
-            <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 bg-clip-text text-transparent">
-              VP Bank Hackathon Voice Agent
-            </h1>
-            <p className="text-xl text-gray-600"></p>
+          {/* Header centered */}
+          <div className="mb-4 flex flex-col items-center gap-2">
+            <img src={Logo} alt="Logo" className="h-8 md:h-9 opacity-95 select-none" />
+            <h1 className="text-base md:text-lg font-semibold text-emerald-800">VPBank Hackathon Voice Agent</h1>
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid lg:grid-cols-2 gap-6">
-            {/* Left Panel - Controls */}
-            <div className="space-y-6">
-              {/* Connection Card */}
-              <div className="bg-white backdrop-blur-xl rounded-3xl p-6 border border-green-200 shadow-2xl">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-                    <Bot className="w-6 h-6 text-green-600" />
-                    VP Bank Assistant
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    {isConnected ? (
-                      <>
-                        <Wifi className="w-5 h-5 text-green-600" />
-                        <span className="text-sm text-green-600">Connected</span>
-                      </>
-                    ) : (
-                      <>
-                        <WifiOff className="w-5 h-5 text-gray-400" />
-                        <span className="text-sm text-gray-400">Disconnected</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+          <div className="grid grid-cols-12 gap-6 items-start">
 
-                {/* Voice Visualizer */}
-                <div className="h-32 mb-6 bg-green-50 rounded-2xl p-4 flex items-center justify-center border border-green-100">
-                  {/* Simple audio visualization bars */}
-                  <div className="flex items-center justify-center gap-1 h-full">
-                    {[...Array(20)].map((_, i) => (
-                      <div
-                        key={i}
-                        className={`bg-gradient-to-t from-green-600 to-green-400 w-2 rounded-full transition-all duration-100 ${
-                          isConnected ? 'animate-pulse' : ''
-                        }`}
-                        style={{
-                          height: isConnected ? `${Math.random() * 100}%` : '10%',
-                          opacity: isConnected ? 0.8 : 0.3,
-                          animationDelay: `${i * 50}ms`
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/*  */}
-                {error && (
-                  <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg">
-                    <p className="text-red-300 text-sm">{error}</p>
-                  </div>
-                )}
-
-                {/* */}
-                <div className="space-y-4">
-                  {/**/}
-                  <div className="bg-green-50 rounded-xl p-4 dropdown-container border border-green-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Mic className="w-4 h-4 text-green-600" />
-                      <label className="text-sm font-medium text-gray-700">Audio Input Device</label>
+            {/* Left - Waveform/Plasma zone (60%) */}
+            <div className={`col-span-12 ${chatExpanded ? 'hidden lg:block lg:col-span-0' : 'lg:col-span-7'}`}> 
+              <div className="w-full h-[520px] flex items-center justify-center">
+                <div className="relative voice-section voice-circle overflow-hidden w-[520px] h-[520px] max-w-full">
+                  {micTrack ? (
+                    <Plasma
+                      initialConfig={plasmaConfig}
+                      audioTrack={micTrack}
+                      className="plasma-wrap absolute inset-0"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-300">
+                      No Audio / Waiting for microphone...
                     </div>
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setInputDropdownOpen(!inputDropdownOpen);
-                          setOutputDropdownOpen(false);
-                        }}
-                        className="w-full bg-white text-gray-800 border border-green-200 rounded-lg px-4 py-2.5 hover:bg-green-50 transition-all focus:outline-none focus:ring-2 focus:ring-green-500/50 flex items-center justify-between"
-                      >
-                        <span className="truncate">
-                          {inputDevices.find(d => d.deviceId === selectedInputDevice)?.label || 'Select Input Device'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${inputDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                      {inputDropdownOpen && (
-                        <div className="absolute top-full mt-2 w-full bg-white backdrop-blur-sm border border-green-200 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
-                          {inputDevices.map((device) => (
-                            <button
-                              key={device.deviceId}
-                              onClick={() => {
-                                setSelectedInputDevice(device.deviceId);
-                                setInputDropdownOpen(false);
-                                if (isConnected) {
-                                  client.updateInputDevice(device.deviceId);
-                                }
-                              }}
-                              className={`w-full text-left px-4 py-2.5 hover:bg-green-50 transition-colors text-gray-800 border-b border-gray-100 last:border-b-0 ${
-                                device.deviceId === selectedInputDevice ? 'bg-green-100' : ''
-                              }`}
-                            >
-                              {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Audio Output Device Selection */}
-                  <div className="bg-green-50 rounded-xl p-4 dropdown-container border border-green-100">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Headphones className="w-4 h-4 text-green-600" />
-                      <label className="text-sm font-medium text-gray-700">Audio Output Device</label>
-                    </div>
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setOutputDropdownOpen(!outputDropdownOpen);
-                          setInputDropdownOpen(false);
-                        }}
-                        className="w-full bg-white text-gray-800 border border-green-200 rounded-lg px-4 py-2.5 hover:bg-green-50 transition-all focus:outline-none focus:ring-2 focus:ring-green-500/50 flex items-center justify-between"
-                      >
-                        <span className="truncate">
-                          {outputDevices.find(d => d.deviceId === selectedOutputDevice)?.label || 'Select Output Device'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${outputDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                      {outputDropdownOpen && (
-                        <div className="absolute top-full mt-2 w-full bg-white backdrop-blur-sm border border-green-200 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
-                          {outputDevices.map((device) => (
-                            <button
-                              key={device.deviceId}
-                              onClick={() => {
-                                setSelectedOutputDevice(device.deviceId);
-                                setOutputDropdownOpen(false);
-                                // Update client audio output if connected
-                                if (isConnected) {
-                                  client.updateOutputDevice(device.deviceId);
-                                }
-                              }}
-                              className={`w-full text-left px-4 py-2.5 hover:bg-green-50 transition-colors text-gray-800 border-b border-gray-100 last:border-b-0 ${
-                                device.deviceId === selectedOutputDevice ? 'bg-green-100' : ''
-                              }`}
-                            >
-                              {device.label || `Speaker ${device.deviceId.slice(0, 8)}`}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Mute Control */}
-                    {isConnected && (
-                      <button
-                        onClick={handleToggleMute}
-                        className={`${
-                          isMuted
-                            ? 'bg-red-600 hover:bg-red-700 border-red-500'
-                            : 'bg-green-600 hover:bg-green-700 border-green-500'
-                        } text-white rounded-xl py-3 px-4 font-medium transition-all flex items-center justify-center gap-2 border`}
-                      >
-                        {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                        <span>{isMuted ? 'Unmute' : 'Mute'}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Connect Button - Enhanced */}
-                  <div className="relative group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl opacity-75 blur group-hover:opacity-100 transition-opacity"></div>
-                    <button
-                      onClick={isConnected ? handleDisconnect : handleConnect}
-                      disabled={isConnecting}
-                      className={`relative w-full ${
-                        isConnecting
-                          ? 'bg-orange-600 animate-pulse'
-                          : isConnected
-                            ? 'bg-red-600 hover:bg-red-700 border-red-500'
-                            : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 border-green-200'
-                      } text-white rounded-xl py-4 px-6 font-semibold transition-all shadow-2xl flex items-center justify-center gap-3 border`}
-                    >
-                      {isConnecting ? (
-                        <>
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                          <span>Connecting...</span>
-                        </>
-                      ) : isConnected ? (
-                        <>
-                          <PhoneOff className="w-5 h-5" />
-                          <span>End Conversation</span>
-                        </>
-                      ) : (
-                        <>
-                          <Phone className="w-5 h-5" />
-                          <span>Start Conversation</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
-
+              <div className="mt-2 text-center text-sm text-gray-700">
+                {isConnected ? (isMuted ? 'Muted' : 'Listening…') : 'Stopped'}
+              </div>
             </div>
 
-            {/* Right Panel - Transcript */}
-            <div className="bg-white backdrop-blur-xl rounded-3xl p-6 border border-green-200 shadow-2xl h-[600px] flex flex-col">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Conversation</h2>
+            {/* Right - Conversation zone (40%) with Expand */}
+            <div className={`col-span-12 ${chatExpanded ? 'lg:col-span-12' : 'lg:col-span-5'} h-[520px] flex flex-col chat-section rounded-2xl p-4`}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-800">Assistant</h2>
+                <button onClick={() => setChatExpanded(v => !v)} className="text-xs text-emerald-600 hover:underline">{chatExpanded ? 'Collapse' : 'Expand'}</button>
+              </div>
 
-              <div className="flex-1 overflow-hidden rounded-2xl bg-green-50 border border-green-100">
-                {/* Custom transcript display */}
-                <div className="h-full overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-hidden mt-2">
+                {/* Conversation bubbles */}
+                <div className="h-full overflow-y-auto p-4 space-y-4 text-[15px]">
                   {transcript.map((message, index) => (
-                    <div
-                      key={index}
-                      className={`rounded-lg p-3 text-gray-800 animate-slide-up ${
-                        message.role === 'user'
-                          ? 'bg-gray-200 ml-8'
-                          : 'bg-green-200 mr-8'
-                      }`}
-                    >
-                      <div className="text-xs text-gray-600 mb-1">
-                        {message.role === 'user' ? 'You' : 'VP Bank Assistant'}
+                    message.role === 'user' ? (
+                      <div key={index} className="flex justify-end">
+                        <div className="max-w-[70%] bg-emerald-50 text-emerald-900 rounded-2xl rounded-tr-sm px-4 py-2 shadow-sm whitespace-pre-wrap">
+                          {formatMessageLines(message.content).map((line, i) => (
+                            <div key={i} className="mb-1 last:mb-0">{line}</div>
+                          ))}
+                        </div>
                       </div>
-                      <div>{message.content}</div>
-                    </div>
+                    ) : (
+                      <div key={index} className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full grid place-items-center bg-gradient-to-br from-emerald-500 to-cyan-400 text-white shadow-sm flex-shrink-0">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div className="max-w-[80%] bg-white text-gray-900 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 whitespace-pre-wrap">
+                          {formatMessageLines(message.content).map((line, i) => (
+                            <div key={i} className="mb-1 last:mb-0">{line}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )
                   ))}
                 </div>
-
-                {transcript.length === 0 && (
-                  <div className="h-full flex items-center justify-center">
-                    <p className="text-gray-400 text-center">
-                      Start a conversation to see the transcript here
-                    </p>
-                  </div>
-                )}
               </div>
 
-              {/* Status Bar */}
-              <div className="mt-4 pt-4 border-t border-green-200">
-                <div className="flex items-center justify-between text-xs text-gray-600">
-                  <span>VP Bank Hackathon</span>
-                  <span>AWS Transcribe - ElevenLabs TTS - AWS Bedrock </span>
-                </div>
-              </div>
+              {/* Status Bar removed for clean look */}
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="mt-8 text-center text-gray-600 text-sm">
-            <p>© 2025 VP Bank Hackathon</p>
-          </div>
+          {/* Bottom Controls - Compact ~60px */}
+            <div className="mt-6 mx-auto w-full max-w-[720px] md:max-w-[840px] rounded-2xl control-bar px-3 py-3">
+              <div className="relative flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={isConnected ? handleDisconnect : handleConnect}
+                  disabled={isConnecting}
+                  className={`btn-soft h-11 px-4 ${isConnecting ? 'opacity-60 cursor-not-allowed' : ''} ${isConnected ? 'text-rose-700' : 'text-emerald-700'}`}
+                >
+                  {isConnected ? 'End' : 'Start'}
+                </button>
+                <button
+                  onClick={handleToggleMute}
+                  className={`btn-soft h-11 px-4 ${isMuted ? 'text-rose-700' : 'text-gray-700'}`}
+                >
+                  {isMuted ? 'Unmute' : 'Mute'}
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setDevicesOpen(v => !v)}
+                    className="btn-soft h-11 px-4 text-gray-700"
+                  >
+                    Setting
+                  </button>
+                  {devicesOpen && (
+                    <div className="absolute left-0 top-full mt-2 z-50 w-[520px] max-w-[80vw] bg-white/90 border border-gray-200 rounded-xl shadow-md p-3 backdrop-blur">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="text-gray-600 min-w-[48px] text-sm">Input</label>
+                          <select
+                            value={selectedInputDevice}
+                            onChange={async (e) => {
+                              const id = e.target.value; setSelectedInputDevice(id);
+                              if (isConnected) { await client.updateInputDevice(id); }
+                            }}
+                            className="flex-1 appearance-none outline-none bg-transparent border border-gray-300 rounded-lg h-9 px-2 text-gray-800 text-sm truncate"
+                          >
+                            {inputDevices.map((d) => (
+                              <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0,8)}`}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-gray-600 min-w-[48px] text-sm">Output</label>
+                          <select
+                            value={selectedOutputDevice}
+                            onChange={async (e) => {
+                              const id = e.target.value; setSelectedOutputDevice(id);
+                              if (isConnected) { await client.updateOutputDevice(id); }
+                            }}
+                            className="flex-1 appearance-none outline-none bg-transparent border border-gray-300 rounded-lg h-9 px-2 text-gray-800 text-sm truncate"
+                          >
+                            {outputDevices.map((d) => (
+                              <option key={d.deviceId} value={d.deviceId}>{d.label || `Spk ${d.deviceId.slice(0,8)}`}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {error && (
+                <div className="mt-2 text-center text-sm text-red-600">{error}</div>
+              )}
+            </div>
+
+          {/* Footer removed */}
         </div>
       </div>
     </div>

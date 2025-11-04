@@ -841,7 +841,7 @@ def build_supervisor_workflow(llm):
 
         BẠN TUYỆT ĐỐI KHÔNG TRẢ LỜI TEXT - PHẢI GỌI TOOL!
 
-        ⚠️ QUAN TRỌNG - INCREMENTAL MODE FIRST:
+        QUAN TRỌNG - INCREMENTAL MODE FIRST:
         - ƯU TIÊN phân tích message CUỐI CÙNG từ user
         - Nếu message chứa 1 field (tên, SĐT, CCCD, email, số tiền) → GỌI fill_single_field() NGAY
         - Nếu message chứa nhiều fields (5+) → Có thể dùng fill_loan_form() hoặc gọi fill_single_field() nhiều lần
@@ -855,14 +855,14 @@ def build_supervisor_workflow(llm):
 
         BẠN CÓ 10 TOOLS (2 MODES):
 
-        🔵 **ONE-SHOT MODE** (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
+        ONE-SHOT MODE (5 tools - khi có ĐẦY ĐỦ thông tin trong 1 message):
         1. fill_loan_form - Điền TẤT CẢ fields đơn vay cùng lúc (dùng khi user nói tất cả thông tin)
         2. fill_crm_form - Điền TẤT CẢ fields CRM cùng lúc
         3. fill_hr_form - Điền TẤT CẢ fields HR cùng lúc
         4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
         5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
 
-        🟢 **INCREMENTAL MODE** (các tools ưu tiên - khi điền TỪNG FIELD real-time):
+        INCREMENTAL MODE (các tools ưu tiên - khi điền TỪNG FIELD real-time):
         6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
         7. go_to_next_step() - Nhấn nút "Tiếp tục" để chuyển bước trong wizard
         8. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC
@@ -873,13 +873,13 @@ def build_supervisor_workflow(llm):
 
         KHI NÀO DÙNG MỖI MODE:
 
-        📋 **Use ONE-SHOT** CHỈ KHI:
+        Use ONE-SHOT CHỈ KHI:
         - User nói 1 câu CHỨA 5+ fields cùng lúc
         - VD: "Vay 500 triệu Nguyễn Văn An CCCD 123... SĐT 0901... email abc@gmail.com... địa chỉ 123..."
         - → Nếu có đủ 5+ fields → GỌI fill_loan_form() với TẤT CẢ params
         - → Nếu chỉ có 1-4 fields → ƯU TIÊN dùng fill_single_field() nhiều lần (incremental)
 
-        📝 **Use INCREMENTAL** khi:
+        Use INCREMENTAL khi:
         - User nói "Bắt đầu điền đơn vay" / "Mở form vay" / "Tạo form"
         → GỌI start_incremental_form("loan") TRƯỚC
         - User nói "Điền tên Hiếu Nghị" / "Tên là Hiếu Nghị" / "Tên Hiếu Nghị"
@@ -1118,7 +1118,7 @@ def build_supervisor_workflow(llm):
         4. Nếu user nói "submit", "gửi", "xong" → GỌI submit_incremental_form()
         5. Nếu user nói TẤT CẢ thông tin trong 1 message (nhiều fields) → Có thể dùng ONE-SHOT hoặc gọi fill_single_field nhiều lần
 
-        🎯 VÍ DỤ INCREMENTAL MODE REAL-TIME:
+        VÍ DỤ INCREMENTAL MODE REAL-TIME:
         - User: "Tôi muốn vay 500 triệu"
         → GỌI: fill_single_field("loanAmount", "500000000") NGAY
         → (fill_single_field sẽ tự động start session nếu chưa có)

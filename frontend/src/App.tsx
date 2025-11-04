@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plasma } from "@pipecat-ai/voice-ui-kit/webgl";
 import Logo from "../Logo.svg";
+import { Mic, MicOff, Phone, PhoneOff, Settings } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 
 class WebRTCClient {
@@ -218,6 +219,8 @@ function MainApp() {
   const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
   const [chatExpanded, setChatExpanded] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('male');
+  const [voiceRegion, setVoiceRegion] = useState<'north' | 'central' | 'south'>('north');
 
   const formatMessageLines = (text: string): string[] => {
     if (!text) return [];
@@ -465,6 +468,107 @@ function MainApp() {
               <div className="mt-2 text-center text-sm text-gray-700">
                 {isConnected ? (isMuted ? 'Muted' : 'Listening…') : 'Stopped'}
               </div>
+              {/* Controls under waveform centered under visualize */}
+              <div className="mt-4 flex justify-center">
+                <div className="inline-flex items-center gap-4 control-bar rounded-2xl px-3 py-3">
+                  {/* Meet-like round controls */}
+                  <button
+                    onClick={handleToggleMute}
+                    className={`w-11 h-11 grid place-items-center rounded-full border ${isMuted ? 'bg-rose-600 text-white border-rose-600' : 'bg-gray-800 text-white border-gray-800'} shadow-sm`}
+                    title={isMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
+                  <button
+                    onClick={isConnected ? handleDisconnect : handleConnect}
+                    disabled={isConnecting}
+                    className={`w-11 h-11 grid place-items-center rounded-full shadow-sm ${isConnected ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'} ${isConnecting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    title={isConnected ? 'End' : 'Start'}
+                  >
+                    {isConnected ? <PhoneOff className="w-5 h-5" /> : <Phone className="w-5 h-5" />}
+                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setDevicesOpen(v => !v)}
+                      className="w-11 h-11 grid place-items-center rounded-full bg-gray-800 text-white shadow-sm"
+                      title="Setting"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+                    {devicesOpen && (
+                      <div className="absolute left-0 top-full mt-2 z-50 w-[520px] max-w-[80vw] bg-white/90 border border-gray-200 rounded-xl shadow-md p-3 backdrop-blur">
+                        <div className="space-y-2">
+                          {/* Gender */}
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-600 text-sm min-w-[92px]">Voice Gender</span>
+                            <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-white">
+                              <button
+                                onClick={() => setVoiceGender('male')}
+                                className={`px-3 h-8 rounded-lg text-sm ${voiceGender==='male' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              >Male</button>
+                              <button
+                                onClick={() => setVoiceGender('female')}
+                                className={`px-3 h-8 rounded-lg text-sm ${voiceGender==='female' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              >Female</button>
+                            </div>
+                          </div>
+                          {/* Region */}
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-600 text-sm min-w-[92px]">Voice Region</span>
+                            <div className="inline-flex rounded-xl border border-gray-200 p-1 bg-white">
+                              <button
+                                onClick={() => setVoiceRegion('north')}
+                                className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='north' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              >North</button>
+                              <button
+                                onClick={() => setVoiceRegion('central')}
+                                className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='central' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              >Central</button>
+                              <button
+                                onClick={() => setVoiceRegion('south')}
+                                className={`px-3 h-8 rounded-lg text-sm ${voiceRegion==='south' ? 'bg-emerald-500 text-white' : 'text-gray-700'}`}
+                              >South</button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <label className="text-gray-600 min-w-[48px] text-sm">Input</label>
+                            <select
+                              value={selectedInputDevice}
+                              onChange={async (e) => {
+                                const id = e.target.value; setSelectedInputDevice(id);
+                                if (isConnected) { await client.updateInputDevice(id); }
+                              }}
+                              className="w-full appearance-none outline-none bg-transparent border border-gray-300 rounded-lg h-9 px-2 text-gray-800 text-sm truncate"
+                            >
+                              {inputDevices.map((d) => (
+                                <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0,8)}`}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <label className="text-gray-600 min-w-[48px] text-sm">Output</label>
+                            <select
+                              value={selectedOutputDevice}
+                              onChange={async (e) => {
+                                const id = e.target.value; setSelectedOutputDevice(id);
+                                if (isConnected) { await client.updateOutputDevice(id); }
+                              }}
+                              className="w-full appearance-none outline-none bg-transparent border border-gray-300 rounded-lg h-9 px-2 text-gray-800 text-sm truncate"
+                            >
+                              {outputDevices.map((d) => (
+                                <option key={d.deviceId} value={d.deviceId}>{d.label || `Spk ${d.deviceId.slice(0,8)}`}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {error && (
+                <div className="mt-2 text-center text-sm text-red-600">{error}</div>
+              )}
             </div>
 
             {/* Right - Conversation zone (40%) with Expand */}
@@ -506,71 +610,7 @@ function MainApp() {
             </div>
           </div>
 
-          {/* Bottom Controls - Compact ~60px */}
-            <div className="mt-6 mx-auto w-full max-w-[720px] md:max-w-[840px] rounded-2xl control-bar px-3 py-3">
-              <div className="relative flex flex-wrap items-center justify-center gap-3">
-                <button
-                  onClick={isConnected ? handleDisconnect : handleConnect}
-                  disabled={isConnecting}
-                  className={`btn-soft h-11 px-4 ${isConnecting ? 'opacity-60 cursor-not-allowed' : ''} ${isConnected ? 'text-rose-700' : 'text-emerald-700'}`}
-                >
-                  {isConnected ? 'End' : 'Start'}
-                </button>
-                <button
-                  onClick={handleToggleMute}
-                  className={`btn-soft h-11 px-4 ${isMuted ? 'text-rose-700' : 'text-gray-700'}`}
-                >
-                  {isMuted ? 'Unmute' : 'Mute'}
-                </button>
-                <div className="relative">
-                  <button
-                    onClick={() => setDevicesOpen(v => !v)}
-                    className="btn-soft h-11 px-4 text-gray-700"
-                  >
-                    Setting
-                  </button>
-                  {devicesOpen && (
-                    <div className="absolute left-0 top-full mt-2 z-50 w-[520px] max-w-[80vw] bg-white/90 border border-gray-200 rounded-xl shadow-md p-3 backdrop-blur">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <label className="text-gray-600 min-w-[48px] text-sm">Input</label>
-                          <select
-                            value={selectedInputDevice}
-                            onChange={async (e) => {
-                              const id = e.target.value; setSelectedInputDevice(id);
-                              if (isConnected) { await client.updateInputDevice(id); }
-                            }}
-                            className="flex-1 appearance-none outline-none bg-transparent border border-gray-300 rounded-lg h-9 px-2 text-gray-800 text-sm truncate"
-                          >
-                            {inputDevices.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0,8)}`}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-gray-600 min-w-[48px] text-sm">Output</label>
-                          <select
-                            value={selectedOutputDevice}
-                            onChange={async (e) => {
-                              const id = e.target.value; setSelectedOutputDevice(id);
-                              if (isConnected) { await client.updateOutputDevice(id); }
-                            }}
-                            className="flex-1 appearance-none outline-none bg-transparent border border-gray-300 rounded-lg h-9 px-2 text-gray-800 text-sm truncate"
-                          >
-                            {outputDevices.map((d) => (
-                              <option key={d.deviceId} value={d.deviceId}>{d.label || `Spk ${d.deviceId.slice(0,8)}`}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {error && (
-                <div className="mt-2 text-center text-sm text-red-600">{error}</div>
-              )}
-            </div>
+          {/* bottom controls moved under waveform */}
 
           {/* Footer removed */}
         </div>

@@ -224,7 +224,7 @@ async def run_bot(webrtc_connection, ws_connections):
     tts = ElevenLabsTTSService(
         api_key=elevenlabs_api_key,
         voice_id=elevenlabs_voice_id,
-        model="eleven_multilingual_v2",
+        model="eleven_flash_v2_5",
         params=ElevenLabsTTSService.InputParams(
             language=Language.VI,
             stability=0.8,
@@ -489,8 +489,11 @@ async def run_bot(webrtc_connection, ws_connections):
 
             **Số điện thoại:** 
             - Format: 10 chữ số, bắt đầu bằng 0
-            - Đọc: TỪNG SỐ riêng biệt
-            - Ví dụ: "0963023600" đọc là "không chín sáu ba không hai ba sáu không không"
+            - ĐỌC TỪNG SỐ KỸ LƯỠNG, RÕ RÀNG, NGẮT NHỊP NHẸ giữa từng số (0 9 6 3 0 2 3 6 0 0)
+            - Tuyệt đối KHÔNG đọc ghép cặp/nhóm, KHÔNG nuốt số, KHÔNG đọc nhanh
+            - Ví dụ ĐÚNG: "0963023600" → "không chín sáu ba không hai ba sáu không không"
+            - Ví dụ SAI: "0963 023 600", "không chín sáu ba không hai ba sáu không", đọc dính/ghép nhóm
+            - Khi bot NHẮC LẠI số điện thoại, vẫn đọc từng số tách bạch như trên (không hỏi xác nhận)
 
             **Số căn cước công dân:**
             - Format: 12 chữ số

@@ -146,6 +146,23 @@ async def fill_multiple_fields(fields_json: str) -> str:
 
 
 @tool
+async def remove_single_field(field_name: str) -> str:
+    """
+    Xóa/clear 1 field cụ thể trong form đang mở (incremental mode).
+    Dùng khi user nói: "xóa CCCD", "xoá số căn cước", "clear customerId"...
+    """
+    global _current_session_id
+    logger.info(f"🧽 Remove single field: {field_name} (session_id: {_current_session_id})")
+
+    if _current_session_id not in browser_agent.sessions:
+        return "❌ Không có active session. Hãy start_incremental_form trước."
+
+    result = await browser_agent.remove_field_incremental(field_name, _current_session_id)
+    if result.get("success"):
+        return f"✅ Đã xóa nội dung field {field_name}."
+    return f"❌ Lỗi khi xóa field {field_name}: {result.get('error', 'Unknown error')}"
+
+@tool
 async def fill_single_field(field_name: str, field_value: str) -> str:
     """
     Điền 1 field cụ thể trong form đang mở (incremental mode).
@@ -816,6 +833,7 @@ def build_supervisor_workflow(llm):
         go_to_next_step,
         fill_single_field,
         fill_multiple_fields,  # NEW: Fill nhiều fields cùng lúc
+        remove_single_field,   # NEW: Xóa 1 field cụ thể
         submit_incremental_form
     ]
     
@@ -844,13 +862,14 @@ def build_supervisor_workflow(llm):
         4. fill_compliance_form - Điền TẤT CẢ fields compliance cùng lúc
         5. fill_operations_form - Điền TẤT CẢ fields operations cùng lúc
 
-        🟢 **INCREMENTAL MODE** (5 tools - ƯU TIÊN DÙNG - khi điền TỪNG FIELD real-time):
+        🟢 **INCREMENTAL MODE** (các tools ưu tiên - khi điền TỪNG FIELD real-time):
         6. start_incremental_form(form_type) - Mở browser, navigate to form, GIỮ MỞ (gọi đầu tiên nếu chưa có session)
         7. go_to_next_step() - Nhấn nút "Tiếp tục" để chuyển bước trong wizard
         8. fill_single_field(field_name, value) - Điền 1 field NGAY LẬP TỨC
         9. fill_multiple_fields(fields_json) - Điền NHIỀU fields cùng lúc từ conversation history (KHÔNG BỎ QUA!)
         - VD: fill_multiple_fields('{"customerName": "Hiếu Nghị", "customerId": "012345678901", "phoneNumber": "0963023600"}')
-        10. submit_incremental_form() - Nhấn "Gửi Đơn" để gửi toàn bộ đơn
+        10. remove_single_field(field_name) - Xóa nội dung 1 field (vd: customerId)
+        11. submit_incremental_form() - Nhấn "Gửi Đơn" để gửi toàn bộ đơn
 
         KHI NÀO DÙNG MỖI MODE:
 
@@ -870,6 +889,8 @@ def build_supervisor_workflow(llm):
         → GỌI fill_single_field("phoneNumber", "0963023600") NGAY
         - User nói "Điền CCCD 123456789012" / "CCCD là 123456789012"
         → GỌI fill_single_field("customerId", "123456789012") NGAY
+        - User nói "Xóa CCCD" / "Xoá số căn cước" / "Clear CMND"
+        → GỌI remove_single_field("customerId") NGAY (KHÔNG điền rỗng!)
         - User nói "Vay 500 triệu" / "Số tiền 500 triệu"
         → GỌI fill_single_field("loanAmount", "500000000") NGAY (convert triệu → số)
         - User nói "Submit" / "Gửi form" / "Xong rồi"
@@ -1091,6 +1112,7 @@ def build_supervisor_workflow(llm):
         - "tên X" / "Tên là X" → fill_single_field("customerName", "X")
         - "SĐT Y" / "Số điện thoại Y" → fill_single_field("phoneNumber", "Y")
         - "CCCD Z" / "Căn cước Z" → fill_single_field("customerId", "Z")
+        - "xóa CCCD" / "xoá số căn cước" → remove_single_field("customerId")
         - "vay X triệu" → fill_single_field("loanAmount", "X*1000000")
         - "email X" → fill_single_field("email", "X")
         4. Nếu user nói "submit", "gửi", "xong" → GỌI submit_incremental_form()

@@ -235,7 +235,6 @@ async def run_bot(webrtc_connection, ws_connections):
         )
     )
     
-    # Workflow sẽ được gọi trực tiếp khi cần, không cần worker riêng
     logger.info("🚀 Voice bot ready - workflow will execute directly when needed")
 
     # Transcript processor
@@ -380,7 +379,7 @@ async def run_bot(webrtc_connection, ws_connections):
 
             ---
 
-            ✅ GỢI Ý NHANH:
+            GỢI Ý NHANH:
             - Để điền nhanh, anh/chị chỉ cần NÓI MỘT LẦN đầy đủ thông tin khách hàng; tôi sẽ tự động trích xuất các trường cần thiết.
             - KHÔNG cần liệt kê từng mục theo thứ tự; chỉ cần nói tự nhiên, đủ ý.
 
@@ -391,7 +390,7 @@ async def run_bot(webrtc_connection, ws_connections):
             - Nếu cần liệt kê, dùng dấu gạch đầu dòng "- " thuần văn bản.
             - Ví dụ sai: "🏦 Đơn vay vốn"; Ví dụ đúng: "- Đơn vay vốn & KYC".
 
-            1️⃣ **ĐƠN VAY VỐN & KYC** (Use Case 1)
+            1️ **ĐƠN VAY VỐN & KYC** (Use Case 1)
             
             **ONE-SHOT:** "Vay 500 triệu Nguyễn Văn An Căn cước công dân 123... SĐT 0901..."
             → Xác nhận → Điền tất cả cùng lúc
@@ -404,23 +403,23 @@ async def run_bot(webrtc_connection, ws_connections):
             - ... (từng field)
             - "Submit form" → Gửi đơn
 
-            2️⃣ **CẬP NHẬT CRM** (Use Case 2)
+            2️ **CẬP NHẬT CRM** (Use Case 2)
             - ONE-SHOT hoặc INCREMENTAL (tương tự)
 
-            3️⃣ **YÊU CẦU HR** (Use Case 3)
+            3️ **YÊU CẦU HR** (Use Case 3)
             - ONE-SHOT hoặc INCREMENTAL (tương tự)
 
-            4️⃣ **BÁO CÁO TUÂN THỦ** (Use Case 4)
+            4️ **BÁO CÁO TUÂN THỦ** (Use Case 4)
             - ONE-SHOT hoặc INCREMENTAL (tương tự)
 
-            5️⃣ **KIỂM TRA GIAO DỊCH** (Use Case 5)
+            5️ **KIỂM TRA GIAO DỊCH** (Use Case 5)
             - ONE-SHOT hoặc INCREMENTAL (tương tự)
 
             Khi người dùng cung cấp đủ thông tin trong một lần nói:
 
-            ⚡ **USER NÓI 1 CÂU DUY NHẤT** chứa TẤT CẢ thông tin
-            ⚡ **BOT GHI NHẬN** và nói "Đang xử lý..."
-            ⚡ **HỆ THỐNG TỰ ĐỘNG** push vào Browser Service → Xử lý ngay
+             **USER NÓI 1 CÂU DUY NHẤT** chứa TẤT CẢ thông tin
+             **BOT GHI NHẬN** và nói "Đang xử lý..."
+             **HỆ THỐNG TỰ ĐỘNG** push vào Browser Service → Xử lý ngay
 
             Khi người dùng cung cấp thông tin theo từng phần:
 
@@ -453,7 +452,7 @@ async def run_bot(webrtc_connection, ws_connections):
             Bot: "Đang gửi form... Vui lòng đợi."
             → System click submit, xác nhận modal, đợi success
             → System đóng browser
-            Bot: "✅ Form đã được gửi thành công!"
+            Bot: "Form đã được gửi thành công!"
 
             LƯU Ý CHO TRƯỜNG HỢP ĐIỀN TỪNG PHẦN:
             - KHÔNG cần xác nhận từng field (quá dài!)

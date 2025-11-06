@@ -223,6 +223,7 @@ function MainApp() {
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('male');
   const [voiceRegion, setVoiceRegion] = useState<'north' | 'central' | 'south'>('north');
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
 
   const formatMessageLines = (text: string): string[] => {
     if (!text) return [];
@@ -375,6 +376,24 @@ function MainApp() {
     return () => {
       navigator.mediaDevices.removeEventListener('devicechange', getDevices);
     };
+  }, []);
+
+  // Poll Browser Service live URL and embed directly when available
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const fetchLive = async () => {
+      try {
+        const res = await fetch('http://localhost:7863/api/live');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data.live_url === 'string') {
+          setLiveUrl(data.live_url || null);
+        }
+      } catch {}
+    };
+    fetchLive();
+    timer = setInterval(fetchLive, 3000);
+    return () => { if (timer) clearInterval(timer); };
   }, []);
 
   const inputDevices = audioDevices.filter(device => device.kind === 'audioinput');
@@ -574,6 +593,14 @@ function MainApp() {
               </div>
               {error && (
                 <div className="mt-2 text-center text-sm text-red-600">{error}</div>
+              )}
+              {liveUrl && (
+                <div className="mt-6">
+                  <div className="text-sm text-gray-700 mb-2 text-center">Live browser session</div>
+                  <div className="w-full max-w-[720px] mx-auto rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white/50 backdrop-blur">
+                    <iframe src={liveUrl} title="Browser Live" className="w-full h-[360px]" />
+                  </div>
+                </div>
               )}
             </div>
 

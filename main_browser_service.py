@@ -95,6 +95,17 @@ async def health_check(request):
     })
 
 
+@routes.get("/api/live")
+async def get_live_url(request):
+    """Expose current live_url of persistent browser session (if any)."""
+    try:
+        url = getattr(browser_agent, "live_url", None)
+        return web.json_response({"live_url": url})
+    except Exception as e:
+        logger.error(f"❌ Failed to get live url: {e}")
+        return web.json_response({"live_url": None, "error": str(e)}, status=500)
+
+
 def create_app():
     """Create aiohttp application"""
     app = web.Application()
@@ -124,6 +135,7 @@ if __name__ == "__main__":
     logger.info("🔗 Endpoints:")
     logger.info("   POST   /api/execute - Execute workflow")
     logger.info("   GET    /api/health - Health check")
+    logger.info("   GET    /api/live  - Current browser live URL")
     
     app = create_app()
     web.run_app(app, host="0.0.0.0", port=7863)

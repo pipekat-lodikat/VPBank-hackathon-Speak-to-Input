@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from browser_use import Agent as BrowserUseAgent
-from browser_use import BrowserProfile
+from browser_use import Browser, BrowserProfile
 
 
 load_dotenv(override=True)
@@ -29,6 +29,7 @@ class BrowserAgentHandler:
         self.sessions: dict[str, dict] = {}
         self.llm = None
         self.browser_profile = None
+        self.browser: Browser | None = None
         logger.info("🌐 BrowserAgentHandler (new) initialized")
 
     def _get_llm(self):
@@ -48,6 +49,15 @@ class BrowserAgentHandler:
             )
         return self.browser_profile
 
+    async def _ensure_browser(self):
+        """Start a persistent browser (keep_alive) for chaining tasks."""
+        if self.browser is None:
+            headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
+            self.browser = Browser(keep_alive=True, headless=headless)
+            await self.browser.start()
+            logger.info("🟢 Persistent browser started (keep_alive=True)")
+        return self.browser
+
     async def start_form_session(self, form_url: str, form_type: str, session_id: str = "default") -> dict:
         try:
             logger.info(f"🚀 Starting form session: {form_type} (session_id: {session_id})")
@@ -55,11 +65,12 @@ class BrowserAgentHandler:
             if session_id in self.sessions:
                 logger.info(f"♻️  Reusing existing session for {session_id}")
                 agent = self.sessions[session_id]["agent"]
-                agent.add_task(f"Open {form_url} and wait for page to fully load.")
+                agent.add_new_task(f"Open {form_url} and wait for page to fully load.")
                 await agent.run()
                 return {"success": True, "message": f"Reusing session for {form_type}", "session": self.sessions[session_id]["session_data"]}
 
             profile = self._get_profile()
+            browser = await self._ensure_browser()
 
             initial_task = (
                 f"Open {form_url} and wait for the form to fully load. Do not submit or fill yet."
@@ -69,6 +80,7 @@ class BrowserAgentHandler:
                 flash_mode=True,
                 browser_profile=profile,
                 extend_system_message=SPEED_OPTIMIZATION_PROMPT,
+                browser_session=browser,
             )
 
             await agent.run()
@@ -104,7 +116,7 @@ class BrowserAgentHandler:
             Memory: {filled_fields_info if filled_fields_info else 'None'}.
             Verify the field now shows the exact value. Do not submit or navigate.
             """
-            agent.add_task(task)
+            agent.add_new_task(task)
             await agent.run()
 
             session_data["fields_filled"].append({"field": field_name, "value": value})
@@ -124,7 +136,7 @@ class BrowserAgentHandler:
             Locate HTML field name="{field_name}" and set/replace its content with: {value}. Verify final value.
             Only modify this field.
             """
-            agent.add_task(task)
+            agent.add_new_task(task)
             await agent.run()
             # upsert memory
             updated = False
@@ -150,7 +162,7 @@ class BrowserAgentHandler:
             task = f"""
             Clear the field with HTML name="{field_name}" (empty the input or reset select to placeholder). Verify cleared.
             """
-            agent.add_task(task)
+            agent.add_new_task(task)
             await agent.run()
             session_data["fields_filled"] = [f for f in session_data["fields_filled"] if f.get("field") != field_name]
             return {"success": True, "field": field_name, "message": "Field cleared and removed from memory"}
@@ -169,7 +181,7 @@ class BrowserAgentHandler:
             task = f"""
             Clear the following fields by HTML name: {fields_str}. Verify each is empty or reset to placeholder.
             """
-            agent.add_task(task)
+            agent.add_new_task(task)
             await agent.run()
             session_data["fields_filled"] = [f for f in session_data["fields_filled"] if f.get("field") not in set(field_names)]
             return {"success": True, "fields": list(field_names), "message": "Fields cleared and removed from memory"}
@@ -226,6 +238,7 @@ class BrowserAgentHandler:
     async def fill_form(self, form_url: str, form_data: dict, form_type: str = "loan") -> dict:
         try:
             profile = self._get_profile()
+            browser = await self._ensure_browser()
             fields_desc = "\n".join([f"- {k}: {v}" for k, v in form_data.items()])
             task = f"""
             1. Open {form_url}
@@ -239,12 +252,9 @@ class BrowserAgentHandler:
                 flash_mode=True,
                 browser_profile=profile,
                 extend_system_message=SPEED_OPTIMIZATION_PROMPT,
+                browser_session=browser,
             )
             result = await agent.run()
-            try:
-                await agent.browser.close()
-            except Exception:
-                pass
             return {"success": True, "message": "Form filled successfully", "result": str(result)}
         except Exception as e:
             logger.error(f"❌ Error in one-shot fill: {e}", exc_info=True)
@@ -258,6 +268,7 @@ class BrowserAgentHandler:
         """
         try:
             profile = self._get_profile()
+            browser = await self._ensure_browser()
 
             loan_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
             crm_url = os.getenv("CRM_FORM_URL", "https://case2-ten.vercel.app/")
@@ -288,13 +299,10 @@ class BrowserAgentHandler:
                 flash_mode=True,
                 browser_profile=profile,
                 extend_system_message=SPEED_OPTIMIZATION_PROMPT,
+                browser_session=browser,
             )
 
             result = await agent.run()
-            try:
-                await agent.browser.close()
-            except Exception:
-                pass
             return {"success": True, "message": "Executed freeform instruction", "result": str(result)}
         except Exception as e:
             logger.error(f"❌ Error executing freeform: {e}", exc_info=True)

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plasma } from "@pipecat-ai/voice-ui-kit/webgl";
-import { Mic, MicOff, Phone, PhoneOff, Settings } from 'lucide-react';
+import { Mic, MicOff, Phone, PhoneOff, Settings, History } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 import Header from './components/Header';
+import { SessionHistory } from './components/SessionHistory';
 
 class WebRTCClient {
   private pc: RTCPeerConnection | null = null;
@@ -221,6 +222,7 @@ function MainApp() {
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('male');
   const [voiceRegion, setVoiceRegion] = useState<'north' | 'central' | 'south'>('north');
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const formatMessageLines = (text: string): string[] => {
     if (!text) return [];
@@ -484,6 +486,13 @@ function MainApp() {
                   >
                     {isConnected ? <PhoneOff className="w-5 h-5" /> : <Phone className="w-5 h-5" />}
                   </button>
+                  <button
+                    onClick={() => setHistoryOpen(true)}
+                    className="w-11 h-11 grid place-items-center rounded-full bg-gray-800 text-white shadow-sm"
+                    title="History"
+                  >
+                    <History className="w-5 h-5" />
+                  </button>
                   <div className="relative">
                     <button
                       onClick={() => setDevicesOpen(v => !v)}
@@ -612,6 +621,9 @@ function MainApp() {
           {/* Footer removed */}
         </div>
       </div>
+
+      {/* Session History Modal */}
+      <SessionHistory isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>
   );
 }

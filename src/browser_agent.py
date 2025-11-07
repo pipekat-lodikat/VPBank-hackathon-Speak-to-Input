@@ -305,73 +305,68 @@ class BrowserAgentHandler:
             compliance_url = os.getenv("COMPLIANCE_FORM_URL", "https://case4-beta.vercel.app/")
             operations_url = os.getenv("OPERATIONS_FORM_URL", "https://case5-chi.vercel.app/")
 
-            navigate_task = (
-                "Decide the most relevant form among these URLs and NAVIGATE to it, then wait until fully loaded. "
-                "Do not fill yet.\n"
+            # Create a single comprehensive task to avoid session clearing between steps
+            comprehensive_task = (
+                "You need to complete a form filling workflow. Follow these steps in order:\n\n"
+                "STEP 1 - NAVIGATE:\n"
+                "Decide the most relevant form among these URLs and NAVIGATE to it, then wait until fully loaded:\n"
                 f"- loan: {loan_url}\n"
                 f"- crm: {crm_url}\n"
                 f"- hr: {hr_url}\n"
                 f"- compliance: {compliance_url}\n"
-                f"- operations: {operations_url}"
-            )
-
-            fill_task = (
-                "From the user instruction below, extract relevant fields and fill ONLY those fields on the current page.\n"
-                "Use multi-action sequences. Do not submit.\n\n"
+                f"- operations: {operations_url}\n\n"
+                "STEP 2 - FILL FORM:\n"
+                "From the USER INSTRUCTION below, extract only the fields relevant to the current page and FILL THEM.\n"
+                "IMPORTANT form mapping guidelines (Vietnamese labels):\n"
+                "- 'Họ và tên' -> full name\n"
+                "- 'Số điện thoại' or 'Điện thoại' -> phone (10 digits, starts with 0 or 84)\n"
+                "- 'Email' -> email\n"
+                "- 'Ngày sinh' -> date of birth (accept DD/MM/YYYY)\n"
+                "- 'CMND/CCCD' -> national id\n"
+                "- 'Tỉnh/Thành phố' -> province/city (select)\n"
+                "- 'Khoản vay' or 'Số tiền vay' -> loan amount (numbers only)\n"
+                "- 'Kỳ hạn' or 'Thời hạn vay' -> term\n"
+                "Filling strategy (use multi-action sequences):\n"
+                "1) First try matching by <label> text (contains/equals ignoring accents and case).\n"
+                "2) Fallback to placeholder text contains Vietnamese label.\n"
+                "3) As last resort, match by input/select name/id containing normalized keywords (e.g., name, phone, email, dob, amount, term).\n"
+                "4) Verify each field after filling (value or selection reflects the intended value).\n\n"
+                "STEP 3 - SUBMIT (if requested):\n"
+                "If the user instruction clearly asks to submit, click submit and confirm if needed; otherwise skip.\n\n"
+                "STEP 4 - SUMMARIZE:\n"
+                "At the end, return ONLY a short plain text summary: fields filled and submit status.\n\n"
                 "USER INSTRUCTION:\n"
-                f"{user_message}"
-            )
-
-            submit_task = (
-                "If the user instruction clearly asks to submit, click submit and confirm if needed; otherwise skip."
-            )
-            summarize_task = (
-                "Return ONLY a short plain text summary: fields filled and submit status."
+                f"{user_message}\n\n"
+                "IMPORTANT: Complete all steps in sequence. Do not stop after navigation. Fill the form fields based on the user instruction."
             )
 
             llm_instance = self._get_llm()
 
             @sandbox(
                 on_browser_created=self._on_browser_created,
+                keep_browser_open=True,
+                cloud_timeout=15,
             )
-            async def run_flow(browser: Browser, *, nav: str, fill: str, submit: str, summarize: str, llm):
+            async def run_flow(browser: Browser, *, task: str, llm):
+                # Use a single agent with one comprehensive task to avoid session clearing
                 agent = BrowserUseAgent(
-                    task=nav,
-                    flash_mode=False,
+                    task=task,
+                    flash_mode=False,  # Use False for better reliability
                     extend_system_message=SPEED_OPTIMIZATION_PROMPT,
                     browser=browser,
                     llm=llm,
                 )
-
-                # Step 1: Navigate
                 try:
-                    await agent.run(max_steps=8)
+                    result = await agent.run(max_steps=40)  # Increased steps for comprehensive task
+                    return result
                 except Exception as e:
-                    if "No result received from execution" not in str(e):
+                    # Return a fallback summary if execution fails
+                    if "No result received from execution" not in str(e) and "BrowserStateRequestEvent" not in str(e):
                         raise
-
-                # Step 2: Fill
-                agent.add_new_task(fill)
-                try:
-                    await agent.run(max_steps=14)
-                except Exception as e:
-                    if "No result received from execution" not in str(e):
-                        raise
-
-                # Step 3: Submit (conditional)
-                agent.add_new_task(submit)
-                try:
-                    await agent.run(max_steps=6)
-                except Exception as e:
-                    if "No result received from execution" not in str(e):
-                        raise
-
-                # Step 4: Summarize
-                agent.add_new_task(summarize)
-                return await agent.run(max_steps=4)
+                    return f"Workflow attempted. Some steps may have completed."
 
             try:
-                result = await run_flow(nav=navigate_task, fill=fill_task, submit=submit_task, summarize=summarize_task, llm=llm_instance)
+                result = await run_flow(task=comprehensive_task, llm=llm_instance)
             except Exception as e:
                 msg = str(e)
                 if "No result received from execution" in msg:

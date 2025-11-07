@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 
 interface TranscriptFile {
   id: string;
-  filename: string;
   started_at: string;
   ended_at?: string;
   message_count: number;
@@ -12,7 +11,7 @@ interface TranscriptData {
   session_id: string;
   started_at: string;
   ended_at?: string;
-  messages: Array<{ role: string; content: string; timestamp: string }>;
+  messages: Array<{ role: string; content: string; timestamp?: string }>;
 }
 
 export function useTranscripts() {
@@ -24,13 +23,26 @@ export function useTranscripts() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:7860/api/transcripts');
-      if (!response.ok) throw new Error('Failed to load transcripts');
-      const data = await response.json();
-      setTranscripts(data);
+      // Use DynamoDB endpoint instead of file-based
+      const response = await fetch('http://localhost:7860/api/sessions?limit=50');
+      if (!response.ok) throw new Error('Failed to load sessions');
+      const result = await response.json();
+
+      if (result.success && result.sessions) {
+        // Transform DynamoDB sessions to match interface
+        const sessions = result.sessions.map((session: any) => ({
+          id: session.session_id,
+          started_at: session.started_at,
+          ended_at: session.ended_at,
+          message_count: session.messages?.length || 0,
+        }));
+        setTranscripts(sessions);
+      } else {
+        setTranscripts([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-      console.error('Error loading transcripts:', err);
+      console.error('Error loading sessions from DynamoDB:', err);
     } finally {
       setLoading(false);
     }
@@ -38,11 +50,17 @@ export function useTranscripts() {
 
   const loadTranscript = async (sessionId: string): Promise<TranscriptData | null> => {
     try {
-      const response = await fetch(`http://localhost:7860/api/transcripts/${sessionId}`);
-      if (!response.ok) throw new Error('Failed to load transcript');
-      return await response.json();
+      // Use DynamoDB endpoint instead of file-based
+      const response = await fetch(`http://localhost:7860/api/sessions/${sessionId}`);
+      if (!response.ok) throw new Error('Failed to load session');
+      const result = await response.json();
+
+      if (result.success && result.session) {
+        return result.session as TranscriptData;
+      }
+      return null;
     } catch (err) {
-      console.error('Error loading transcript:', err);
+      console.error('Error loading session from DynamoDB:', err);
       return null;
     }
   };

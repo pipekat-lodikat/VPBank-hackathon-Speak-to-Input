@@ -384,7 +384,7 @@ async def run_bot(webrtc_connection, ws_connections):
             audio_out_enabled=True,
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
-                    stop_secs=2,
+                    stop_secs=5.0,  # Increase to 5 seconds to allow longer pauses
                     start_secs=0.1,
                     min_volume=0.6
                 )
@@ -628,7 +628,7 @@ async def run_bot(webrtc_connection, ws_connections):
             enable_vad=True,
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
-                    stop_secs=0.7,
+                    stop_secs=5.0,  # Increase to 5 seconds to allow longer pauses
                     start_secs=0.1,
                     min_volume=0.6
                 )
@@ -639,14 +639,11 @@ async def run_bot(webrtc_connection, ws_connections):
     # Run pipeline
     runner = PipelineRunner()
     await runner.run(task)
-    
-    # Save final transcript to DynamoDB
+
+    # Save final transcript to DynamoDB only (no local file)
     transcript_data["ended_at"] = datetime.now().isoformat()
-    with open(transcript_file, 'w', encoding='utf-8') as f:
-        json.dump(transcript_data, f, ensure_ascii=False, indent=2)
     dynamodb_service.save_session(transcript_data)
 
-    
     logger.info(f"💾 Session completed. Transcript saved to DynamoDB (session: {session_id})")
 
 
@@ -796,64 +793,6 @@ async def auth_options(request):
             "Access-Control-Allow-Headers": "Content-Type",
         }
     )
-
-
-@routes.get("/api/transcripts")
-async def get_transcripts(request):
-    """Get list of transcript files"""
-    try:
-        transcripts_dir = "transcripts"
-        if not os.path.exists(transcripts_dir):
-            return web.json_response([])
-
-        files = []
-        for filename in os.listdir(transcripts_dir):
-            if filename.endswith(".json"):
-                filepath = os.path.join(transcripts_dir, filename)
-                with open(filepath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    files.append(
-                        {
-                            "id": data.get("session_id", filename.replace(".json", "")),
-                            "filename": filename,
-                            "started_at": data.get("started_at"),
-                            "ended_at": data.get("ended_at"),
-                            "message_count": len(data.get("messages", [])),
-                        }
-                    )
-
-        files.sort(key=lambda x: x.get("started_at", ""), reverse=True)
-        return web.json_response(files)
-    except Exception as e:
-        logger.error(f"Error loading transcripts: {e}")
-        return web.json_response({"error": str(e)}, status=500)
-
-
-@routes.get("/api/transcripts/{session_id}")
-async def get_transcript(request):
-    """Get specific transcript by session_id"""
-    try:
-        session_id = request.match_info["session_id"]
-        filepath = f"transcripts/conversation_{session_id}.json"
-
-        if not os.path.exists(filepath):
-            return web.json_response({"error": "Transcript not found"}, status=404)
-
-        file_size = os.path.getsize(filepath)
-        logger.info(f"Loading transcript {session_id} ({file_size} bytes)")
-
-        start_time = time.time()
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        load_time = time.time() - start_time
-        message_count = len(data.get("messages", []))
-        logger.info(f"Loaded transcript {session_id}: {message_count} messages in {load_time:.3f}s")
-
-        return web.json_response(data)
-    except Exception as e:
-        logger.error(f"Error loading transcript: {e}")
-        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.post("/offer")
@@ -1144,77 +1083,6 @@ async def auth_options(request):
         headers={
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        }
-    )
-
-
-@routes.get("/api/transcripts")
-async def get_transcripts(request):
-    """Get list of transcript files"""
-    try:
-        transcripts_dir = "transcripts"
-        if not os.path.exists(transcripts_dir):
-            return web.json_response([])
-        
-        files = []
-        for filename in os.listdir(transcripts_dir):
-            if filename.endswith('.json'):
-                filepath = os.path.join(transcripts_dir, filename)
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    files.append({
-                        'id': data.get('session_id', filename.replace('.json', '')),
-                        'filename': filename,
-                        'started_at': data.get('started_at'),
-                        'ended_at': data.get('ended_at'),
-                        'message_count': len(data.get('messages', []))
-                    })
-        
-        # Sort by started_at descending
-        files.sort(key=lambda x: x.get('started_at', ''), reverse=True)
-        return web.json_response(files)
-    except Exception as e:
-        logger.error(f"Error loading transcripts: {e}")
-        return web.json_response({'error': str(e)}, status=500)
-
-
-@routes.get("/api/transcripts/{session_id}")
-async def get_transcript(request):
-    """Get specific transcript by session_id"""
-    try:
-        session_id = request.match_info['session_id']
-        filepath = f"transcripts/conversation_{session_id}.json"
-        
-        if not os.path.exists(filepath):
-            return web.json_response({'error': 'Transcript not found'}, status=404)
-        
-        # Get file size for performance logging
-        file_size = os.path.getsize(filepath)
-        logger.info(f"Loading transcript {session_id} ({file_size} bytes)")
-        
-        start_time = time.time()
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        load_time = time.time() - start_time
-        message_count = len(data.get('messages', []))
-        logger.info(f"Loaded transcript {session_id}: {message_count} messages in {load_time:.3f}s")
-        
-        return web.json_response(data)
-    except Exception as e:
-        logger.error(f"Error loading transcript: {e}")
-        return web.json_response({'error': str(e)}, status=500)
-
-
-@routes.options("/api/transcripts")
-@routes.options("/api/transcripts/{session_id}")
-async def transcripts_options(request):
-    """Handle CORS preflight for transcript endpoints"""
-    return web.Response(
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
         }
     )

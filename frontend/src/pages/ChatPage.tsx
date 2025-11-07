@@ -16,17 +16,26 @@ import Header from "../components/Header";
 import VPBankWelcome from "../components/VPBankWelcome";
 import { useTranscripts } from "../hooks/useTranscripts";
 
+const LIVE_URL_ALIAS_TEMPLATE =
+  import.meta.env.VITE_BROWSER_URL_ALIAS ?? "aws://secure-mirror";
+
+const maskLiveUrl = (url: string | null) => {
+  if (!url) return "";
+  try {
+    const { hostname } = new URL(url);
+    if (LIVE_URL_ALIAS_TEMPLATE.includes("{host}")) {
+      return LIVE_URL_ALIAS_TEMPLATE.replace("{host}", hostname);
+    }
+    return LIVE_URL_ALIAS_TEMPLATE;
+  } catch {
+    return LIVE_URL_ALIAS_TEMPLATE;
+  }
+};
+
 type TranscriptMessage = {
   role: string;
   content: string;
 };
-
-interface ConversationHistory {
-  id: string;
-  timestamp: Date;
-  messages: TranscriptMessage[];
-  semanticTitle?: string;
-}
 
 interface UserInfo {
   name: string;
@@ -274,87 +283,6 @@ const formatMessageLines = (
     .filter(Boolean);
 };
 
-const generateSemanticTitle = (messages: TranscriptMessage[]): string => {
-  if (messages.length === 0) return "New Conversation";
-
-  const firstMessages = messages
-    .slice(0, 3)
-    .map((m) => m.content.toLowerCase());
-  const allText = firstMessages.join(" ");
-
-  if (
-    allText.includes("loan") ||
-    allText.includes("vay") ||
-    allText.includes("kyc")
-  )
-    return "Loan KYC Check";
-  if (
-    allText.includes("crm") ||
-    allText.includes("customer") ||
-    allText.includes("khách hàng")
-  )
-    return "Customer CRM Update";
-  if (
-    allText.includes("hr") ||
-    allText.includes("leave") ||
-    allText.includes("nghỉ phép")
-  )
-    return "HR Leave Request";
-  if (
-    allText.includes("compliance") ||
-    allText.includes("audit") ||
-    allText.includes("kiểm toán")
-  )
-    return "Compliance & Audit";
-  if (
-    allText.includes("transaction") ||
-    allText.includes("giao dịch") ||
-    allText.includes("risk")
-  )
-    return "Transaction Check";
-  if (allText.includes("report") || allText.includes("báo cáo"))
-    return "Report Generation";
-
-  return "General Inquiry";
-};
-
-const groupConversationsByDate = (conversations: ConversationHistory[]) => {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const thisWeekStart = new Date(today);
-  thisWeekStart.setDate(thisWeekStart.getDate() - 7);
-
-  const groups = {
-    today: [] as ConversationHistory[],
-    yesterday: [] as ConversationHistory[],
-    thisWeek: [] as ConversationHistory[],
-    older: [] as ConversationHistory[],
-  };
-
-  conversations.forEach((conv) => {
-    const convDate = new Date(conv.timestamp);
-    const convDateOnly = new Date(
-      convDate.getFullYear(),
-      convDate.getMonth(),
-      convDate.getDate()
-    );
-
-    if (convDateOnly.getTime() === today.getTime()) {
-      groups.today.push(conv);
-    } else if (convDateOnly.getTime() === yesterday.getTime()) {
-      groups.yesterday.push(conv);
-    } else if (convDateOnly.getTime() >= thisWeekStart.getTime()) {
-      groups.thisWeek.push(conv);
-    } else {
-      groups.older.push(conv);
-    }
-  });
-
-  return groups;
-};
-
 const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   const clientRef = useRef<WebRTCClient>(new WebRTCClient());
   const client = clientRef.current;
@@ -369,27 +297,28 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   const [selectedInputDevice, setSelectedInputDevice] = useState("");
   const [selectedOutputDevice, setSelectedOutputDevice] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [voiceGender, setVoiceGender] = useState<"male" | "female">("male");
   const [voiceRegion, setVoiceRegion] = useState<"north" | "central" | "south">(
     "north"
   );
-  const [conversationHistory, setConversationHistory] = useState<
-    ConversationHistory[]
-  >([]);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [newConvId, setNewConvId] = useState<string | null>(null);
   const [isLoadedFromFile, setIsLoadedFromFile] = useState(false);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
-  const [chatExpanded, setChatExpanded] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(true);
   const [showWelcome, setShowWelcome] = useState(true);
   const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const displayLiveUrl = useMemo(() => maskLiveUrl(liveUrl), [liveUrl]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement>(null);
 
   const {
     transcripts: savedTranscripts,
@@ -485,28 +414,22 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                 return prev;
               }
 
+              // Only create new conversation if there are NO existing messages
+              // This prevents clearing transcript when reconnecting
               let targetConversationId = activeConversationId;
-              if (!targetConversationId) {
+              if (!targetConversationId && prev.length === 0) {
                 targetConversationId = createConversation();
                 setActiveConversationId(targetConversationId);
+              } else if (!targetConversationId && prev.length > 0) {
+                // Messages exist but no conversation ID - create one without clearing
+                const newSessionId = Date.now().toString();
+                setActiveConversationId(newSessionId);
               }
 
               const newTranscript = [
                 ...prev,
                 data.message as TranscriptMessage,
               ];
-
-              setConversationHistory((prevHistory) =>
-                prevHistory.map((conv) =>
-                  conv.id === targetConversationId
-                    ? {
-                        ...conv,
-                        messages: newTranscript,
-                        timestamp: new Date(),
-                      }
-                    : conv
-                )
-              );
 
               return newTranscript;
             });
@@ -574,16 +497,64 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       ) {
         setSettingsOpen(false);
       }
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setUserMenuOpen(false);
+      }
     };
 
-    if (settingsOpen) {
+    if (settingsOpen || userMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [settingsOpen]);
+  }, [settingsOpen, userMenuOpen]);
+
+  // Poll Browser Service live URL
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const fetchLive = async () => {
+      try {
+        const res = await fetch("http://localhost:7863/api/live");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data.live_url === "string") {
+          const url = data.live_url || null;
+          setLiveUrl(url);
+        }
+      } catch (err) {
+        // Silently fail if browser service is not available
+      }
+    };
+    fetchLive();
+    timer = setInterval(fetchLive, 3000);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  // Auto-scroll transcript to bottom when new messages arrive
+  // Only auto-scroll during LIVE conversation (when connected), NOT when loading old conversations
+  useEffect(() => {
+    if (transcriptScrollRef.current && transcript.length > 0 && chatExpanded && isConnected) {
+      const scrollToBottom = () => {
+        if (transcriptScrollRef.current) {
+          transcriptScrollRef.current.scrollTop = transcriptScrollRef.current.scrollHeight;
+        }
+      };
+
+      // First scroll immediately
+      requestAnimationFrame(() => {
+        scrollToBottom();
+        // Second scroll after short delay to ensure DOM is fully rendered
+        setTimeout(scrollToBottom, 50);
+      });
+    }
+  }, [transcript, chatExpanded, isConnected]);
 
   const inputDevices = useMemo(
     () => audioDevices.filter((device) => device.kind === "audioinput"),
@@ -595,25 +566,13 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   );
 
   const createConversation = () => {
-    const newConversation: ConversationHistory = {
-      id: Date.now().toString(),
-      timestamp: new Date(),
-      messages: [],
-    };
-    setConversationHistory((prev) => [newConversation, ...prev]);
-    setActiveConversationId(newConversation.id);
+    // Generate new session ID (will be created by backend when bot starts)
+    const newSessionId = Date.now().toString();
+    setActiveConversationId(newSessionId);
     setTranscript([]);
     setIsLoadedFromFile(false);
-    setNewConvId(newConversation.id);
 
-    setTimeout(() => {
-      if (historyListRef.current) {
-        historyListRef.current.scrollTo({ top: 0, behavior: "smooth" });
-      }
-    }, 100);
-
-    setTimeout(() => setNewConvId(null), 2000);
-    return newConversation.id;
+    return newSessionId;
   };
 
   const handleNewConversation = () => {
@@ -629,28 +588,36 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
 
   const ensureConversation = () => {
     if (activeConversationId) return activeConversationId;
+
+    // If we have existing messages, keep them and just create a new session ID
+    if (transcript.length > 0) {
+      const newSessionId = Date.now().toString();
+      setActiveConversationId(newSessionId);
+      return newSessionId;
+    }
+
+    // No messages, create fresh conversation
     return createConversation();
   };
 
   const handleConnect = async () => {
     if (isConnected) {
-      if (activeConversationId && transcript.length > 0) {
-        setConversationHistory((prev) =>
-          prev.map((conv) =>
-            conv.id === activeConversationId
-              ? { ...conv, messages: transcript }
-              : conv
-          )
-        );
-      }
+      // Disconnect - session will be saved to DynamoDB by backend
       client.disconnect();
       setIsConnected(false);
       setError(null);
-      setTranscript([]);
+      // Keep transcript - don't clear it on disconnect
+      // User can continue the same conversation by reconnecting
       return;
     }
 
     const conversationId = ensureConversation();
+
+    // Auto-expand chat to show real-time messages
+    setChatExpanded(true);
+
+    // Enable auto-scroll for new messages (disable loaded-from-file mode)
+    setIsLoadedFromFile(false);
 
     try {
       setIsConnecting(true);
@@ -675,34 +642,32 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     setIsMuted(muted);
   };
 
-  const handleLoadConversation = async (convId: string, fromFile = false) => {
+  const handleLoadConversation = async (convId: string) => {
     if (isConnected) return;
 
-    if (fromFile) {
-      setLoadingTranscript(true);
-      try {
-        const data = await loadTranscript(convId);
-        if (data) {
-          const messages = data.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          }));
-          setTranscript(messages);
-          setActiveConversationId(convId);
-          setIsLoadedFromFile(true);
-        }
-      } catch (error) {
-        console.error("Error loading transcript:", error);
-      } finally {
-        setLoadingTranscript(false);
+    // Always load from DynamoDB
+    setLoadingTranscript(true);
+    try {
+      const data = await loadTranscript(convId);
+      if (data) {
+        const messages = data.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+        setTranscript(messages);
+        setActiveConversationId(convId);
+        setIsLoadedFromFile(true);
+
+        // Hide welcome screen and show chat interface
+        setShowWelcome(false);
+
+        // Auto-expand chat to show loaded messages
+        setChatExpanded(true);
       }
-    } else {
-      const conv = conversationHistory.find((c) => c.id === convId);
-      if (conv) {
-        setTranscript(conv.messages);
-        setActiveConversationId(conv.id);
-        setIsLoadedFromFile(false);
-      }
+    } catch (error) {
+      console.error("Error loading transcript:", error);
+    } finally {
+      setLoadingTranscript(false);
     }
   };
 
@@ -722,6 +687,13 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       ? "Muted"
       : "Listening…"
     : "Disconnected";
+  const statusColor = isConnected
+    ? isMuted
+      ? "#6b7280"
+      : "#016d33"
+    : isConnecting
+    ? "#6b7280"
+    : "#e20600";
 
   return (
     <div className="h-screen overflow-hidden bg-white flex flex-col">
@@ -780,7 +752,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
             className="flex-1 overflow-y-auto px-3"
             style={{ paddingBottom: "140px" }}
           >
-            {isConnecting && conversationHistory.length === 0 && (
+            {isConnecting && savedTranscripts.length === 0 && (
               <div className="p-2.5 rounded-lg bg-gradient-to-r from-green-50 to-blue-50 border border-green-100 mb-3">
                 <div className="flex items-center gap-2.5">
                   <div
@@ -799,96 +771,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
               </div>
             )}
 
-            {conversationHistory.length > 0 &&
-              (() => {
-                const grouped = groupConversationsByDate(conversationHistory);
-
-                const renderGroup = (
-                  title: string,
-                  conversations: ConversationHistory[]
-                ) => {
-                  if (conversations.length === 0) return null;
-
-                  return (
-                    <div key={title} className="mb-4">
-                      <div className="text-xs font-bold text-gray-600 mb-2 px-1">
-                        {title}
-                      </div>
-                      <div className="space-y-1">
-                        {conversations.map((conv) => {
-                          const semanticTitle =
-                            conv.semanticTitle ||
-                            generateSemanticTitle(conv.messages);
-                          const dateStr = conv.timestamp.toLocaleDateString(
-                            "en-US",
-                            { month: "short", day: "numeric" }
-                          );
-                          const msgCount = conv.messages.length;
-                          const isActive =
-                            activeConversationId === conv.id &&
-                            !isLoadedFromFile;
-
-                          return (
-                            <div
-                              key={conv.id}
-                              onClick={() =>
-                                !isConnected && handleLoadConversation(conv.id)
-                              }
-                              title={`Session ${conv.id}`}
-                              className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg transition-all duration-150 cursor-pointer ${
-                                isActive
-                                  ? "bg-yellow-50 border-l-2 border-yellow-400"
-                                  : "hover:bg-gray-50 border-l-2 border-transparent"
-                              } ${
-                                newConvId === conv.id ? "animate-pulse" : ""
-                              }`}
-                              style={{
-                                cursor: isConnected ? "not-allowed" : "pointer",
-                                opacity: isConnected && !isActive ? 0.5 : 1,
-                              }}
-                            >
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium text-gray-800 truncate leading-tight">
-                                  {semanticTitle}
-                                </div>
-                                <div
-                                  className="text-[10px] text-gray-500 mt-0.5 leading-tight"
-                                  style={{ opacity: 0.7 }}
-                                >
-                                  {dateStr} · {msgCount} msg
-                                  {msgCount !== 1 ? "s" : ""}
-                                </div>
-                              </div>
-                              {newConvId === conv.id && (
-                                <span
-                                  className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                                  style={{
-                                    backgroundColor: "#1d4289",
-                                    color: "white",
-                                  }}
-                                >
-                                  New
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                };
-
-                return (
-                  <>
-                    {renderGroup("Today", grouped.today)}
-                    {renderGroup("Yesterday", grouped.yesterday)}
-                    {renderGroup("This Week", grouped.thisWeek)}
-                    {renderGroup("Older", grouped.older)}
-                  </>
-                );
-              })()}
-
-            {/* Saved Transcripts from backend */}
+            {/* Session History from DynamoDB */}
             {savedTranscripts.length > 0 && (
               <div className="mb-4">
                 <div className="flex items-center justify-between text-xs font-bold text-gray-600 mb-2 px-1">
@@ -918,7 +801,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                         onClick={() =>
                           !isConnected &&
                           !loadingTranscript &&
-                          handleLoadConversation(item.id, true)
+                          handleLoadConversation(item.id)
                         }
                         title={`Session ${item.id}`}
                         className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg transition-all duration-150 cursor-pointer ${
@@ -953,24 +836,22 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
             )}
 
             {/* Empty state */}
-            {conversationHistory.length === 0 &&
-              savedTranscripts.length === 0 &&
-              !isConnecting && (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
-                    <MessageSquare
-                      className="w-6 h-6 text-gray-400"
-                      strokeWidth={1.25}
-                    />
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-1">
-                    No conversations yet
-                  </p>
-                  <p className="text-[10px] text-gray-400">
-                    Click "+ New" to start
-                  </p>
+            {savedTranscripts.length === 0 && !isConnecting && (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
+                  <MessageSquare
+                    className="w-6 h-6 text-gray-400"
+                    strokeWidth={1.25}
+                  />
                 </div>
-              )}
+                <p className="text-xs font-medium text-gray-600 mb-1">
+                  No conversations yet
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Click "+ New" to start
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Bottom Bar with User Info */}
@@ -981,14 +862,17 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
               bottom: 0,
               left: 0,
               right: 0,
-              padding: "12px",
+              padding: "8px",
             }}
           >
-            <div className="px-3 py-3 rounded-xl bg-white border border-gray-200 shadow-sm">
-              {/* User Info */}
-              <div className="flex items-center gap-3 mb-3">
+            <div className="relative" ref={userMenuRef}>
+              {/* User Info Card - Clickable */}
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors flex items-center gap-2"
+              >
                 <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
                   style={{
                     background:
                       "linear-gradient(135deg, #00b74f 0%, #1d4289 100%)",
@@ -1008,13 +892,13 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                     />
                   </svg>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-gray-900 truncate">
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="text-xs font-semibold text-gray-900 truncate">
                     {userInfo?.name || "VPBank User"}
                   </div>
-                  <div className="text-xs text-gray-500 capitalize flex items-center gap-1 mt-0.5">
+                  <div className="text-[10px] text-gray-500 capitalize flex items-center gap-1">
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
+                      className={`w-1 h-1 rounded-full ${
                         userInfo?.role === "employee"
                           ? "bg-blue-500"
                           : "bg-green-500"
@@ -1025,37 +909,68 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                       : userInfo?.role || "user"}
                   </div>
                 </div>
-              </div>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                    userMenuOpen ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 15l7-7 7 7"
+                  />
+                </svg>
+              </button>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                <button
-                  onClick={() => setSettingsOpen(!settingsOpen)}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors text-xs font-medium text-gray-700"
+              {/* Popup Menu */}
+              {userMenuOpen && (
+                <div
+                  className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+                  style={{ zIndex: 1000 }}
                 >
-                  <Settings className="w-4 h-4" />
-                  <span>Settings</span>
-                </button>
-                <button
-                  onClick={handleSignOut}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 hover:bg-red-50 transition-colors text-xs font-medium text-gray-700 hover:text-red-600"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                    className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                    />
-                  </svg>
-                  <span>Sign Out</span>
-                </button>
-              </div>
+                    <Settings className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">
+                      Settings
+                    </span>
+                  </button>
+                  <div className="border-t border-gray-100" />
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      handleSignOut();
+                    }}
+                    className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-red-50 transition-colors text-left group"
+                  >
+                    <svg
+                      className="w-4 h-4 text-gray-600 group-hover:text-red-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
+                    </svg>
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-red-600">
+                      Sign Out
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1270,26 +1185,24 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
 
         {/* Main Content Area */}
         <main
-          className="flex-1 overflow-hidden pt-6 px-4 lg:px-8 transition-all duration-300"
+          className="flex-1 overflow-hidden pt-4 px-4 lg:px-6 transition-all duration-300"
           style={{
             marginLeft: sidebarCollapsed ? "0" : "256px",
           }}
         >
-          <div className="h-full flex flex-col gap-6">
-            <div className="grid grid-cols-12 gap-6">
+          <div className="h-full flex flex-col gap-4">
+            <div className="grid grid-cols-12 gap-4 items-start flex-1 min-h-0">
               {showWelcome ? (
                 <div className="col-span-12">
                   <VPBankWelcome onStartSpeaking={handleStartFromWelcome} />
                 </div>
               ) : (
                 <>
-                  <div
-                    className={`col-span-12 ${
-                      chatExpanded ? "lg:col-span-5" : "lg:col-span-7"
-                    } flex flex-col`}
-                  >
+                  {/* Left Column: Waveform + Controls + Chat */}
+                  <div className="col-span-12 lg:col-span-3 flex flex-col gap-2 h-full min-h-0 pb-4">
+                    {/* Waveform Circle */}
                     <div className="w-full flex items-center justify-center">
-                      <div className="relative voice-section voice-circle overflow-hidden w-full max-w-[180px] sm:max-w-[220px] lg:max-w-[260px] aspect-square mx-auto">
+                      <div className="relative voice-section voice-circle overflow-hidden w-full max-w-[160px] aspect-square mx-auto">
                         {micTrack ? (
                           <Plasma
                             initialConfig={plasmaConfig}
@@ -1297,18 +1210,20 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                             className="plasma-wrap absolute inset-0"
                           />
                         ) : (
-                          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-gray-400 font-medium">
+                          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-gray-400 font-medium text-xs">
                             Start to speak
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="mt-4 flex justify-center">
-                      <div className="inline-flex items-center gap-4 control-bar rounded-2xl px-3 py-3">
+
+                    {/* Control Buttons */}
+                    <div className="flex justify-center">
+                      <div className="inline-flex items-center gap-3 control-bar rounded-2xl px-3 py-2">
                         <button
                           onClick={handleToggleMute}
                           disabled={!isConnected && !client.connected}
-                          className={`w-11 h-11 grid place-items-center rounded-full border transition-colors ${
+                          className={`w-10 h-10 grid place-items-center rounded-full border transition-colors ${
                             isMuted
                               ? "bg-rose-600 text-white border-rose-600"
                               : "bg-gray-800 text-white border-gray-800"
@@ -1316,15 +1231,15 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                           title={isMuted ? "Unmute" : "Mute"}
                         >
                           {isMuted ? (
-                            <MicOff className="w-5 h-5" />
+                            <MicOff className="w-4 h-4" />
                           ) : (
-                            <Mic className="w-5 h-5" />
+                            <Mic className="w-4 h-4" />
                           )}
                         </button>
                         <button
                           onClick={handleConnect}
                           disabled={isConnecting}
-                          className={`w-11 h-11 grid place-items-center rounded-full text-white transition-all ${
+                          className={`w-10 h-10 grid place-items-center rounded-full text-white transition-all ${
                             isConnected ? "bg-rose-600" : "bg-emerald-600"
                           } ${
                             isConnecting ? "opacity-60 cursor-not-allowed" : ""
@@ -1332,93 +1247,136 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                           title={isConnected ? "End" : "Start"}
                         >
                           {isConnecting ? (
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           ) : isConnected ? (
-                            <PhoneOff className="w-5 h-5" />
+                            <PhoneOff className="w-4 h-4" />
                           ) : (
-                            <Phone className="w-5 h-5" />
+                            <Phone className="w-4 h-4" />
                           )}
                         </button>
                       </div>
                     </div>
-                    <div className="mt-2 text-center text-sm text-gray-700">
+
+                    {/* Status */}
+                    <div
+                      className="text-center text-xs font-medium"
+                      style={{ color: statusColor }}
+                    >
                       {statusLabel}
                     </div>
                     {error && (
-                      <div className="mt-2 text-center text-sm text-red-600">
+                      <div className="text-center text-xs text-red-600">
                         {error}
                       </div>
                     )}
-                  </div>
 
-                  <div
-                    className={`col-span-12 ${
-                      chatExpanded ? "lg:col-span-7" : "lg:col-span-5"
-                    } flex flex-col min-h-[510px] lg:min-h-[590px] chat-section rounded-2xl p-4`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-emerald-600" />
-                        <h2 className="text-sm font-semibold text-gray-800">
-                          {isLoadedFromFile ? "Saved Transcript" : "Assistant"}
-                        </h2>
+                    {/* Chat Panel - Collapsible */}
+                    <div className={`bg-white/70 rounded-xl border border-gray-200 shadow-sm flex flex-col ${chatExpanded ? 'flex-1 min-h-0' : ''}`}>
+                      {/* Chat Header */}
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-white/50 backdrop-blur flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-emerald-600" />
+                          <h2 className="text-xs font-semibold text-gray-800">
+                            {isLoadedFromFile ? "Saved" : "Chat"}
+                          </h2>
+                        </div>
+                        <button
+                          onClick={() => setChatExpanded((v) => !v)}
+                          className="text-xs text-emerald-600 hover:underline"
+                        >
+                          {chatExpanded ? "▼" : "▲"}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setChatExpanded((v) => !v)}
-                        className="text-xs text-emerald-600 hover:underline"
-                      >
-                        {chatExpanded ? "Collapse" : "Expand"}
-                      </button>
-                    </div>
 
-                    <div className="flex-1 overflow-hidden mt-3 bg-white/70 rounded-xl border border-gray-200">
-                      <div className="h-full overflow-y-auto p-4 space-y-4 text-[15px]">
-                        {transcript.length === 0 ? (
-                          <div className="h-full flex flex-col items-center justify-center text-gray-400 text-sm">
-                            <MessageSquare className="w-6 h-6 mb-2 text-emerald-400" />
-                            <p>
-                              No messages yet. Start speaking to see the
-                              transcript.
-                            </p>
-                          </div>
-                        ) : (
-                          transcript.map((message, index) =>
-                            message.role === "user" ? (
-                              <div key={index} className="flex justify-end">
-                                <div className="max-w-[70%] bg-emerald-50 text-emerald-900 rounded-2xl rounded-tr-sm px-4 py-2 shadow-sm whitespace-pre-wrap">
-                                  {formatMessageLines(message.content).map(
-                                    (line, i) => (
-                                      <div key={i} className="mb-1 last:mb-0">
+                      {/* Chat Messages - Only show if expanded */}
+                      {chatExpanded && (
+                        <div
+                          ref={transcriptScrollRef}
+                          className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2 text-xs"
+                        >
+                          {transcript.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-gray-400 text-xs">
+                              <MessageSquare className="w-5 h-5 mb-1 text-emerald-400" />
+                              <p className="text-center px-2">
+                                No messages yet
+                              </p>
+                            </div>
+                          ) : (
+                            transcript.map((message, index) =>
+                              message.role === "user" ? (
+                                <div key={index} className="flex justify-end">
+                                  <div className="max-w-[85%] bg-emerald-50 text-emerald-900 rounded-lg rounded-tr-sm px-2 py-1.5 shadow-sm whitespace-pre-wrap text-xs">
+                                    {formatMessageLines(message.content).map(
+                                      (line, i) => (
+                                        <div key={i} className="mb-0.5 last:mb-0">
+                                          {line}
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  key={index}
+                                  className="flex items-start gap-1.5"
+                                >
+                                  <div className="w-5 h-5 rounded-full grid place-items-center bg-gradient-to-br from-emerald-500 to-cyan-400 text-white shadow-sm flex-shrink-0">
+                                    <Bot className="w-3 h-3" />
+                                  </div>
+                                  <div className="max-w-[80%] bg-white text-gray-900 rounded-lg rounded-tl-sm px-2 py-1.5 shadow-sm border border-gray-100 whitespace-pre-wrap text-xs">
+                                    {formatMessageLines(
+                                      message.content,
+                                      isLoadedFromFile
+                                    ).map((line, i) => (
+                                      <div key={i} className="mb-0.5 last:mb-0">
                                         {line}
                                       </div>
-                                    )
-                                  )}
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div
-                                key={index}
-                                className="flex items-start gap-3"
-                              >
-                                <div className="w-8 h-8 rounded-full grid place-items-center bg-gradient-to-br from-emerald-500 to-cyan-400 text-white shadow-sm flex-shrink-0">
-                                  <Bot className="w-4 h-4" />
-                                </div>
-                                <div className="max-w-[80%] bg-white text-gray-900 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 whitespace-pre-wrap">
-                                  {formatMessageLines(
-                                    message.content,
-                                    isLoadedFromFile
-                                  ).map((line, i) => (
-                                    <div key={i} className="mb-1 last:mb-0">
-                                      {line}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                              )
                             )
-                          )
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Right Column: Browser View - Full Height */}
+                  <div className="col-span-12 lg:col-span-9 flex flex-col h-full min-h-0 pb-4">
+                    {liveUrl ? (
+                      <div className="flex-1 w-full rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <iframe
+                          src={liveUrl}
+                          className="w-full h-full border-0"
+                          title="Live Browser View"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex-1 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
+                        <div className="text-center text-gray-400">
+                          <svg
+                            className="w-16 h-16 mx-auto mb-3 text-gray-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                            />
+                          </svg>
+                          <p className="text-sm font-medium">
+                            Browser not active
+                          </p>
+                          <p className="text-xs mt-1">
+                            Start a conversation to see browser view
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

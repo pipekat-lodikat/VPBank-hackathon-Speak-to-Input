@@ -1353,7 +1353,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                           title="Live Browser View"
                           style={{
                             background: "#f3f4f6",
-                            filter: "brightness(1.2) contrast(0.95)",
+                            filter: "brightness(0.85) contrast(1.05) saturate(1.1)",
                           }}
                         />
                       </div>

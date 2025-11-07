@@ -16,22 +16,6 @@ import Header from "../components/Header";
 import VPBankWelcome from "../components/VPBankWelcome";
 import { useTranscripts } from "../hooks/useTranscripts";
 
-const LIVE_URL_ALIAS_TEMPLATE =
-  import.meta.env.VITE_BROWSER_URL_ALIAS ?? "aws://secure-mirror";
-
-const maskLiveUrl = (url: string | null) => {
-  if (!url) return "";
-  try {
-    const { hostname } = new URL(url);
-    if (LIVE_URL_ALIAS_TEMPLATE.includes("{host}")) {
-      return LIVE_URL_ALIAS_TEMPLATE.replace("{host}", hostname);
-    }
-    return LIVE_URL_ALIAS_TEMPLATE;
-  } catch {
-    return LIVE_URL_ALIAS_TEMPLATE;
-  }
-};
-
 type TranscriptMessage = {
   role: string;
   content: string;
@@ -312,7 +296,6 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   const [showWelcome, setShowWelcome] = useState(true);
   const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
   const [liveUrl, setLiveUrl] = useState<string | null>(null);
-  const displayLiveUrl = useMemo(() => maskLiveUrl(liveUrl), [liveUrl]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
@@ -540,10 +523,16 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   // Auto-scroll transcript to bottom when new messages arrive
   // Only auto-scroll during LIVE conversation (when connected), NOT when loading old conversations
   useEffect(() => {
-    if (transcriptScrollRef.current && transcript.length > 0 && chatExpanded && isConnected) {
+    if (
+      transcriptScrollRef.current &&
+      transcript.length > 0 &&
+      chatExpanded &&
+      isConnected
+    ) {
       const scrollToBottom = () => {
         if (transcriptScrollRef.current) {
-          transcriptScrollRef.current.scrollTop = transcriptScrollRef.current.scrollHeight;
+          transcriptScrollRef.current.scrollTop =
+            transcriptScrollRef.current.scrollHeight;
         }
       };
 
@@ -1271,7 +1260,11 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                     )}
 
                     {/* Chat Panel - Collapsible */}
-                    <div className={`bg-white/70 rounded-xl border border-gray-200 shadow-sm flex flex-col ${chatExpanded ? 'flex-1 min-h-0' : ''}`}>
+                    <div
+                      className={`bg-white/70 rounded-xl border border-gray-200 shadow-sm flex flex-col ${
+                        chatExpanded ? "flex-1 min-h-0" : ""
+                      }`}
+                    >
                       {/* Chat Header */}
                       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-white/50 backdrop-blur flex-shrink-0">
                         <div className="flex items-center gap-2">
@@ -1308,7 +1301,10 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                                   <div className="max-w-[85%] bg-emerald-50 text-emerald-900 rounded-lg rounded-tr-sm px-2 py-1.5 shadow-sm whitespace-pre-wrap text-xs">
                                     {formatMessageLines(message.content).map(
                                       (line, i) => (
-                                        <div key={i} className="mb-0.5 last:mb-0">
+                                        <div
+                                          key={i}
+                                          className="mb-0.5 last:mb-0"
+                                        >
                                           {line}
                                         </div>
                                       )
@@ -1345,11 +1341,20 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                   {/* Right Column: Browser View - Full Height */}
                   <div className="col-span-12 lg:col-span-9 flex flex-col h-full min-h-0 pb-4">
                     {liveUrl ? (
-                      <div className="flex-1 w-full rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div
+                        className="flex-1 w-full rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                        style={{
+                          background: "linear-gradient(to bottom right, #f9fafb, #ffffff, #f3f4f6)",
+                        }}
+                      >
                         <iframe
                           src={liveUrl}
                           className="w-full h-full border-0"
                           title="Live Browser View"
+                          style={{
+                            background: "#f3f4f6",
+                            filter: "brightness(1.2) contrast(0.95)",
+                          }}
                         />
                       </div>
                     ) : (

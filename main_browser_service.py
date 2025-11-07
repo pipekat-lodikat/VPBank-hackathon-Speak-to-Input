@@ -101,17 +101,8 @@ async def get_live_url(request):
     try:
         url = getattr(browser_agent, "live_url", None)
 
-        # Generate display name for frontend
-        display_name = None
-        if url:
-            # Extract session ID from URL for display
-            import hashlib
-            session_hash = hashlib.md5(url.encode()).hexdigest()[:8]
-            display_name = f"aws:container://vpbank-session-{session_hash}"
-
         return web.json_response({
-            "live_url": url,
-            "display_name": display_name
+            "live_url": url
         })
     except Exception as e:
         logger.error(f"❌ Failed to get live url: {e}")

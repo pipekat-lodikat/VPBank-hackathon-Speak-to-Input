@@ -12,7 +12,7 @@
 # ==========================================
 # VPBank Forms đã tách thành repos riêng
 # frontend/ - Now tracked in this repo
-vpbank-forms/
+#vpbank-forms/
 
 # ==========================================
 # Python

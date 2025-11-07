@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: VPBank Voice Bot & Browser Automation Services
+  title: VPBank Voice Bot, Browser Automation & Authentication API
   description: |
-    Two microservices for voice-driven form automation:
+    Two microservices for voice-driven form automation, plus Authentication APIs powered by AWS Cognito:
 
     **Voice Bot Service (Port 7860)**
     - WebRTC-based voice interface
@@ -18,6 +18,13 @@ info:
     - Task orchestration and supervision
 
     The Voice Bot service communicates with the Browser Agent service via HTTP API to execute automation tasks.
+
+    **Authentication Service (Cognito)**
+    - User authentication with JWT tokens
+    - User registration and profile management
+    - Password reset with email verification
+    - Token verification and validation
+
   version: 1.0.0
   contact:
     name: VPBank Development Team
@@ -28,6 +35,8 @@ info:
 servers:
   - url: http://localhost:7860
     description: Voice Bot Service (Development)
+  - url: http://localhost:7860/api/v1
+    description: Voice Bot Service (Dev, versioned base for auth endpoints)
   - url: http://localhost:7863
     description: Browser Agent Service (Development)
 
@@ -36,11 +45,15 @@ tags:
     description: Voice interface and conversation management
   - name: Browser Agent
     description: Browser automation and workflow execution
+  - name: Authentication
+    description: AWS Cognito-based authentication & user management
   - name: Health
     description: Service health monitoring
 
 paths:
-  # Voice Bot Service Endpoints (Port 7860)
+  # ===========================
+  # Voice Bot Service (Port 7860)
+  # ===========================
   /offer:
     post:
       tags:
@@ -207,7 +220,9 @@ paths:
                     error: "Browser not initialized"
                     message: "❌ Lỗi khi xử lý: Browser not initialized"
 
-  # Browser Agent Service Endpoints (Port 7863)
+  # ===========================
+  # Browser Agent Service (Port 7863)
+  # ===========================
   /api/execute:
     post:
       tags:
@@ -380,8 +395,280 @@ paths:
                     service: "browser-agent-service"
                     workflow_loaded: true
 
+  # ===========================
+  # Authentication (Cognito)  — typically served under http://localhost:7860/api/v1
+  # ===========================
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: |
+        Authenticate user with AWS Cognito using username and password.
+
+        **Input:**
+        - Username (required)
+        - Password (required)
+
+        **Output:**
+        - Access token (JWT)
+        - ID token
+        - Refresh token
+        - Token expiration time
+
+        **Use case:**
+        - User login to access voice bot features
+        - Returns authentication tokens for subsequent API calls
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify:
+    post:
+      tags:
+        - Authentication
+      summary: Verify access token
+      description: |
+        Verify AWS Cognito access token and retrieve user information.
+
+        **Input:**
+        - Access token (required)
+
+        **Output:**
+        - User information (username, attributes)
+        - Verification status
+
+        **Use case:**
+        - Validate user session before allowing access to protected resources
+        - Retrieve user profile information from token
+        - Check if token is still valid and not expired
+      operationId: verifyToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRequest"
+      responses:
+        "200":
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResponse"
+        "400":
+          description: Missing token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: |
+        Register a new user with AWS Cognito.
+
+        **Input:**
+        - Username (required)
+        - Password (required)
+        - Email (required)
+        - Phone number (optional)
+        - Name (optional)
+
+        **Output:**
+        - Registration status
+        - Success/error message
+
+        **Use case:**
+        - New user self-registration
+        - Creates user account with 'user' role by default
+
+        **Important:**
+        - Employee role cannot be self-registered
+        - Contact administrator for employee account creation
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Missing required fields or registration error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Initiate forgot password flow
+      description: |
+        Send verification code to user's email for password reset.
+
+        **Input:**
+        - Email (required)
+
+        **Output:**
+        - Success/error status
+        - Confirmation message
+
+        **Use case:**
+        - User forgot password and needs to reset it
+        - System finds username by email and sends verification code
+        - Verification code will be sent to user's email address
+
+        **Flow:**
+        1. User provides email
+        2. System looks up username by email
+        3. Sends verification code via AWS Cognito
+        4. User receives code in email to use in reset-password endpoint
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "200":
+          description: Verification code sent or email not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgotPasswordResponse"
+        "400":
+          description: Missing email or user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgotPasswordResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with verification code
+      description: |
+        Confirm password reset using verification code sent to email.
+
+        **Input:**
+        - Email (required)
+        - Verification code (required)
+        - New password (required)
+
+        **Output:**
+        - Success/error status
+        - Confirmation message
+
+        **Use case:**
+        - Complete password reset flow after receiving verification code
+        - User must have valid code from forgot-password endpoint
+
+        **Flow:**
+        1. User receives verification code via email from forgot-password endpoint
+        2. User provides email, code, and new password
+        3. System validates code and resets password
+        4. User can login with new password
+
+        **Important:**
+        - Verification code expires after certain time
+        - Code is single-use only
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password reset successful or failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordResponse"
+        "400":
+          description: Missing required fields or invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
+    # ---- Shared / Voice Bot
     Error:
       type: object
       required:
@@ -471,13 +758,171 @@ components:
           description: User-friendly error message
           example: "❌ Lỗi khi xử lý: Browser not initialized"
 
+    # ---- Authentication Schemas
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: user123
+        password:
+          type: string
+          format: password
+          example: Password123!
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        access_token:
+          type: string
+          description: AWS Cognito access token
+        id_token:
+          type: string
+          description: AWS Cognito ID token
+        refresh_token:
+          type: string
+          description: AWS Cognito refresh token
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+        error:
+          type: string
+          description: Error code if success is false
+        message:
+          type: string
+          description: Error message if success is false
+
+    VerifyRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: Access token to verify
+
+    VerifyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        user:
+          type: object
+          properties:
+            username:
+              type: string
+            attributes:
+              type: object
+              additionalProperties:
+                type: string
+        error:
+          type: string
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - email
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        email:
+          type: string
+          format: email
+        phone_number:
+          type: string
+          description: Optional phone number
+        name:
+          type: string
+          description: Optional full name
+
+    RegisterResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+          description: Error code if success is false
+
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+
+    ForgotPasswordResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - email
+        - code
+        - new_password
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          description: Verification code sent to email
+        new_password:
+          type: string
+          format: password
+
+    ResetPasswordResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+
   securitySchemes:
-    # Currently no authentication - internal services
-    # Add OAuth2/API Key when deploying to production
+    # Internal service traffic can be unauthenticated in dev.
+    # Add OAuth2/API Key when deploying to production.
     none:
       type: http
       scheme: none
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: AWS Cognito JWT access token
 
+# Default: no global auth requirement (dev). Apply BearerAuth per endpoint if/when needed.
 security:
   - none: []
 
@@ -505,7 +950,6 @@ x-metadata:
          - Specialized agents for different forms
          - Browser automation with Playwright
          - AWS Bedrock for intelligent form filling
-
   technology_stack:
     voice_bot:
       - Python 3.x with aiohttp
@@ -520,7 +964,6 @@ x-metadata:
       - AWS Bedrock Claude Sonnet 4
       - Playwright for browser automation
       - Multi-agent orchestration
-
   deployment:
     development:
       voice_bot_port: 7860

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plasma } from "@pipecat-ai/voice-ui-kit/webgl";
-import { Mic, MicOff, Phone, PhoneOff, Settings } from 'lucide-react';
+import { Mic, MicOff, Phone, PhoneOff, Settings, History } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
 import Header from './components/Header';
+import { SessionHistory } from './components/SessionHistory';
 
 class WebRTCClient {
   private pc: RTCPeerConnection | null = null;
@@ -221,6 +222,10 @@ function MainApp() {
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('male');
   const [voiceRegion, setVoiceRegion] = useState<'north' | 'central' | 'south'>('north');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const [liveEmbedReady, setLiveEmbedReady] = useState<boolean>(false);
+  const liveTimerRef = useRef<number | null>(null);
 
   const formatMessageLines = (text: string): string[] => {
     if (!text) return [];
@@ -375,6 +380,49 @@ function MainApp() {
     };
   }, []);
 
+  // Poll Browser Service live URL and embed directly when available
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const fetchLive = async () => {
+      try {
+        const res = await fetch('http://localhost:7863/api/live');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data.live_url === 'string') {
+          const url = data.live_url || null;
+          if (url !== liveUrl) {
+            setLiveEmbedReady(false);
+          }
+          setLiveUrl(url);
+        }
+      } catch {}
+    };
+    fetchLive();
+    timer = setInterval(fetchLive, 3000);
+    return () => { if (timer) clearInterval(timer); };
+  }, []);
+
+  // When liveUrl updates, start a short timeout to detect embedding issues
+  useEffect(() => {
+    if (!liveUrl) return;
+    if (liveTimerRef.current) {
+      window.clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = null;
+    }
+    // If iframe onLoad doesn't fire within 4s, consider embed blocked
+    liveTimerRef.current = window.setTimeout(() => {
+      if (!liveEmbedReady) {
+        console.warn('Iframe live view not loaded in time; likely blocked by X-Frame-Options.');
+      }
+    }, 4000);
+    return () => {
+      if (liveTimerRef.current) {
+        window.clearTimeout(liveTimerRef.current);
+        liveTimerRef.current = null;
+      }
+    };
+  }, [liveUrl, liveEmbedReady]);
+
   const inputDevices = audioDevices.filter(device => device.kind === 'audioinput');
   const outputDevices = audioDevices.filter(device => device.kind === 'audiooutput');
 
@@ -484,6 +532,13 @@ function MainApp() {
                   >
                     {isConnected ? <PhoneOff className="w-5 h-5" /> : <Phone className="w-5 h-5" />}
                   </button>
+                  <button
+                    onClick={() => setHistoryOpen(true)}
+                    className="w-11 h-11 grid place-items-center rounded-full bg-gray-800 text-white shadow-sm"
+                    title="History"
+                  >
+                    <History className="w-5 h-5" />
+                  </button>
                   <div className="relative">
                     <button
                       onClick={() => setDevicesOpen(v => !v)}
@@ -566,6 +621,35 @@ function MainApp() {
               {error && (
                 <div className="mt-2 text-center text-sm text-red-600">{error}</div>
               )}
+              {liveUrl && (
+                <div className="mt-6">
+                  <div className="text-sm text-gray-700 mb-2 text-center">Live browser session</div>
+                  <div className="w-full max-w-[720px] mx-auto rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white/50 backdrop-blur">
+                    <iframe
+                      src={liveUrl}
+                      title="Browser Live"
+                      className="w-full h-[360px]"
+                      allow="clipboard-read; clipboard-write; autoplay; fullscreen"
+                      referrerPolicy="no-referrer"
+                      allowFullScreen
+                      onLoad={() => setLiveEmbedReady(true)}
+                    />
+                  </div>
+                  {!liveEmbedReady && (
+                    <div className="mt-2 text-center text-xs text-gray-600">
+                      Không thể nhúng trực tiếp live view (trình duyệt đích chặn iframe).{' '}
+                      <a
+                        className="text-emerald-700 underline"
+                        href={liveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Mở trong tab mới
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right - Conversation zone (40%) with Expand */}
@@ -612,6 +696,9 @@ function MainApp() {
           {/* Footer removed */}
         </div>
       </div>
+
+      {/* Session History Modal */}
+      <SessionHistory isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>
   );
 }

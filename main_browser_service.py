@@ -16,38 +16,12 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.browser_agent import browser_agent
-from src.multi_agent.graph.builder import build_supervisor_workflow
-from src.multi_agent.graph.state import MultiAgentState
-from langchain_aws import ChatBedrockConverse
 
 load_dotenv(override=True)
 
 routes = RouteTableDef()
 
-# Global workflow instance (lazy loaded)
-_workflow = None
-_llm = None
-
-
-def get_workflow():
-    """Lazy load workflow"""
-    global _workflow, _llm
-    
-    if _workflow is None:
-        model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
-        region = os.getenv("AWS_REGION", "us-east-1")
-        
-        _llm = ChatBedrockConverse(
-            model=model_id,
-            region_name=region,
-            temperature=0,
-            max_tokens=4096,
-        )
-        
-        _workflow = build_supervisor_workflow(_llm)
-        logger.info(f"✅ Workflow initialized (model: {model_id})")
-    
-    return _workflow
+# No workflow; we call browser_agent directly
 
 
 @routes.post("/api/execute")
@@ -82,34 +56,15 @@ async def execute_workflow(request):
         logger.info(f"🚀 Received workflow request for session {session_id}")
         logger.debug(f"   Message length: {len(user_message)} chars")
         
-        # Get workflow
-        workflow = get_workflow()
+        # Execute directly via browser agent (freeform instruction)
+        logger.info(f"🔄 Executing via browser agent...")
+        agent_result = await browser_agent.execute_freeform(user_message, session_id=session_id)
         
-        # Create initial state
-        # Note: user_message chứa TOÀN BỘ conversation history (format: "user: msg1\nuser: msg2\n...")
-        # Supervisor sẽ parse TẤT CẢ messages để extract TẤT CẢ fields
-        initial_state: MultiAgentState = {
-            "messages": [("user", user_message)],  # Full conversation history as single message
-            "next": "supervisor",
-            "task_id": session_id,
-            "metadata": {
-                "session_id": session_id,
-                "created_at": asyncio.get_event_loop().time(),
-                # Avoid backslash in f-string expressions → use splitlines()
-                "message_count": len(user_message.splitlines())  # Count of messages in history
-            }
-        }
-        
-        # Avoid backslash inside f-string expression (SyntaxError in some Python versions)
-        logger.debug(f"   Conversation history contains {len(user_message.splitlines())} lines")
-        logger.debug(f"   Full context length: {len(user_message)} chars")
-        
-        # Execute workflow
-        logger.info(f"🔄 Running workflow...")
-        result = await workflow.ainvoke(initial_state)
-        
-        # Extract result
-        final_message = result["messages"][-1].content if result["messages"] else "No response"
+        # Extract short message to return
+        if agent_result.get("success"):
+            final_message = agent_result.get("result") or agent_result.get("message") or "Đã xử lý thành công"
+        else:
+            raise RuntimeError(agent_result.get("error", "Unknown error from browser agent"))
         
         # Filter out empty or invalid responses
         if not final_message or final_message == "No response" or len(final_message.strip()) < 3:
@@ -136,9 +91,19 @@ async def health_check(request):
     """Health check endpoint"""
     return web.json_response({
         "status": "healthy",
-        "service": "browser-agent-service",
-        "workflow_loaded": _workflow is not None
+        "service": "browser-agent-service"
     })
+
+
+@routes.get("/api/live")
+async def get_live_url(request):
+    """Expose current live_url of persistent browser session (if any)."""
+    try:
+        url = getattr(browser_agent, "live_url", None)
+        return web.json_response({"live_url": url})
+    except Exception as e:
+        logger.error(f"❌ Failed to get live url: {e}")
+        return web.json_response({"live_url": None, "error": str(e)}, status=500)
 
 
 def create_app():
@@ -170,6 +135,7 @@ if __name__ == "__main__":
     logger.info("🔗 Endpoints:")
     logger.info("   POST   /api/execute - Execute workflow")
     logger.info("   GET    /api/health - Health check")
+    logger.info("   GET    /api/live  - Current browser live URL")
     
     app = create_app()
     web.run_app(app, host="0.0.0.0", port=7863)

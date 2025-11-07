@@ -6,6 +6,7 @@ Gửi requests đến Browser Agent Service để thực hiện automation
 import asyncio
 import os
 import json
+from decimal import Decimal
 from datetime import datetime
 from aiohttp import web
 from aiohttp.web import RouteTableDef
@@ -26,10 +27,15 @@ from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.transcript_processor import TranscriptProcessor
 
+load_dotenv(override=True)
+
+from src.dynamodb_service import DynamoDBService
+
 # Browser Agent Service URL
 BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
 
-load_dotenv(override=True)
+# Initialize DynamoDB service
+dynamodb_service = DynamoDBService()
 
 # Environment variables
 aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
@@ -53,6 +59,18 @@ ice_servers = [
         credential="openrelayproject"
     ),
 ]
+
+
+def _to_jsonable(value):
+    """Recursively convert DynamoDB Decimals to native Python types for JSON."""
+    if isinstance(value, list):
+        return [_to_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, Decimal):
+        # Convert to int if integral, else float
+        return int(value) if value % 1 == 0 else float(value)
+    return value
 
 
 async def push_to_browser_service(user_message: str, ws_connections: set, session_id: str, processing_flag: dict):
@@ -242,8 +260,6 @@ async def run_bot(webrtc_connection, ws_connections):
     
     # Create session
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    transcript_file = f"transcripts/conversation_{session_id}.json"
-    os.makedirs("transcripts", exist_ok=True)
     
     transcript_data = {
         "session_id": session_id,
@@ -251,6 +267,10 @@ async def run_bot(webrtc_connection, ws_connections):
         "messages": [],
         "workflow_executions": []
     }
+    
+    # Save initial session to DynamoDB
+    dynamodb_service.save_session(transcript_data)
+    logger.info(f"💾 Created session {session_id} in DynamoDB")
     
     # Transcript handler
     @transcript.event_handler("on_transcript_update")
@@ -265,9 +285,8 @@ async def run_bot(webrtc_connection, ws_connections):
                 }
                 transcript_data["messages"].append(msg_dict)
                 
-                # Save to file
-                with open(transcript_file, 'w', encoding='utf-8') as f:
-                    json.dump(transcript_data, f, ensure_ascii=False, indent=2)
+                # Save to DynamoDB (async update)
+                dynamodb_service.save_session(transcript_data)
                 
                 # Send to WebSocket clients
                 for ws in list(ws_connections):
@@ -614,12 +633,11 @@ async def run_bot(webrtc_connection, ws_connections):
     runner = PipelineRunner()
     await runner.run(task)
     
-    # Save final transcript
+    # Save final transcript to DynamoDB
     transcript_data["ended_at"] = datetime.now().isoformat()
-    with open(transcript_file, 'w', encoding='utf-8') as f:
-        json.dump(transcript_data, f, ensure_ascii=False, indent=2)
+    dynamodb_service.save_session(transcript_data)
     
-    logger.info(f"💾 Session completed. Transcript saved to {transcript_file}")
+    logger.info(f"💾 Session completed. Transcript saved to DynamoDB (session: {session_id})")
 
 
 
@@ -685,6 +703,65 @@ async def handle_offer_options(request):
             'Access-Control-Allow-Headers': 'Content-Type',
         }
     )
+
+
+@routes.get("/api/sessions")
+async def list_sessions(request):
+    """List all sessions from DynamoDB"""
+    try:
+        limit = int(request.query.get("limit", 50))
+        last_key = request.query.get("last_key")
+        
+        # Parse last_key nếu có (JSON string)
+        last_key_dict = None
+        if last_key:
+            try:
+                last_key_dict = json.loads(last_key)
+            except:
+                pass
+        
+        result = dynamodb_service.list_sessions(limit=limit, last_key=last_key_dict)
+        # Convert Decimals to JSONable types
+        jsonable_result = _to_jsonable(result)
+        
+        return web.json_response({
+            "success": True,
+            "sessions": jsonable_result["items"],
+            "count": jsonable_result["count"],
+            "last_evaluated_key": jsonable_result["last_evaluated_key"]
+        })
+    except Exception as e:
+        logger.error(f"❌ Failed to list sessions: {e}", exc_info=True)
+        return web.json_response({
+            "success": False,
+            "error": str(e)
+        }, status=500)
+
+
+@routes.get("/api/sessions/{session_id}")
+async def get_session(request):
+    """Get session details by session_id"""
+    try:
+        session_id = request.match_info["session_id"]
+        session = dynamodb_service.get_session(session_id)
+        
+        if session:
+            session = _to_jsonable(session)
+            return web.json_response({
+                "success": True,
+                "session": session
+            })
+        else:
+            return web.json_response({
+                "success": False,
+                "error": "Session not found"
+            }, status=404)
+    except Exception as e:
+        logger.error(f"❌ Failed to get session: {e}", exc_info=True)
+        return web.json_response({
+            "success": False,
+            "error": str(e)
+        }, status=500)
 
 
 @routes.get("/ws")

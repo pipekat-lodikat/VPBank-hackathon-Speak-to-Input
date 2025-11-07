@@ -108,3 +108,86 @@ body {
 .vp-gradient {
   background: linear-gradient(135deg, var(--vp-green) 0%, var(--vp-blue) 100%);
 }
+
+/* Conversation history sidebar */
+.history-sidebar {
+  background: rgba(249, 250, 251, 0.98);
+  backdrop-filter: blur(8px);
+}
+
+.history-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+  border: none;
+}
+
+.history-item:hover {
+  background: rgba(0, 0, 0, 0.03);
+  transform: translateX(1px);
+}
+
+.history-item.active {
+  background: rgba(251, 234, 88, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Animations */
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.new-conversation {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(251, 234, 88, 0.3), inset 3px 0 0 #fbea58;
+}
+
+/* Settings dropdown animation */
+.settings-dropdown {
+  animation: bounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

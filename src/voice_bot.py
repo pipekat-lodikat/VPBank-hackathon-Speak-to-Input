@@ -6,6 +6,7 @@ Gửi requests đến Browser Agent Service để thực hiện automation
 import asyncio
 import os
 import json
+import time
 from decimal import Decimal
 from datetime import datetime
 from aiohttp import web
@@ -37,6 +38,9 @@ BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
 # Initialize DynamoDB service
 dynamodb_service = DynamoDBService()
 
+# Import auth service AFTER loading .env
+from auth_service import CognitoAuthService
+
 # Environment variables
 aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -49,6 +53,9 @@ routes = RouteTableDef()
 
 # WebSocket connections cho transcript streaming
 ws_connections = set()
+
+# Initialize auth service
+auth_service = CognitoAuthService()
 
 # ICE servers
 ice_servers = [
@@ -635,10 +642,218 @@ async def run_bot(webrtc_connection, ws_connections):
     
     # Save final transcript to DynamoDB
     transcript_data["ended_at"] = datetime.now().isoformat()
+    with open(transcript_file, 'w', encoding='utf-8') as f:
+        json.dump(transcript_data, f, ensure_ascii=False, indent=2)
     dynamodb_service.save_session(transcript_data)
+
     
     logger.info(f"💾 Session completed. Transcript saved to DynamoDB (session: {session_id})")
 
+
+@routes.post("/api/auth/login")
+async def login_handler(request):
+    """Handle Cognito login"""
+    try:
+        data = await request.json()
+        username = data.get("username")
+        password = data.get("password")
+
+        if not username or not password:
+            return web.json_response(
+                {"success": False, "error": "Missing credentials"},
+                status=400,
+            )
+
+        result = await auth_service.login(username, password)
+        status = 200 if result["success"] else 401
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return web.json_response(
+            {"success": False, "error": str(e)},
+            status=500,
+        )
+
+
+@routes.post("/api/auth/verify")
+async def verify_handler(request):
+    """Verify access token"""
+    try:
+        data = await request.json()
+        token = data.get("token")
+
+        if not token:
+            return web.json_response(
+                {"success": False, "error": "Missing token"},
+                status=400,
+            )
+
+        user_info = await auth_service.verify_token(token)
+        if user_info:
+            return web.json_response({"success": True, "user": user_info})
+        else:
+            return web.json_response(
+                {"success": False, "error": "Invalid token"},
+                status=401,
+            )
+    except Exception as e:
+        logger.error(f"Verify error: {e}")
+        return web.json_response(
+            {"success": False, "error": str(e)},
+            status=500,
+        )
+
+
+@routes.post("/api/auth/register")
+async def register_handler(request):
+    """Handle user registration"""
+    try:
+        data = await request.json()
+        username = data.get("username")
+        password = data.get("password")
+        email = data.get("email")
+        phone_number = data.get("phone_number")
+        name = data.get("name")
+
+        if not username or not password or not email:
+            return web.json_response(
+                {"success": False, "error": "Missing username, password, or email"},
+                status=400,
+            )
+
+        result = await auth_service.register_user(username, password, email, phone_number, name)
+        status = 200 if result["success"] else 400
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Register error: {e}")
+        return web.json_response(
+            {"success": False, "error": str(e)},
+            status=500,
+        )
+
+
+@routes.post("/api/auth/forgot-password")
+async def forgot_password_handler(request):
+    """Handle forgot password"""
+    try:
+        data = await request.json()
+        email = data.get("email")
+
+        if not email:
+            return web.json_response(
+                {"success": False, "error": "Missing email"},
+                status=400,
+            )
+
+        result = await auth_service.forgot_password(email)
+        status = 200 if result["success"] else 400
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Forgot password error: {e}")
+        return web.json_response(
+            {"success": False, "error": str(e)},
+            status=500,
+        )
+
+
+@routes.post("/api/auth/reset-password")
+async def reset_password_handler(request):
+    """Handle reset password with verification code"""
+    try:
+        data = await request.json()
+        email = data.get("email")
+        code = data.get("code")
+        new_password = data.get("new_password")
+
+        if not email or not code or not new_password:
+            return web.json_response(
+                {"success": False, "error": "Missing required fields"},
+                status=400,
+            )
+
+        result = await auth_service.reset_password(email, code, new_password)
+        status = 200 if result["success"] else 400
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        return web.json_response(
+            {"success": False, "error": str(e)},
+            status=500,
+        )
+
+
+@routes.options("/api/auth/login")
+@routes.options("/api/auth/verify")
+@routes.options("/api/auth/register")
+@routes.options("/api/auth/forgot-password")
+@routes.options("/api/auth/reset-password")
+async def auth_options(request):
+    """Handle CORS preflight for auth endpoints"""
+    return web.Response(
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        }
+    )
+
+
+@routes.get("/api/transcripts")
+async def get_transcripts(request):
+    """Get list of transcript files"""
+    try:
+        transcripts_dir = "transcripts"
+        if not os.path.exists(transcripts_dir):
+            return web.json_response([])
+
+        files = []
+        for filename in os.listdir(transcripts_dir):
+            if filename.endswith(".json"):
+                filepath = os.path.join(transcripts_dir, filename)
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    files.append(
+                        {
+                            "id": data.get("session_id", filename.replace(".json", "")),
+                            "filename": filename,
+                            "started_at": data.get("started_at"),
+                            "ended_at": data.get("ended_at"),
+                            "message_count": len(data.get("messages", [])),
+                        }
+                    )
+
+        files.sort(key=lambda x: x.get("started_at", ""), reverse=True)
+        return web.json_response(files)
+    except Exception as e:
+        logger.error(f"Error loading transcripts: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
+@routes.get("/api/transcripts/{session_id}")
+async def get_transcript(request):
+    """Get specific transcript by session_id"""
+    try:
+        session_id = request.match_info["session_id"]
+        filepath = f"transcripts/conversation_{session_id}.json"
+
+        if not os.path.exists(filepath):
+            return web.json_response({"error": "Transcript not found"}, status=404)
+
+        file_size = os.path.getsize(filepath)
+        logger.info(f"Loading transcript {session_id} ({file_size} bytes)")
+
+        start_time = time.time()
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        load_time = time.time() - start_time
+        message_count = len(data.get("messages", []))
+        logger.info(f"Loaded transcript {session_id}: {message_count} messages in {load_time:.3f}s")
+
+        return web.json_response(data)
+    except Exception as e:
+        logger.error(f"Error loading transcript: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 @routes.post("/offer")
@@ -784,6 +999,225 @@ async def websocket_handler(request):
         logger.info(f"📡 WebSocket disconnected. Remaining: {len(ws_connections)}")
     
     return ws
+
+
+@routes.post("/api/auth/login")
+async def login_handler(request):
+    """Handle Cognito login"""
+    try:
+        data = await request.json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return web.json_response(
+                {'success': False, 'error': 'Missing credentials'},
+                status=400
+            )
+        
+        result = await auth_service.login(username, password)
+        status = 200 if result['success'] else 401
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        return web.json_response(
+            {'success': False, 'error': str(e)},
+            status=500
+        )
+
+
+@routes.post("/api/auth/verify")
+async def verify_handler(request):
+    """Verify access token"""
+    try:
+        data = await request.json()
+        token = data.get('token')
+        
+        if not token:
+            return web.json_response(
+                {'success': False, 'error': 'Missing token'},
+                status=400
+            )
+        
+        user_info = await auth_service.verify_token(token)
+        if user_info:
+            return web.json_response({'success': True, 'user': user_info})
+        else:
+            return web.json_response(
+                {'success': False, 'error': 'Invalid token'},
+                status=401
+            )
+    except Exception as e:
+        logger.error(f"Verify error: {e}")
+        return web.json_response(
+            {'success': False, 'error': str(e)},
+            status=500
+        )
+
+
+@routes.post("/api/auth/register")
+async def register_handler(request):
+    """Handle user registration"""
+    try:
+        data = await request.json()
+        username = data.get('username')
+        password = data.get('password')
+        email = data.get('email')
+        phone_number = data.get('phone_number')
+        name = data.get('name')
+        
+        if not username or not password or not email:
+            return web.json_response(
+                {'success': False, 'error': 'Missing username, password, or email'},
+                status=400
+            )
+        
+        result = await auth_service.register_user(username, password, email, phone_number, name)
+        status = 200 if result['success'] else 400
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Register error: {e}")
+        return web.json_response(
+            {'success': False, 'error': str(e)},
+            status=500
+        )
+
+
+@routes.post("/api/auth/forgot-password")
+async def forgot_password_handler(request):
+    """Handle forgot password"""
+    try:
+        data = await request.json()
+        email = data.get('email')
+        
+        if not email:
+            return web.json_response(
+                {'success': False, 'error': 'Missing email'},
+                status=400
+            )
+        
+        result = await auth_service.forgot_password(email)
+        status = 200 if result['success'] else 400
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Forgot password error: {e}")
+        return web.json_response(
+            {'success': False, 'error': str(e)},
+            status=500
+        )
+
+
+@routes.post("/api/auth/reset-password")
+async def reset_password_handler(request):
+    """Handle reset password with verification code"""
+    try:
+        data = await request.json()
+        email = data.get('email')
+        code = data.get('code')
+        new_password = data.get('new_password')
+        
+        if not email or not code or not new_password:
+            return web.json_response(
+                {'success': False, 'error': 'Missing required fields'},
+                status=400
+            )
+        
+        result = await auth_service.reset_password(email, code, new_password)
+        status = 200 if result['success'] else 400
+        return web.json_response(result, status=status)
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        return web.json_response(
+            {'success': False, 'error': str(e)},
+            status=500
+        )
+
+
+@routes.options("/api/auth/login")
+@routes.options("/api/auth/verify")
+@routes.options("/api/auth/register")
+@routes.options("/api/auth/forgot-password")
+@routes.options("/api/auth/reset-password")
+async def auth_options(request):
+    """Handle CORS preflight for auth endpoints"""
+    return web.Response(
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        }
+    )
+
+
+@routes.get("/api/transcripts")
+async def get_transcripts(request):
+    """Get list of transcript files"""
+    try:
+        transcripts_dir = "transcripts"
+        if not os.path.exists(transcripts_dir):
+            return web.json_response([])
+        
+        files = []
+        for filename in os.listdir(transcripts_dir):
+            if filename.endswith('.json'):
+                filepath = os.path.join(transcripts_dir, filename)
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    files.append({
+                        'id': data.get('session_id', filename.replace('.json', '')),
+                        'filename': filename,
+                        'started_at': data.get('started_at'),
+                        'ended_at': data.get('ended_at'),
+                        'message_count': len(data.get('messages', []))
+                    })
+        
+        # Sort by started_at descending
+        files.sort(key=lambda x: x.get('started_at', ''), reverse=True)
+        return web.json_response(files)
+    except Exception as e:
+        logger.error(f"Error loading transcripts: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+@routes.get("/api/transcripts/{session_id}")
+async def get_transcript(request):
+    """Get specific transcript by session_id"""
+    try:
+        session_id = request.match_info['session_id']
+        filepath = f"transcripts/conversation_{session_id}.json"
+        
+        if not os.path.exists(filepath):
+            return web.json_response({'error': 'Transcript not found'}, status=404)
+        
+        # Get file size for performance logging
+        file_size = os.path.getsize(filepath)
+        logger.info(f"Loading transcript {session_id} ({file_size} bytes)")
+        
+        start_time = time.time()
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        load_time = time.time() - start_time
+        message_count = len(data.get('messages', []))
+        logger.info(f"Loaded transcript {session_id}: {message_count} messages in {load_time:.3f}s")
+        
+        return web.json_response(data)
+    except Exception as e:
+        logger.error(f"Error loading transcript: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+@routes.options("/api/transcripts")
+@routes.options("/api/transcripts/{session_id}")
+async def transcripts_options(request):
+    """Handle CORS preflight for transcript endpoints"""
+    return web.Response(
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+        }
+    )
 
 
 def create_app():

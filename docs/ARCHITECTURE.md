@@ -20,24 +20,27 @@ VPBank Voice Agent - System Architecture and Technical Design
 
 ## System Overview
 
-VPBank Voice Agent is a production-ready voice-powered banking form automation system built on microservices architecture. The system enables users to fill Vietnamese banking forms through natural speech using WebRTC, AI-powered speech recognition, conversational AI, and intelligent browser automation.
+VPBank Voice Agent is a production-ready voice-powered banking form automation system built on cloud-native microservices architecture. The system enables users to fill Vietnamese banking forms through natural speech using WebRTC, AI-powered speech recognition, conversational AI, and intelligent browser automation.
 
 ### Key Characteristics
 
-- **Microservices Architecture**: Three independent services with clear boundaries
+- **Cloud-Native Architecture**: Serverless frontend (S3 + CloudFront) + containerized backend (ECS Fargate)
+- **Microservices**: Two independent backend services with clear boundaries
 - **Real-time Processing**: WebRTC for low-latency audio streaming
-- **AI-Powered**: AWS Bedrock Claude Sonnet 4 for conversation, OpenAI GPT-4 for automation
-- **Cloud-Native**: AWS services (Transcribe, Bedrock, Cognito, DynamoDB)
-- **Language-Specific**: Optimized for Vietnamese language processing
-- **Production-Ready**: Monitoring, logging, authentication, rate limiting
+- **AI-Powered**: PhoWhisper (fine-tuned Vietnamese STT), AWS Bedrock Claude Sonnet 4 for conversation, OpenAI GPT-4 for automation
+- **AWS Services**: Bedrock, Cognito, DynamoDB, ECR, CloudWatch
+- **Language-Specific**: Optimized for Vietnamese language processing with fine-tuned models
+- **Production-Ready**: Monitoring, logging, authentication, rate limiting, auto-scaling
+- **Global Performance**: CloudFront CDN with 450+ edge locations
 
 ### System Goals
 
 1. **User Experience**: Natural voice interaction without complex commands
 2. **Accuracy**: 95%+ form filling accuracy with Vietnamese speech
-3. **Performance**: <30 seconds for one-shot form completion
+3. **Performance**: <30 seconds for one-shot form completion, <50ms frontend latency
 4. **Reliability**: 99.9% uptime with graceful error handling
 5. **Security**: PCI-compliant data handling and authentication
+6. **Cost Efficiency**: Optimized cloud architecture (~$220-280/month for full stack)
 
 ---
 
@@ -230,7 +233,7 @@ Voice Bot Service (Python + Pipecat AI)
 │   │   └── Silero VAD (voice activity detection)
 │   │
 │   ├── Processing Stage
-│   │   ├── AWS Transcribe STT (Vietnamese)
+│   │   ├── PhoWhisper STT (Fine-tuned for Vietnamese)
 │   │   ├── Transcript Processor
 │   │   ├── OpenAI LLM Context Aggregator
 │   │   └── AWS Bedrock LLM (Claude Sonnet 4)
@@ -266,10 +269,11 @@ Voice Bot Service (Python + Pipecat AI)
 **Key Design Decisions:**
 
 1. **Pipecat AI Framework**: Pipeline-based voice processing for modularity
-2. **AWS Services**: Transcribe for STT, Bedrock for LLM (managed services)
-3. **ElevenLabs TTS**: Superior Vietnamese voice quality vs OpenAI
-4. **Intent-Based Push**: Automatic detection of form-filling intent from speech
-5. **Session Persistence**: DynamoDB for durable session storage
+2. **PhoWhisper STT**: Fine-tuned Vietnamese speech recognition model
+3. **AWS Bedrock**: Claude Sonnet 4 for conversational AI
+4. **ElevenLabs TTS**: Superior Vietnamese voice quality vs OpenAI
+5. **Intent-Based Push**: Automatic detection of form-filling intent from speech
+6. **Session Persistence**: DynamoDB for durable session storage
 
 ---
 
@@ -373,7 +377,7 @@ Browser Agent Service (Python + browser-use)
 │ [4] Silero VAD                                             │
 │     └─> Detects speech segments (start/stop)              │
 │                                                             │
-│ [5] AWS Transcribe STT                                     │
+│ [5] PhoWhisper STT (Fine-tuned Vietnamese Model)          │
 │     └─> Converts audio → text (Vietnamese)                │
 │     Output: "Tôi muốn vay 500 triệu..."                   │
 │                                                             │
@@ -548,11 +552,14 @@ Browser Agent Service (Python + browser-use)
 
 **Voice Processing:**
 - **Pipecat AI 0.0.91**: Voice AI framework
-  - Why: Pipeline-based architecture, WebRTC integration, AWS support
+  - Why: Pipeline-based architecture, WebRTC integration, modular design
   - Includes: SmallWebRTC transport, Silero VAD, service wrappers
-- **AWS Transcribe**: Speech-to-Text
-  - Why: Excellent Vietnamese support, real-time streaming, managed service
-  - Alternatives: Google Speech-to-Text (lower Vietnamese accuracy)
+- **PhoWhisper**: Speech-to-Text (Fine-tuned for Vietnamese)
+  - Why: Superior Vietnamese accuracy, fine-tuned on Vietnamese dataset
+  - Model: Based on OpenAI Whisper architecture, optimized for Vietnamese tones
+  - Advantages: Better handling of Vietnamese phonetics, tonal recognition
+  - Deployment: Self-hosted model running in Voice Bot container
+  - Alternatives: AWS Transcribe (generic), Google Speech-to-Text (lower accuracy)
 - **AWS Bedrock Claude Sonnet 4**: Large Language Model
   - Why: Best reasoning, context length (200k tokens), Vietnamese support
   - Model: `us.anthropic.claude-sonnet-4-20250514-v1:0`
@@ -624,6 +631,17 @@ Browser Agent Service (Python + browser-use)
   - Why: Modern, tree-shakeable, SVG-based
 - **clsx + tailwind-merge**: Conditional classes
   - Why: Dynamic styling, conflict resolution
+
+**Deployment:**
+- **AWS S3**: Static file hosting
+  - Why: Cheap, reliable, versioning support
+  - Cost: ~$1-2/month for storage
+- **AWS CloudFront**: Global CDN
+  - Why: Low latency worldwide, HTTPS, caching
+  - Cost: ~$5-15/month depending on traffic
+  - Edge locations: 450+ globally
+- **AWS Certificate Manager**: SSL/TLS certificates
+  - Why: Free, auto-renewal, integration with CloudFront
 
 ---
 
@@ -783,10 +801,10 @@ Benefits:
 
 **Current Architecture (Single Instance):**
 ```
-1 Browser Agent + 1 Voice Bot + 1 Frontend
+1 Browser Agent Task + 1 Voice Bot Task + 1 Frontend Task
 ```
 
-**Scaled Architecture (Multi-Instance):**
+**Scaled Architecture (ECS Multi-Task):**
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Load Balancer (ALB)                  │
@@ -798,18 +816,19 @@ Benefits:
    ↓                   ↓                 ↓              ↓
 ┌─────────┐      ┌─────────┐      ┌─────────┐   ┌─────────┐
 │Voice Bot│      │Voice Bot│      │Voice Bot│...│Voice Bot│
-│Instance │      │Instance │      │Instance │   │Instance │
+│  Task   │      │  Task   │      │  Task   │   │  Task   │
 │   #1    │      │   #2    │      │   #3    │   │   #N    │
+│(Fargate)│      │(Fargate)│      │(Fargate)│   │(Fargate)│
 └────┬────┘      └────┬────┘      └────┬────┘   └────┬────┘
      │                │                │              │
      └────────────────┴────────────────┴──────────────┘
                       │
-            HTTP POST /api/execute
+        HTTP POST /api/execute (Service Discovery)
                       │
                       ↓
              ┌────────────────┐
-             │ Load Balancer  │
-             │  (Internal)    │
+             │ ECS Service    │
+             │  Discovery     │
              └────────┬───────┘
                       │
    ┌──────────────────┴──────────────────┬──────────────┐
@@ -817,7 +836,9 @@ Benefits:
    ↓                  ↓                  ↓              ↓
 ┌──────────┐    ┌──────────┐     ┌──────────┐   ┌──────────┐
 │Browser   │    │Browser   │     │Browser   │...│Browser   │
-│Agent #1  │    │Agent #2  │     │Agent #3  │   │Agent #N  │
+│Agent     │    │Agent     │     │Agent     │   │Agent     │
+│Task #1   │    │Task #2   │     │Task #3   │   │Task #N   │
+│(Fargate) │    │(Fargate) │     │(Fargate) │   │(Fargate) │
 └──────────┘    └──────────┘     └──────────┘   └──────────┘
 ```
 
@@ -825,29 +846,68 @@ Benefits:
 
 | Component | Current | Scaled | Bottleneck |
 |-----------|---------|--------|------------|
-| Voice Bot | 1 instance | 5+ instances | WebRTC connections (50/instance) |
-| Browser Agent | 1 instance | 10+ instances | Browser memory (5 sessions/instance) |
-| Frontend | 1 instance | CDN + many | Static files |
+| Voice Bot | 1 task | 5-10 tasks | WebRTC connections (50/task) |
+| Browser Agent | 1 task | 10-20 tasks | Browser memory (5 sessions/task) |
+| Frontend | S3 + CloudFront | Unlimited | Auto-scaled by AWS CDN |
 
-**Scaling Configuration:**
+**ECS Auto Scaling Configuration:**
 
 ```yaml
-# Auto-scaling policy (AWS)
-Voice Bot:
-  min_instances: 2
-  max_instances: 10
-  target_cpu: 70%
-  target_memory: 80%
-  scale_up: +2 instances when CPU > 70% for 5 min
-  scale_down: -1 instance when CPU < 40% for 10 min
+# ECS Service Auto Scaling
+voice-bot-service:
+  minCapacity: 2
+  maxCapacity: 10
+  targetTrackingScaling:
+    - targetValue: 70
+      predefinedMetricType: ECSServiceAverageCPUUtilization
+      scaleInCooldown: 300
+      scaleOutCooldown: 60
+    - targetValue: 80
+      predefinedMetricType: ECSServiceAverageMemoryUtilization
+      scaleInCooldown: 300
+      scaleOutCooldown: 60
+  stepScaling:
+    - adjustmentType: PercentChangeInCapacity
+      metricAggregationType: Average
+      scalingAdjustment: 100
+      stepAdjustment:
+        - metricIntervalLowerBound: 0
+          metricIntervalUpperBound: 10
+          scalingAdjustment: 0
+        - metricIntervalLowerBound: 10
+          scalingAdjustment: 100
 
-Browser Agent:
-  min_instances: 3
-  max_instances: 20
-  target_cpu: 60%
-  target_memory: 75%
-  scale_up: +3 instances when queue > 10 for 3 min
-  scale_down: -1 instance when queue < 2 for 15 min
+browser-agent-service:
+  minCapacity: 3
+  maxCapacity: 20
+  targetTrackingScaling:
+    - targetValue: 60
+      predefinedMetricType: ECSServiceAverageCPUUtilization
+      scaleInCooldown: 600
+      scaleOutCooldown: 60
+    - targetValue: 75
+      predefinedMetricType: ECSServiceAverageMemoryUtilization
+      scaleInCooldown: 600
+      scaleOutCooldown: 60
+  customMetricScaling:
+    - metricName: ActiveSessionsCount
+      namespace: BrowserAgent
+      targetValue: 4  # Scale when avg 4 sessions per task
+      scaleInCooldown: 900
+      scaleOutCooldown: 120
+```
+
+**ECS Capacity Providers:**
+
+```yaml
+# Optional: Use both Fargate and Fargate Spot for cost optimization
+capacityProviders:
+  - name: FARGATE
+    weight: 70
+    base: 2  # Minimum 2 tasks on regular Fargate
+  - name: FARGATE_SPOT
+    weight: 30
+    base: 0  # Additional tasks can use Spot (70% cost savings)
 ```
 
 ---
@@ -878,23 +938,35 @@ Browser Agent:
 
 **Frontend Optimizations:**
 
-1. **Dynamic Imports (Code Splitting)**
+1. **CloudFront CDN Caching**
+   - Static assets cached at edge locations
+   - TTL: 1 hour for HTML, 1 day for JS/CSS
+   - Automatic compression (gzip, brotli)
+   - Global latency: <50ms
+
+2. **Dynamic Imports (Code Splitting)**
 ```typescript
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const TranscriptsPage = lazy(() => import('./pages/TranscriptsPage'));
 ```
 
-2. **WebRTC Audio Optimization**
-   - Echo cancellation, noise suppression enabled
-   - 16kHz sample rate (AWS Transcribe requirement)
+3. **Asset Optimization**
+   - Hashed filenames for cache busting: `bundle.[hash].js`
+   - Tree-shaking removes unused code
+   - Minification and compression
+   - Bundle size: ~150KB gzipped
 
-3. **TailwindCSS Purging**
+4. **WebRTC Audio Optimization**
+   - Echo cancellation, noise suppression enabled
+   - 16kHz sample rate (optimal for PhoWhisper model)
+
+5. **TailwindCSS Purging**
    - Remove unused CSS classes
    - Production bundle: ~10KB CSS (vs 3MB unpurged)
 
-4. **Vite Optimization**
-   - Tree-shaking, minification, compression
-   - Bundle size: ~150KB gzipped
+6. **S3 Transfer Acceleration** (Optional)
+   - Upload to nearest edge location
+   - Faster deployments globally
 
 **Performance Benchmarks:**
 
@@ -1049,9 +1121,46 @@ class RateLimiter:
 
 ## Deployment Architecture
 
-### AWS EC2 Production Deployment
+### AWS Cloud-Native Production Deployment
 
 ```
+┌────────────────────────────────────────────────────────────────┐
+│                         USER LAYER                             │
+│                                                                │
+│  ┌──────────────┐     ┌──────────────┐                       │
+│  │   Browser    │     │  Mobile App  │                       │
+│  └──────┬───────┘     └──────┬───────┘                       │
+│         │ HTTPS              │ HTTPS                          │
+└─────────┼────────────────────┼────────────────────────────────┘
+          │                    │
+          │ Static Files       │ API Calls
+          ↓                    ↓
+┌────────────────────────────────────────────────────────────────┐
+│                    CloudFront Distribution                     │
+│                  (Global CDN - Edge Locations)                 │
+│                                                                │
+│  Origin: S3 Bucket (Static Frontend)                          │
+│  Cache Behavior: Cache HTML/CSS/JS, TTL: 1 hour              │
+│  SSL/TLS: AWS Certificate Manager                             │
+│  Custom Domain: vpbank-voice.com                              │
+└────────────┬───────────────────────────────────────────────────┘
+             │
+             │ Origin Pull (on cache miss)
+             ↓
+┌────────────────────────────────────────────────────────────────┐
+│                S3 Bucket (Frontend Static Files)               │
+│                                                                │
+│  - index.html                                                  │
+│  - assets/bundle-[hash].js                                     │
+│  - assets/styles-[hash].css                                    │
+│  - assets/images/*                                             │
+│                                                                │
+│  Versioning: Enabled                                           │
+│  Encryption: AES-256                                           │
+└────────────────────────────────────────────────────────────────┘
+
+          │ API Calls (AJAX/WebSocket)
+          ↓
 ┌────────────────────────────────────────────────────────────────┐
 │                        Internet Gateway                        │
 └────────────────────────────┬───────────────────────────────────┘
@@ -1061,74 +1170,273 @@ class RateLimiter:
 │                   Application Load Balancer                    │
 │                    (SSL/TLS Termination)                       │
 │                                                                │
-│  Ports: 80 (HTTP → HTTPS redirect), 443 (HTTPS)              │
+│  Listener Rules:                                               │
+│  - /api/* → voice-bot-tg                                       │
+│  - /ws → voice-bot-tg (WebSocket upgrade)                      │
 │  Health Checks: /api/health, /metrics                         │
+│  Target Groups: voice-bot-tg, browser-agent-tg                │
 └────────────────────────────┬───────────────────────────────────┘
                              │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        ↓                    ↓                    ↓
-┌───────────────┐   ┌───────────────┐   ┌───────────────┐
-│   EC2 AZ-1    │   │   EC2 AZ-2    │   │   EC2 AZ-3    │
-│               │   │               │   │               │
-│ ┌───────────┐ │   │ ┌───────────┐ │   │ ┌───────────┐ │
-│ │Voice Bot  │ │   │ │Voice Bot  │ │   │ │Voice Bot  │ │
-│ │Port: 7860 │ │   │ │Port: 7860 │ │   │ │Port: 7860 │ │
-│ └───────────┘ │   │ └───────────┘ │   │ └───────────┘ │
-│               │   │               │   │               │
-│ ┌───────────┐ │   │ ┌───────────┐ │   │ ┌───────────┐ │
-│ │Browser    │ │   │ │Browser    │ │   │ │Browser    │ │
-│ │Agent      │ │   │ │Agent      │ │   │ │Agent      │ │
-│ │Port: 7863 │ │   │ │Port: 7863 │ │   │ │Port: 7863 │ │
-│ └───────────┘ │   │ └───────────┘ │   │ └───────────┘ │
-│               │   │               │   │               │
-│ ┌───────────┐ │   │ ┌───────────┐ │   │ ┌───────────┐ │
-│ │Nginx      │ │   │ │Nginx      │ │   │ │Nginx      │ │
-│ │(Frontend) │ │   │ │(Frontend) │ │   │ │(Frontend) │ │
-│ │Port: 5173 │ │   │ │Port: 5173 │ │   │ │Port: 5173 │ │
-│ └───────────┘ │   │ └───────────┘ │   │ └───────────┘ │
-└───────────────┘   └───────────────┘   └───────────────┘
-
+                             ↓
+┌────────────────────────────────────────────────────────────────┐
+│                        ECS Cluster                             │
+│                    (Fargate Launch Type)                       │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │              VPC (Private Subnets)                       │ │
+│  │                                                          │ │
+│  │   Subnet AZ-1        Subnet AZ-2        Subnet AZ-3     │ │
+│  │  ┌──────────┐       ┌──────────┐       ┌──────────┐    │ │
+│  │  │ECS Tasks │       │ECS Tasks │       │ECS Tasks │    │ │
+│  │  │          │       │          │       │          │    │ │
+│  │  │ ┌──────┐ │       │ ┌──────┐ │       │ ┌──────┐ │    │ │
+│  │  │ │Voice │ │       │ │Voice │ │       │ │Voice │ │    │ │
+│  │  │ │Bot   │ │       │ │Bot   │ │       │ │Bot   │ │    │ │
+│  │  │ │:7860 │ │       │ │:7860 │ │       │ │:7860 │ │    │ │
+│  │  │ └──────┘ │       │ └──────┘ │       │ └──────┘ │    │ │
+│  │  │          │       │          │       │          │    │ │
+│  │  │ ┌──────┐ │       │ ┌──────┐ │       │ ┌──────┐ │    │ │
+│  │  │ │Brows │ │       │ │Brows │ │       │ │Brows │ │    │ │
+│  │  │ │Agent │ │       │ │Agent │ │       │ │Agent │ │    │ │
+│  │  │ │:7863 │ │       │ │:7863 │ │       │ │:7863 │ │    │ │
+│  │  │ └──────┘ │       │ └──────┘ │       │ └──────┘ │    │ │
+│  │  └──────────┘       └──────────┘       └──────────┘    │ │
+│  │                                                          │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │                    ECS Services                          │ │
+│  │                                                          │ │
+│  │  - voice-bot-service (Desired: 3-10 tasks)              │ │
+│  │    * Auto Scaling: CPU/Memory based                     │ │
+│  │    * Task Definition: voice-bot:latest                  │ │
+│  │    * CPU: 2 vCPU, Memory: 4 GB                          │ │
+│  │    * Service Discovery: voice-bot.local                 │ │
+│  │                                                          │ │
+│  │  - browser-agent-service (Desired: 3-20 tasks)          │ │
+│  │    * Auto Scaling: CPU/Memory based                     │ │
+│  │    * Task Definition: browser-agent:latest              │ │
+│  │    * CPU: 4 vCPU, Memory: 8 GB                          │ │
+│  │    * Service Discovery: browser-agent.local             │ │
+│  └──────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
+                             │
+                             ↓
+┌────────────────────────────────────────────────────────────────┐
+│                        NAT Gateway                             │
+│                  (Outbound Internet Access)                    │
+│                    Multi-AZ Deployment                         │
+└────────────────────────────┬───────────────────────────────────┘
+                             │
+                             ↓
 ┌────────────────────────────────────────────────────────────────┐
 │                     External Services                          │
 │                                                                │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │AWS       │  │AWS       │  │ElevenLabs│  │OpenAI    │    │
-│  │Transcribe│  │Bedrock   │  │TTS       │  │GPT-4     │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
+│  │AWS       │  │ElevenLabs│  │OpenAI    │                   │
+│  │Bedrock   │  │TTS       │  │GPT-4     │                   │
+│  └──────────┘  └──────────┘  └──────────┘                   │
 │                                                                │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐                   │
 │  │AWS       │  │AWS       │  │CloudWatch│                   │
 │  │Cognito   │  │DynamoDB  │  │Logs      │                   │
 │  └──────────┘  └──────────┘  └──────────┘                   │
+│                                                                │
+│  Note: PhoWhisper STT runs self-hosted in Voice Bot container │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │              VPC Endpoints (Cost Optimization)           │ │
+│  │  - com.amazonaws.region.bedrock-runtime                  │ │
+│  │  - com.amazonaws.region.dynamodb                         │ │
+│  │  - com.amazonaws.region.secretsmanager                   │ │
+│  │  - com.amazonaws.region.ecr.api                          │ │
+│  │  - com.amazonaws.region.ecr.dkr                          │ │
+│  │  - com.amazonaws.region.logs                             │ │
+│  └──────────────────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────┘
+```
+
+**ECS Task Definitions:**
+
+```yaml
+voice-bot-task:
+  family: voice-bot
+  networkMode: awsvpc
+  requiresCompatibilities: [FARGATE]
+  cpu: "2048"  # 2 vCPU
+  memory: "4096"  # 4 GB
+  containerDefinitions:
+    - name: voice-bot-container
+      image: <account-id>.dkr.ecr.<region>.amazonaws.com/voice-bot:latest
+      portMappings:
+        - containerPort: 7860
+          protocol: tcp
+      environment:
+        - name: AWS_REGION
+          value: us-east-1
+        - name: LOG_LEVEL
+          value: INFO
+      secrets:
+        - name: OPENAI_API_KEY
+          valueFrom: arn:aws:secretsmanager:...
+        - name: ELEVENLABS_API_KEY
+          valueFrom: arn:aws:secretsmanager:...
+      logConfiguration:
+        logDriver: awslogs
+        options:
+          awslogs-group: /ecs/voice-bot
+          awslogs-region: us-east-1
+          awslogs-stream-prefix: ecs
+      healthCheck:
+        command: ["CMD-SHELL", "curl -f http://localhost:7860/api/health || exit 1"]
+        interval: 30
+        timeout: 5
+        retries: 3
+
+browser-agent-task:
+  family: browser-agent
+  networkMode: awsvpc
+  requiresCompatibilities: [FARGATE]
+  cpu: "4096"  # 4 vCPU
+  memory: "8192"  # 8 GB
+  containerDefinitions:
+    - name: browser-agent-container
+      image: <account-id>.dkr.ecr.<region>.amazonaws.com/browser-agent:latest
+      portMappings:
+        - containerPort: 7863
+          protocol: tcp
+      environment:
+        - name: AWS_REGION
+          value: us-east-1
+        - name: CHROMIUM_PATH
+          value: /usr/bin/chromium-browser
+      secrets:
+        - name: OPENAI_API_KEY
+          valueFrom: arn:aws:secretsmanager:...
+      logConfiguration:
+        logDriver: awslogs
+        options:
+          awslogs-group: /ecs/browser-agent
+          awslogs-region: us-east-1
+          awslogs-stream-prefix: ecs
+      healthCheck:
+        command: ["CMD-SHELL", "curl -f http://localhost:7863/api/health || exit 1"]
+        interval: 30
+        timeout: 5
+        retries: 3
+```
+
+**S3 + CloudFront Configuration:**
+
+```yaml
+# S3 Bucket for Frontend
+s3-frontend-bucket:
+  bucketName: vpbank-voice-frontend
+  versioning: Enabled
+  encryption:
+    type: AES256
+  publicAccessBlock:
+    blockPublicAcls: true
+    blockPublicPolicy: true
+    ignorePublicAcls: true
+    restrictPublicBuckets: true
+  lifecycle:
+    - id: delete-old-versions
+      status: Enabled
+      noncurrentVersionExpiration: 30  # days
+
+# CloudFront Distribution
+cloudfront-distribution:
+  origins:
+    - domainName: vpbank-voice-frontend.s3.us-east-1.amazonaws.com
+      id: S3-frontend
+      s3OriginConfig:
+        originAccessIdentity: origin-access-identity/cloudfront/ABCDEFG
+  enabled: true
+  defaultRootObject: index.html
+  customErrorResponses:
+    - errorCode: 404
+      responseCode: 200
+      responsePage: /index.html  # SPA routing
+    - errorCode: 403
+      responseCode: 200
+      responsePage: /index.html
+  defaultCacheBehavior:
+    targetOriginId: S3-frontend
+    viewerProtocolPolicy: redirect-to-https
+    allowedMethods: [GET, HEAD, OPTIONS]
+    cachedMethods: [GET, HEAD]
+    compress: true
+    minTTL: 0
+    defaultTTL: 3600  # 1 hour
+    maxTTL: 86400  # 24 hours
+    forwardedValues:
+      queryString: false
+      cookies:
+        forward: none
+  priceClass: PriceClass_100  # US, Europe, Asia
+  viewerCertificate:
+    acmCertificateArn: arn:aws:acm:us-east-1:...
+    sslSupportMethod: sni-only
+    minimumProtocolVersion: TLSv1.2_2021
+  aliases:
+    - vpbank-voice.com
+    - www.vpbank-voice.com
 ```
 
 **Security Groups:**
 
 ```
+ALB Security Group:
+  Inbound:
+    - TCP 80 from 0.0.0.0/0 (HTTP → HTTPS redirect)
+    - TCP 443 from 0.0.0.0/0 (HTTPS)
+  Outbound:
+    - All traffic to Voice Bot Security Group
+
 Voice Bot Security Group:
   Inbound:
-    - TCP 7860 from ALB
-    - TCP 22 from Bastion Host
-    - UDP 49152-65535 from 0.0.0.0/0 (WebRTC)
+    - TCP 7860 from ALB Security Group
+    - UDP 49152-65535 from 0.0.0.0/0 (WebRTC media)
   Outbound:
     - All traffic to 0.0.0.0/0
 
 Browser Agent Security Group:
   Inbound:
-    - TCP 7863 from Voice Bot SG
-    - TCP 22 from Bastion Host
+    - TCP 7863 from Voice Bot Security Group
   Outbound:
     - TCP 443 to 0.0.0.0/0 (HTTPS to forms)
     - All traffic to 0.0.0.0/0
+```
 
-Frontend (Nginx) Security Group:
-  Inbound:
-    - TCP 5173 from ALB
-    - TCP 22 from Bastion Host
-  Outbound:
-    - All traffic to 0.0.0.0/0
+**ECS Service Auto Scaling:**
+
+```yaml
+voice-bot-scaling:
+  targetTrackingScaling:
+    - type: TargetTrackingScaling
+      targetValue: 70
+      predefinedMetricType: ECSServiceAverageCPUUtilization
+      scaleInCooldown: 300
+      scaleOutCooldown: 60
+  stepScaling:
+    - metricAggregationType: Average
+      adjustmentType: PercentChangeInCapacity
+      scalingAdjustment: 200
+      metricIntervalLowerBound: 0
+
+browser-agent-scaling:
+  targetTrackingScaling:
+    - type: TargetTrackingScaling
+      targetValue: 60
+      predefinedMetricType: ECSServiceAverageCPUUtilization
+      scaleInCooldown: 600
+      scaleOutCooldown: 60
+    - type: TargetTrackingScaling
+      targetValue: 75
+      predefinedMetricType: ECSServiceAverageMemoryUtilization
+      scaleInCooldown: 600
+      scaleOutCooldown: 60
 ```
 
 ---
@@ -1137,7 +1445,41 @@ Frontend (Nginx) Security Group:
 
 ### Key Decision Records
 
-**1. Python 3.11 (NOT 3.12/3.13)**
+**1. PhoWhisper for Vietnamese STT (NOT AWS Transcribe)**
+
+**Decision**: Use PhoWhisper fine-tuned model for Speech-to-Text
+
+**Rationale**:
+- **Vietnamese-specific**: Fine-tuned on Vietnamese dataset for superior accuracy
+- **Tonal recognition**: Better handling of Vietnamese 6 tones (ngang, huyền, sắc, hỏi, ngã, nặng)
+- **Phonetics**: Optimized for Vietnamese phonemes and diphthongs
+- **Cost-effective**: Self-hosted, no per-request API costs
+- **Privacy**: Audio data stays within infrastructure (no external API calls)
+- **Customization**: Can fine-tune further on banking-specific vocabulary
+
+**Alternatives Considered**:
+- **AWS Transcribe**: Rejected (generic model, lower Vietnamese accuracy, API costs)
+- **Google Speech-to-Text**: Rejected (lower Vietnamese tone recognition)
+- **OpenAI Whisper (base)**: Rejected (not optimized for Vietnamese)
+- **Whisper Large V3**: Considered (good, but PhoWhisper is fine-tuned specifically)
+
+**Trade-offs**:
+- ✅ Superior Vietnamese accuracy (95%+ vs 85-90% for generic models)
+- ✅ Cost savings: $0 vs ~$0.024/minute for AWS Transcribe
+- ✅ Data privacy and compliance
+- ✅ Customizable for domain-specific terms
+- ❌ Self-hosted requires more compute (runs in Voice Bot container)
+- ❌ Model size increases container image (~1-2GB)
+- ❌ Slightly higher memory usage (4GB vs 2GB)
+
+**Performance Impact**:
+- Voice Bot container: 2 vCPU, 4GB RAM (vs 2GB without model)
+- Inference time: ~300-500ms per utterance
+- Model loading: ~10s on container startup (cold start)
+
+---
+
+**2. Python 3.11 (NOT 3.12/3.13)**
 
 **Decision**: Use Python 3.11.x exclusively
 
@@ -1157,7 +1499,7 @@ Frontend (Nginx) Security Group:
 
 ---
 
-**2. ElevenLabs TTS (NOT AWS Polly or OpenAI TTS)**
+**3. ElevenLabs TTS (NOT AWS Polly or OpenAI TTS)**
 
 **Decision**: Use ElevenLabs for Vietnamese Text-to-Speech
 
@@ -1179,7 +1521,7 @@ Frontend (Nginx) Security Group:
 
 ---
 
-**3. Microservices Architecture (NOT Monolith)**
+**4. Microservices Architecture (NOT Monolith)**
 
 **Decision**: Separate Voice Bot and Browser Agent into independent services
 
@@ -1201,7 +1543,96 @@ Frontend (Nginx) Security Group:
 
 ---
 
-**4. AWS Bedrock Claude Sonnet 4 (NOT GPT-4 for conversation)**
+**5. S3 + CloudFront for Frontend (NOT ECS)**
+
+**Decision**: Use S3 for static hosting and CloudFront for CDN
+
+**Rationale**:
+- **Cost-effective**: ~$10/month vs ~$25/month for ECS Fargate
+- **Performance**: Global CDN with edge locations, <50ms latency worldwide
+- **Scalability**: Unlimited, auto-scaled by AWS
+- **Simplicity**: No container management, no health checks
+- **Reliability**: 99.99% SLA for CloudFront, 99.999999999% durability for S3
+- **React SPA**: Static build output, no server-side rendering needed
+
+**Alternatives Considered**:
+- **ECS Fargate**: Rejected (3x more expensive, slower, over-engineering for static files)
+- **Amplify Hosting**: Rejected (vendor lock-in, less control)
+- **Netlify/Vercel**: Rejected (prefer AWS-native, cost)
+- **Nginx on EC2**: Rejected (management overhead, no CDN)
+
+**Trade-offs**:
+- ✅ 60-70% cost savings vs ECS
+- ✅ Global CDN performance
+- ✅ Zero infrastructure management
+- ✅ Instant scalability
+- ❌ Build-time environment variables only
+- ❌ No Server-Side Rendering (SSR)
+- ❌ Cache invalidation needed for updates
+
+**Cost Comparison (monthly):**
+
+| Option | Cost | Performance | Management |
+|--------|------|-------------|------------|
+| S3 + CloudFront | ~$10-15 | Excellent (CDN) | None |
+| ECS Fargate (2 tasks) | ~$20-30 | Good (single region) | Low |
+| Amplify Hosting | ~$15-20 | Excellent (CDN) | None |
+| EC2 + Nginx | ~$15-25 | Fair (single region) | High |
+
+**Why S3 + CloudFront is optimal:**
+- React SPA doesn't need server-side rendering
+- Global user base benefits from CDN
+- Lowest operational overhead
+- Best performance/cost ratio
+
+---
+
+**6. ECS Fargate for Backend (NOT EC2 or EKS)**
+
+**Decision**: Use AWS ECS with Fargate launch type for backend services
+
+**Rationale**:
+- **Serverless containers**: No server management, automatic infrastructure provisioning
+- **Auto-scaling**: Built-in integration with Application Auto Scaling
+- **Cost-effective**: Pay only for resources used (per-second billing)
+- **Security**: Task-level isolation, no shared kernel with other customers
+- **AWS integration**: Native integration with ALB, CloudWatch, IAM, Secrets Manager
+- **Fast deployment**: No cluster provisioning, instant task launches
+- **Simplified operations**: No patching, no node management
+
+**Alternatives Considered**:
+- **EC2 (self-managed)**: Rejected (requires managing instances, patching, capacity planning)
+- **ECS on EC2**: Rejected (need to manage EC2 instances, less cost-effective for variable load)
+- **EKS (Kubernetes)**: Rejected (over-engineering, steep learning curve, higher cost)
+- **Lambda**: Rejected (WebRTC requires persistent connections, 15-min timeout)
+
+**Trade-offs**:
+- ✅ Zero infrastructure management
+- ✅ Automatic scaling and high availability
+- ✅ Built-in security and compliance
+- ✅ Cost optimization with Fargate Spot (70% savings)
+- ❌ Slightly higher cost than EC2 for steady-state workloads
+- ❌ Cold start for new tasks (~10-30 seconds)
+- ❌ Less control over underlying infrastructure
+
+**Cost Comparison (monthly, assuming 24/7 operation):**
+
+| Option | Cost | Management Overhead |
+|--------|------|---------------------|
+| ECS Fargate (3 tasks) | ~$200-250 | None |
+| ECS on EC2 (t3.large) | ~$150-180 | High (patching, monitoring) |
+| EKS + Fargate | ~$300-350 | Medium (Kubernetes complexity) |
+| Self-managed EC2 | ~$120-150 | Very High (full ops responsibility) |
+
+**Why Fargate is optimal:**
+- Variable workload patterns (voice calls are bursty)
+- Development team focus on application, not infrastructure
+- Built-in high availability across AZs
+- Simplified CI/CD (just push new container image)
+
+---
+
+**7. AWS Bedrock Claude Sonnet 4 (NOT GPT-4 for conversation)**
 
 **Decision**: Use AWS Bedrock Claude Sonnet 4 for conversational AI
 
@@ -1223,7 +1654,7 @@ Frontend (Nginx) Security Group:
 
 ---
 
-**5. DynamoDB (NOT PostgreSQL or MongoDB)**
+**8. DynamoDB (NOT PostgreSQL or MongoDB)**
 
 **Decision**: Use AWS DynamoDB for session storage
 
@@ -1315,7 +1746,82 @@ Frontend (Nginx) Security Group:
 
 ---
 
-**Document Version:** 1.0.0
-**Last Updated:** November 7, 2025
-**Next Review:** February 7, 2026
+## Architecture Summary
+
+### Infrastructure Stack
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     FRONTEND LAYER                      │
+│  • S3 Static Hosting (~$2/month)                        │
+│  • CloudFront Global CDN (~$10/month)                   │
+│  • React 19 + Vite + TypeScript                         │
+│  • ~150KB bundle size (gzipped)                         │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                     BACKEND LAYER                       │
+│  • ECS Fargate Cluster                                  │
+│  • Voice Bot Service: 3-10 tasks (~$120-200/month)      │
+│  • Browser Agent Service: 3-20 tasks (~$90-180/month)   │
+│  • Application Load Balancer (~$20/month)               │
+│  • NAT Gateway (~$35/month)                             │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                      DATA LAYER                         │
+│  • DynamoDB (pay-per-request)                           │
+│  • S3 (session logs, artifacts)                         │
+│  • CloudWatch Logs (retention: 30 days)                 │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                   EXTERNAL SERVICES                     │
+│  • AWS Bedrock Claude Sonnet 4 (Conversational AI)      │
+│  • ElevenLabs (Vietnamese TTS)                          │
+│  • OpenAI GPT-4 (Form Automation AI)                    │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                  SELF-HOSTED AI MODELS                  │
+│  • PhoWhisper (Vietnamese STT - Fine-tuned)             │
+│    Running in Voice Bot container                       │
+└─────────────────────────────────────────────────────────┘
+
+Total Monthly Cost: ~$220-280 (excluding AI API usage)
+```
+
+### Key Architecture Decisions
+
+1. ✅ **PhoWhisper STT** - Fine-tuned for Vietnamese, 95%+ accuracy, self-hosted
+2. ✅ **S3 + CloudFront for Frontend** - 60% cost savings, global CDN performance
+3. ✅ **ECS Fargate for Backend** - Zero infrastructure management, auto-scaling
+4. ✅ **Microservices** - Independent scaling, fault isolation
+5. ✅ **AWS Bedrock** - Best Vietnamese support, 200k context
+6. ✅ **DynamoDB** - Serverless, pay-per-request, scalable
+7. ✅ **VPC Endpoints** - Reduced NAT Gateway costs
+
+### Performance Metrics
+
+- Frontend Latency: <50ms (CloudFront edge)
+- API Latency: <100ms (ALB + ECS)
+- WebRTC Connection: <2s
+- Form Filling: 15-25s (one-shot)
+- Global Availability: 99.99% SLA
+
+### Security Features
+
+- SSL/TLS everywhere (CloudFront + ALB)
+- Private subnets for ECS tasks
+- IAM roles with least privilege
+- Secrets Manager for API keys
+- PII masking in logs
+- Rate limiting per IP
+
+---
+
+**Document Version:** 2.0.0
+**Last Updated:** January 8, 2025
+**Architecture:** Cloud-Native (S3 + CloudFront + ECS Fargate)
+**Next Review:** April 8, 2025
 **Maintained by:** VPBank Engineering Team

@@ -6,6 +6,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from loguru import logger
+from langsmith import traceable
 
 from browser_use import Agent as BrowserUseAgent
 from browser_use import Browser, BrowserProfile
@@ -14,6 +15,10 @@ from browser_use import ChatBrowserUse
 
 
 load_dotenv(override=True)
+
+# Enable LangSmith tracing
+os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+os.environ.setdefault("LANGCHAIN_PROJECT", "browser-agent")
 
 
 SPEED_OPTIMIZATION_PROMPT = """
@@ -75,6 +80,7 @@ class BrowserAgentHandler:
             logger.info("🟢 Persistent browser started (keep_alive=True)")
         return self.browser
 
+    @traceable(name="start_form_session")
     async def start_form_session(self, form_url: str, form_type: str, session_id: str = "default") -> dict:
         try:
             logger.info(f"🚀 Starting form session: {form_type} (session_id: {session_id})")
@@ -116,6 +122,7 @@ class BrowserAgentHandler:
             logger.error(f"❌ Error starting session: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
+    @traceable(name="fill_field_incremental")
     async def fill_field_incremental(self, field_name: str, value: str, session_id: str = "default") -> dict:
         try:
             if session_id not in self.sessions:
@@ -232,6 +239,7 @@ class BrowserAgentHandler:
         session = self.sessions[session_id]
         return {"success": True, "fields": list(session["session_data"].get("fields_filled", []))}
 
+    @traceable(name="submit_form_incremental")
     async def submit_form_incremental(self, session_id: str = "default") -> dict:
         try:
             if session_id not in self.sessions:
@@ -253,6 +261,7 @@ class BrowserAgentHandler:
             logger.error(f"❌ Error submitting form: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
+    @traceable(name="fill_form")
     async def fill_form(self, form_url: str, form_data: dict, form_type: str = "loan") -> dict:
         try:
             profile = self._get_profile()
@@ -292,6 +301,7 @@ class BrowserAgentHandler:
             logger.error(f"❌ Error in one-shot fill: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
+    @traceable(name="execute_freeform")
     async def execute_freeform(self, user_message: str, session_id: str = "default") -> dict:
         """Thực thi dạng freeform theo cấu trúc @sandbox chuẩn của browser-use.
 

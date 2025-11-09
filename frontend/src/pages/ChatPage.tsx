@@ -1344,7 +1344,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                       <div
                         className="flex-1 w-full rounded-xl border border-gray-200 shadow-sm overflow-hidden"
                         style={{
-                          background: "linear-gradient(to bottom right, #f9fafb, #ffffff, #f3f4f6)",
+                          background: "#ffffff",
                         }}
                       >
                         <iframe

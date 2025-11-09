@@ -95,7 +95,7 @@ export function SessionHistory({ isOpen, onClose }: SessionHistoryProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm">
       <div className="w-full max-w-6xl h-[85vh] bg-white rounded-2xl shadow-2xl flex flex-col m-4">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">

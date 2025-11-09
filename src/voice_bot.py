@@ -26,7 +26,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, IceServer
 from pipecat.transports.base_transport import TransportParams
-from pipecat.services.openai.stt import OpenAISTTService
+from pipecat.services.openai.stt import WhisperSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
@@ -319,9 +319,9 @@ async def run_bot(webrtc_connection, ws_connections):
     
     # Initialize services
     # OpenAI Whisper STT Service for Vietnamese
-    stt = OpenAISTTService(
-        api_key=openai_api_key,
-        model="whisper-1",
+    stt = WhisperSTTService(
+        device='auto',
+        model="PhoWhisper-medium",
         language="vi"  # Vietnamese language code
     )
 

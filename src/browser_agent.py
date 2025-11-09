@@ -68,8 +68,8 @@ class BrowserAgentHandler:
             self.live_url = getattr(data, "live_url", None)
             if self.live_url:
                 logger.info(f"👁️ Live URL: {self.live_url}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to extract live_url from browser data: {e}")
 
     async def _ensure_browser(self):
         """Start a persistent browser (keep_alive) and capture live_url."""

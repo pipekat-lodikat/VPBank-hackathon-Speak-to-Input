@@ -39,7 +39,7 @@ BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
 dynamodb_service = DynamoDBService()
 
 # Import auth service AFTER loading .env
-from auth_service import CognitoAuthService
+from .auth_service import CognitoAuthService
 
 # Environment variables
 aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
@@ -57,13 +57,18 @@ ws_connections = set()
 # Initialize auth service
 auth_service = CognitoAuthService()
 
-# ICE servers
+# ICE servers configuration
+STUN_SERVER = os.getenv("STUN_SERVER", "stun:stun.l.google.com:19302")
+TURN_SERVER = os.getenv("TURN_SERVER", "turn:openrelay.metered.ca:80")
+TURN_USERNAME = os.getenv("TURN_USERNAME", "openrelayproject")
+TURN_CREDENTIAL = os.getenv("TURN_CREDENTIAL", "openrelayproject")
+
 ice_servers = [
-    IceServer(urls="stun:stun.l.google.com:19302"),
+    IceServer(urls=STUN_SERVER),
     IceServer(
-        urls="turn:openrelay.metered.ca:80",
-        username="openrelayproject",
-        credential="openrelayproject"
+        urls=TURN_SERVER,
+        username=TURN_USERNAME,
+        credential=TURN_CREDENTIAL
     ),
 ]
 
@@ -83,7 +88,7 @@ def _to_jsonable(value):
 async def push_to_browser_service(user_message: str, ws_connections: set, session_id: str, processing_flag: dict):
     """
     Gửi request đến Browser Agent Service qua HTTP API
-    
+
     Args:
         user_message: Full conversation context từ user
         ws_connections: WebSocket connections để notify
@@ -91,132 +96,148 @@ async def push_to_browser_service(user_message: str, ws_connections: set, sessio
         processing_flag: Dict để track processing state
     """
     import aiohttp
-    
-    try:
-        logger.info(f"📤 Pushing request to Browser Service for session {session_id}")
-        logger.debug(f"   Service URL: {BROWSER_SERVICE_URL}")
-        logger.debug(f"   Message length: {len(user_message)} chars")
-        
-        # Prepare request
-        payload = {
-            "user_message": user_message,
-            "session_id": session_id
-        }
-        
-        # Send HTTP POST request
+
+    logger.info(f"📤 Pushing request to Browser Service for session {session_id}")
+    logger.debug(f"   Service URL: {BROWSER_SERVICE_URL}")
+    logger.debug(f"   Message length: {len(user_message)} chars")
+
+    # Generate request ID for correlation across services
+    request_id = generate_request_id()
+
+    # Prepare request
+    payload = {
+        "user_message": user_message,
+        "session_id": session_id,
+        "request_id": request_id
+    }
+
+    logger.info(f"📝 Request ID: {request_id} - Sending to Browser Service")
+
+    # Send HTTP POST request with retry logic
+    async def send_to_browser_service():
         timeout = aiohttp.ClientTimeout(total=300)  # 5 minutes timeout
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 f"{BROWSER_SERVICE_URL}/api/execute",
                 json=payload
             ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    
-                    if result.get("success"):
-                        final_message = result.get("result", "Completed")
-                        
-                        # Filter JSON from response (avoid TTS reading JSON)
-                        if isinstance(final_message, str):
-                            # Remove JSON code blocks
-                            import re
-                            # Remove ```json blocks
-                            final_message = re.sub(r'```json\s*\{[^}]*\}\s*```', '', final_message, flags=re.DOTALL)
-                            # Remove ``` blocks
-                            final_message = re.sub(r'```[^`]*```', '', final_message, flags=re.DOTALL)
-                            # Remove { } blocks
-                            final_message = re.sub(r'\{[^}]*\}', '', final_message)
-                            # Clean up extra whitespace
-                            final_message = final_message.strip()
-                        
-                        # If empty after filtering, use default message
-                        if not final_message or len(final_message) < 5:
-                            final_message = "Đã điền thành công"
-                        
-                        logger.info(f"✅ Browser Service completed! Result: {final_message[:200]}...")
-                        
-                        # Notify via WebSocket
-                        notification = {
-                            "type": "task_completed",
-                            "result": final_message,
-                            "message": f"✅ {final_message}"
-                        }
-                        
-                        for ws in list(ws_connections):
-                            try:
-                                await ws.send_json(notification)
-                                logger.info(f"📢 Sent completion notification to frontend")
-                            except Exception as e:
-                                logger.warning(f"Failed to send notification: {e}")
-                    else:
-                        error_msg = result.get("error", "Unknown error")
-                        logger.error(f"❌ Browser Service failed: {error_msg}")
-                        
-                        notification = {
-                            "type": "task_failed",
-                            "error": error_msg,
-                            "message": f"❌ Lỗi khi xử lý: {error_msg}"
-                        }
-                        
-                        for ws in list(ws_connections):
-                            try:
-                                await ws.send_json(notification)
-                            except:
-                                pass
-                else:
-                    error_text = await response.text()
-                    logger.error(f"❌ Browser Service HTTP error {response.status}: {error_text}")
-                    
-                    notification = {
-                        "type": "task_failed",
-                        "error": f"HTTP {response.status}: {error_text}",
-                        "message": f"❌ Lỗi kết nối với Browser Service"
-                    }
-                    
-                    for ws in list(ws_connections):
-                        try:
-                            await ws.send_json(notification)
-                        except:
-                            pass
-        
+                return response.status, await response.json() if response.status == 200 else await response.text()
+
+    try:
+        # Retry on network errors (connection refused, timeouts, etc.)
+        status, result = await retry_with_exponential_backoff(
+            send_to_browser_service,
+            max_retries=2,
+            initial_delay=2.0,
+            retry_on_exceptions=(aiohttp.ClientError, asyncio.TimeoutError)
+        )
+
+        if status == 200:
+            if result.get("success"):
+                final_message = result.get("result", "Completed")
+
+                # Filter JSON from response (avoid TTS reading JSON)
+                if isinstance(final_message, str):
+                    # Remove JSON code blocks
+                    import re
+                    # Remove ```json blocks
+                    final_message = re.sub(r'```json\s*\{[^}]*\}\s*```', '', final_message, flags=re.DOTALL)
+                    # Remove ``` blocks
+                    final_message = re.sub(r'```[^`]*```', '', final_message, flags=re.DOTALL)
+                    # Remove { } blocks
+                    final_message = re.sub(r'\{[^}]*\}', '', final_message)
+                    # Clean up extra whitespace
+                    final_message = final_message.strip()
+
+                # If empty after filtering, use default message
+                if not final_message or len(final_message) < 5:
+                    final_message = "Đã điền thành công"
+
+                logger.info(f"✅ Browser Service completed! Result: {final_message[:200]}...")
+
+                # Notify via WebSocket
+                notification = {
+                    "type": "task_completed",
+                    "result": final_message,
+                    "message": f"✅ {final_message}"
+                }
+
+                for ws in list(ws_connections):
+                    try:
+                        await ws.send_json(notification)
+                        logger.info(f"📢 Sent completion notification to frontend")
+                    except Exception as e:
+                        logger.warning(f"Failed to send notification: {e}")
+            else:
+                error_msg = result.get("error", "Unknown error")
+                logger.error(f"❌ Browser Service failed: {error_msg}")
+
+                notification = {
+                    "type": "task_failed",
+                    "error": error_msg,
+                    "message": f"❌ Lỗi khi xử lý: {error_msg}"
+                }
+
+                for ws in list(ws_connections):
+                    try:
+                        await ws.send_json(notification)
+                    except Exception as e:
+                        logger.warning(f"Failed to send error notification to WebSocket: {e}")
+        else:
+            # Non-200 status code
+            error_text = result if isinstance(result, str) else "Unknown error"
+            logger.error(f"❌ Browser Service HTTP error {status}: {error_text}")
+
+            notification = {
+                "type": "task_failed",
+                "error": f"HTTP {status}: {error_text}",
+                "message": f"❌ Lỗi kết nối với Browser Service"
+            }
+
+            for ws in list(ws_connections):
+                try:
+                    await ws.send_json(notification)
+                except Exception as e:
+                    logger.warning(f"Failed to send error notification to WebSocket: {e}")
+
         # Clear processing flag
         processing_flag["active"] = False
         processing_flag["task_id"] = None
         logger.info(f"🔓 Voice input RESUMED")
-        
+
     except asyncio.TimeoutError:
         logger.error(f"❌ Browser Service timeout after 5 minutes")
-        
+
         notification = {
             "type": "task_failed",
             "error": "Timeout",
             "message": "❌ Browser Service không phản hồi (timeout)"
         }
-        
+
         for ws in list(ws_connections):
             try:
                 await ws.send_json(notification)
-            except:
-                pass
-        
+            except Exception as e:
+                logger.warning(f"Failed to send timeout notification to WebSocket: {e}")
+
         processing_flag["active"] = False
         processing_flag["task_id"] = None
-        
+
     except Exception as e:
         logger.error(f"❌ Error calling Browser Service: {e}", exc_info=True)
-        
+
         notification = {
             "type": "task_failed",
             "error": str(e),
             "message": f"❌ Lỗi kết nối: {str(e)}"
         }
-        
+
         for ws in list(ws_connections):
             try:
                 await ws.send_json(notification)
-            except:
-                pass
-        
+            except Exception as e:
+                logger.warning(f"Failed to send connection error notification to WebSocket: {e}")
+
         processing_flag["active"] = False
         processing_flag["task_id"] = None
 
@@ -910,8 +931,8 @@ async def list_sessions(request):
         if last_key:
             try:
                 last_key_dict = json.loads(last_key)
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to parse last_key from query params: {e}")
         
         result = dynamodb_service.list_sessions(limit=limit, last_key=last_key_dict)
         # Convert Decimals to JSONable types

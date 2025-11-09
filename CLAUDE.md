@@ -13,7 +13,7 @@ The system follows a **microservices architecture** with three independent servi
 1. **Voice Bot Service** (Port 7860)
    - Entry point: `main_voice.py`
    - Handles WebRTC audio streaming (bidirectional)
-   - AWS Transcribe for STT (Vietnamese language)
+   - Pipecat Whisper STT Service for speech-to-text (Vietnamese language)
    - AWS Bedrock Claude Sonnet 4 for conversational AI
    - ElevenLabs for Vietnamese TTS
    - Sends HTTP POST requests to Browser Agent Service
@@ -80,11 +80,11 @@ cp .env.example .env
 ```
 
 Required variables:
-- `AWS_ACCESS_KEY_ID` - AWS credentials for Transcribe/Bedrock
-- `AWS_SECRET_ACCESS_KEY` - AWS secret key
+- `AWS_ACCESS_KEY_ID` - AWS credentials for Bedrock only
+- `AWS_SECRET_ACCESS_KEY` - AWS secret key for Bedrock
 - `AWS_REGION` - Default: us-east-1
 - `BEDROCK_MODEL_ID` - Claude model: us.anthropic.claude-sonnet-4-20250514-v1:0
-- `OPENAI_API_KEY` - For browser automation (GPT-4)
+- `OPENAI_API_KEY` - For Pipecat Whisper STT Service and GPT-4 browser automation
 - `ELEVENLABS_API_KEY` - For Vietnamese TTS
 - `ELEVENLABS_VOICE_ID` - Voice model ID
 - `BROWSER_SERVICE_URL` - Default: http://localhost:7863
@@ -145,7 +145,7 @@ docker-compose down
 
 The voice bot uses Pipecat AI framework with this pipeline:
 - SmallWebRTC Transport for bidirectional audio
-- AWS Transcribe STT (Vietnamese language)
+- Pipecat Whisper STT Service (Vietnamese language, OpenAI Whisper backend)
 - AWS Bedrock Claude Sonnet 4 LLM
 - ElevenLabs TTS (Vietnamese voice)
 - Silero VAD for voice activity detection
@@ -321,7 +321,7 @@ lsof -ti:5173 | xargs kill -9
 1. **Service Startup Order Matters:** Always start Browser Agent (7863) before Voice Bot (7860)
 
 2. **Multiple AWS Credentials:** The system uses separate AWS credentials for:
-   - Transcribe/Bedrock (main credentials)
+   - Bedrock only (main credentials, NOT for STT)
    - Cognito authentication (AUTH_* credentials)
    - DynamoDB sessions (DYNAMODB_* credentials)
 
@@ -339,11 +339,12 @@ lsof -ti:5173 | xargs kill -9
 - Python 3.11
 - Pipecat AI 0.0.91 (WebRTC/Voice framework)
 - aiohttp 3.12.15 (HTTP server)
-- AWS Transcribe (STT)
+- Pipecat Whisper STT Service (speech-to-text for Vietnamese, OpenAI backend)
 - AWS Bedrock Claude Sonnet 4 (LLM)
 - ElevenLabs (TTS)
 - browser-use 0.9.5 (AI browser automation)
 - Playwright 1.55.0 (browser control)
+- OpenAI GPT-4 (browser automation planning)
 - LangChain + LangGraph (multi-agent)
 
 **Frontend:**
@@ -354,7 +355,6 @@ lsof -ti:5173 | xargs kill -9
 - TailwindCSS 4.1.13
 
 **AWS Services:**
-- Transcribe (Speech-to-Text)
-- Bedrock (Claude Sonnet 4 LLM)
+- Bedrock (Claude Sonnet 4 LLM only, NOT for STT)
 - Cognito (Authentication)
 - DynamoDB (Session Storage)

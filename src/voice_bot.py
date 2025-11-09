@@ -26,7 +26,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, IceServer
 from pipecat.transports.base_transport import TransportParams
-from pipecat.services.aws.stt import AWSTranscribeSTTService
+from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
@@ -318,14 +318,11 @@ async def run_bot(webrtc_connection, ws_connections):
     processing_task = {"active": False, "task_id": None}
     
     # Initialize services
-    # AWS Transcribe STT Service
-    # Note: AWS Transcribe automatically closes connection after 15 seconds of no audio
-    # This is normal behavior and not an error - connection will be re-established on next audio
-    stt = AWSTranscribeSTTService(
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        language=Language.VI
+    # OpenAI Whisper STT Service for Vietnamese
+    stt = OpenAISTTService(
+        api_key=openai_api_key,
+        model="whisper-1",
+        language="vi"  # Vietnamese language code
     )
 
     llm = AWSBedrockLLMService(

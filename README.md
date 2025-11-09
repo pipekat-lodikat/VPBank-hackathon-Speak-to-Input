@@ -1,124 +1,314 @@
 # VPBank Voice Agent
 
-A production-ready voice-powered form automation system for banking operations. This system enables users to fill banking forms using natural Vietnamese speech through a multi-agent architecture.
+**Production-ready voice-powered banking form automation using AI-driven conversational interface and intelligent browser automation.**
+
+> A microservices-based system that enables users to fill Vietnamese banking forms through natural speech, leveraging WebRTC, AWS Transcribe, Claude Sonnet 4, and autonomous browser agents.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [Deployment](#deployment)
+- [Project Structure](#project-structure)
+- [Technology Stack](#technology-stack)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [License](#license)
+
+---
 
 ## Overview
 
-VPBank Voice Agent is a microservices-based system that combines speech recognition, natural language understanding, and browser automation to automate form filling for five banking use cases:
+VPBank Voice Agent is an enterprise-grade voice automation platform designed for Vietnamese banking operations. The system combines cutting-edge speech recognition, natural language understanding, and AI-powered browser automation to streamline form filling across five critical banking use cases:
 
-- Loan Origination & KYC
-- CRM Updates
-- HR Workflows
-- Compliance Reporting
-- Operations Validation
+| Use Case | Description | Form URL |
+|----------|-------------|----------|
+| **Loan Origination & KYC** | Customer onboarding and loan application processing | [Case 1](https://vpbank-shared-form-fastdeploy.vercel.app/) |
+| **CRM Updates** | Customer relationship management data entry | [Case 2](https://case2-ten.vercel.app/) |
+| **HR Workflows** | Employee data management and HR operations | [Case 3](https://case3-seven.vercel.app/) |
+| **Compliance Reporting** | Regulatory compliance form submission | [Case 4](https://case4-beta.vercel.app/) |
+| **Operations Validation** | Operational data verification and validation | [Case 5](https://case5-chi.vercel.app/) |
 
-### Architecture
+---
 
-The system follows a microservices architecture with three independent services:
+## Key Features
 
-1. **Voice Bot Service** (Port 7860): Handles WebRTC audio streaming, speech-to-text, text-to-speech, and conversational AI
-2. **Task Queue Service** (Port 7862): HTTP REST API for managing tasks between services
-3. **Browser Worker Service**: Background service that executes multi-agent workflows and browser automation
+### Voice Interface
+- **Real-time Speech Recognition**: Vietnamese language support via AWS Transcribe
+- **Natural Language Understanding**: Powered by Claude Sonnet 4 (AWS Bedrock)
+- **Conversational AI**: Context-aware dialogue management
+- **Voice Synthesis**: High-quality Vietnamese TTS using ElevenLabs
 
-Communication between services is handled via HTTP REST API through the Task Queue Service.
+### Intelligent Automation
+- **AI-Powered Browser Automation**: Autonomous form filling using GPT-4 and Playwright
+- **Multi-Agent Orchestration**: LangGraph-based agent coordination
+- **Session Management**: AWS DynamoDB for persistent conversation history
+- **Error Recovery**: Automatic retry and fallback mechanisms
 
-## Prerequisites
+### Enterprise-Ready
+- **Microservices Architecture**: Independently scalable services
+- **Authentication**: AWS Cognito integration
+- **Monitoring**: Comprehensive logging and metrics
+- **Security**: PII masking, rate limiting, input validation
+- **Cost Optimization**: LLM response caching and efficient resource usage
 
-### System Requirements
+### User Experience
+- **WebRTC Audio**: Low-latency bidirectional audio streaming
+- **Real-time Transcripts**: Live conversation display via WebSocket
+- **React Frontend**: Modern, responsive web interface
+- **Dynamic Configuration**: Auto-detection for local and remote deployments
 
-- **Python**: 3.11.x (required, not 3.12 or 3.13)
-- **Operating System**: Windows 10+, macOS, or Linux
-- **Rust**: Required for building some Python dependencies
+---
 
-### Required Credentials
+## Architecture
 
-Before installation, ensure you have:
+The system follows a **microservices architecture** with three independent services communicating via HTTP REST APIs and WebSocket:
 
-1. **AWS Account** with IAM user credentials:
-   - Access to AWS Transcribe (Speech-to-Text)
-   - Access to AWS Bedrock with Claude Sonnet 4 model enabled
-   - Required permissions documented below
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend (React)                         │
+│                      Port 5173 - Web UI                          │
+│                                                                   │
+│  • WebRTC Audio Streaming (bidirectional)                        │
+│  • Real-time Transcript Display (WebSocket)                      │
+│  • Session Management UI                                         │
+└────────────────┬────────────────────────────────────────────────┘
+                 │ WebRTC + WebSocket
+                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Voice Bot Service                             │
+│                      Port 7860                                   │
+│                                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ AWS Transcribe│  │Claude Sonnet4│  │ ElevenLabs   │          │
+│  │     (STT)    │  │     (LLM)    │  │     (TTS)    │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                   │
+│  • Audio Processing Pipeline (Pipecat AI)                        │
+│  • Conversation Management                                       │
+│  • Authentication (AWS Cognito)                                  │
+│  • Session Storage (AWS DynamoDB)                                │
+└────────────────┬────────────────────────────────────────────────┘
+                 │ HTTP POST
+                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Browser Agent Service                           │
+│                      Port 7863                                   │
+│                                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ browser-use  │  │   GPT-4      │  │  Playwright  │          │
+│  │  (Agents)    │  │ (Planning)   │  │  (Browser)   │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                   │
+│  • AI-Powered Browser Automation                                 │
+│  • Form Detection & Filling                                      │
+│  • Multi-Step Workflow Execution                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-2. **OpenAI API Key**:
-   - Account with billing enabled
-   - API key with model access permissions
+### Service Communication Flow
+
+1. **User → Frontend**: User initiates voice conversation via web browser
+2. **Frontend → Voice Bot**: WebRTC audio stream + WebSocket for transcripts
+3. **Voice Bot Processing**:
+   - AWS Transcribe converts speech to text
+   - Claude Sonnet 4 understands intent and extracts data
+   - ElevenLabs synthesizes Vietnamese voice responses
+4. **Voice Bot → Browser Agent**: HTTP POST with extracted form data
+5. **Browser Agent Execution**:
+   - GPT-4 plans browser actions
+   - Playwright executes automation
+   - Returns completion status
+6. **Voice Bot → User**: Voice confirmation of task completion
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Python 3.11.x** (required - not 3.12 or 3.13)
+- **Node.js 18+** and npm
+- **Git**
+- **AWS Account** with Bedrock and Transcribe access
+- **OpenAI API Key** with GPT-4 access
+- **ElevenLabs API Key** for Vietnamese TTS
+
+### 5-Minute Setup
+
+```bash
+# 1. Clone repository
+git clone https://github.com/pipekat-lodikat/speak-to-input.git
+cd speak-to-input
+
+# 2. Create Python virtual environment
+python3.11 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# OR: venv\Scripts\activate  # Windows
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+
+# 4. Install Playwright browsers
+playwright install chromium
+playwright install-deps chromium  # Linux only
+
+# 5. Install frontend dependencies
+cd frontend
+npm install
+cd ..
+
+# 6. Configure environment
+cp .env.example .env
+# Edit .env with your AWS, OpenAI, and ElevenLabs credentials
+
+# 7. Start services (3 terminals)
+# Terminal 1: Browser Agent
+python main_browser_service.py
+
+# Terminal 2: Voice Bot
+python main_voice.py
+
+# Terminal 3: Frontend
+cd frontend && npm run dev -- --host 0.0.0.0
+
+# 8. Open browser
+# Navigate to http://localhost:5173
+```
+
+**Quick Start Script** (starts all services):
+```bash
+./scripts/start-dev.sh
+```
+
+---
 
 ## Installation
 
-### Step 1: Clone Repository
+### System Requirements
+
+| Component | Requirement |
+|-----------|------------|
+| **Operating System** | Windows 10+, macOS 11+, or Linux (Ubuntu 20.04+) |
+| **Python** | 3.11.x (required for Pipecat AI compatibility) |
+| **Node.js** | 18.x or higher |
+| **RAM** | 4GB minimum, 8GB recommended |
+| **Disk Space** | 2GB for dependencies and browsers |
+| **Network** | Stable internet for AWS/OpenAI APIs |
+
+### Step 1: Python Environment
 
 ```bash
-git clone <repository-url>
-cd VPBankHackathon
-```
+# Install Python 3.11 if not available
+# Ubuntu/Debian:
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install python3.11 python3.11-venv
 
-### Step 2: Set Up Python Environment
+# macOS (with Homebrew):
+brew install python@3.11
 
-```bash
+# Windows:
+# Download from python.org/downloads/
+
 # Create virtual environment
 python3.11 -m venv venv
 
 # Activate virtual environment
-# Windows:
-venv\Scripts\activate
 # Linux/macOS:
 source venv/bin/activate
 
+# Windows PowerShell:
+venv\Scripts\activate
+
+# Windows Command Prompt:
+venv\Scripts\activate.bat
+
+# Verify Python version
+python --version  # Should show Python 3.11.x
+```
+
+### Step 2: Install Dependencies
+
+```bash
 # Upgrade pip
 pip install --upgrade pip
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
-```
 
-### Step 3: Install Rust (if not already installed)
-
-Some Python dependencies require Rust to compile.
-
-**Windows:**
-```powershell
-winget install Rustlang.Rustup
-```
-
-**Linux/macOS:**
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-```
-
-### Step 4: Install Playwright Browsers
-
-```bash
+# Install Playwright browsers
 playwright install chromium
-playwright install-deps chromium  # Linux only
+
+# Linux only: Install system dependencies for Playwright
+playwright install-deps chromium
 ```
 
-### Step 5: Configure Environment Variables
-
-Create a `.env` file in the project root:
+### Step 3: Frontend Setup
 
 ```bash
-cp .env.example .env
+cd frontend
+
+# Install Node.js dependencies
+npm install
+
+# Build for production (optional)
+npm run build
+
+cd ..
 ```
 
-Edit `.env` and provide the following variables:
+### Step 4: Environment Configuration
 
-```env
-# AWS Credentials
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env with your credentials
+nano .env  # or use your preferred editor
+```
+
+**Required Environment Variables:**
+
+```bash
+# AWS Credentials (Main - for Transcribe/Bedrock)
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 AWS_REGION=us-east-1
 
-# AWS Bedrock Model ID
+# AWS Bedrock Model
 BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
 
-# OpenAI API Key
+# OpenAI API Key (for browser automation)
 OPENAI_API_KEY=your_openai_api_key
 
-# Browser Agent Service URL (optional, default: http://localhost:7863)
+# ElevenLabs TTS (Vietnamese Voice)
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+ELEVENLABS_VOICE_ID=your_voice_id
+
+# AWS Cognito (Authentication)
+COGNITO_USER_POOL_ID=your_pool_id
+COGNITO_CLIENT_ID=your_client_id
+
+# AWS DynamoDB (Session Storage)
+DYNAMODB_TABLE_NAME=vpbank-sessions
+DYNAMODB_ACCESS_KEY_ID=your_dynamodb_key
+DYNAMODB_SECRET_ACCESS_KEY=your_dynamodb_secret
+DYNAMODB_REGION=us-east-1
+
+# Service URLs (defaults)
 BROWSER_SERVICE_URL=http://localhost:7863
 
-# Form URLs (optional, defaults provided)
+# Form URLs (defaults provided)
 LOAN_FORM_URL=https://vpbank-shared-form-fastdeploy.vercel.app/
 CRM_FORM_URL=https://case2-ten.vercel.app/
 HR_FORM_URL=https://case3-seven.vercel.app/
@@ -126,15 +316,19 @@ COMPLIANCE_FORM_URL=https://case4-beta.vercel.app/
 OPERATIONS_FORM_URL=https://case5-chi.vercel.app/
 ```
 
-### Step 6: AWS IAM Setup
+### Step 5: AWS Setup
 
-Create an IAM user with the following permissions:
+#### Enable AWS Bedrock Access
 
-**Required Policies:**
-- `AmazonTranscribeFullAccess` (for Speech-to-Text)
-- `AmazonBedrockFullAccess` (for Claude LLM)
+1. Navigate to [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
+2. Select region: **US East (N. Virginia) - us-east-1**
+3. Go to **Model access**
+4. Click **Enable specific models**
+5. Enable: **Anthropic Claude Sonnet 4**
 
-**Or create a custom policy with least privilege:**
+#### Configure IAM Permissions
+
+Create an IAM user with these policies:
 
 ```json
 {
@@ -156,302 +350,653 @@ Create an IAM user with the following permissions:
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream"
       ],
-      "Resource": [
-        "arn:aws:bedrock:us-east-1::foundation-model/us.anthropic.claude-sonnet-4-20250514-v1:0",
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude*"
-      ]
+      "Resource": "arn:aws:bedrock:*::foundation-model/us.anthropic.claude-sonnet-4-*"
     }
   ]
 }
 ```
 
-**Enable Bedrock Model Access:**
-1. Go to [AWS Bedrock Console](https://console.aws.amazon.com/bedrock/)
-2. Select region: US East (N. Virginia) - us-east-1
-3. Navigate to Model access
-4. Enable: Anthropic Claude Sonnet 4
+#### Setup Cognito User Pool
 
-### Step 7: OpenAI Setup
+1. Create user pool in [AWS Cognito Console](https://console.aws.amazon.com/cognito/)
+2. Configure app client
+3. Note the **User Pool ID** and **Client ID**
 
-1. Create account at [OpenAI Platform](https://platform.openai.com/)
-2. Add payment method and credits
-3. Create API key from [API Keys](https://platform.openai.com/api-keys)
-4. Set usage limits (recommended for production)
+#### Setup DynamoDB Table
 
-## Running the Application
+```bash
+aws dynamodb create-table \
+    --table-name vpbank-sessions \
+    --attribute-definitions AttributeName=session_id,AttributeType=S \
+    --key-schema AttributeName=session_id,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST
+```
 
-### Prerequisites
+---
 
-Đảm bảo đã:
-1. Activate virtual environment: `venv\Scripts\activate` (Windows) hoặc `source venv/bin/activate` (Linux/macOS)
-2. Install dependencies: `pip install -r requirements.txt`
-3. Config `.env` file với AWS và OpenAI credentials
-4. Install Playwright browsers: `playwright install chromium`
+## Configuration
 
-### Quick Start
+### Environment Variables Reference
 
-Run both services separately (recommended):
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `AWS_ACCESS_KEY_ID` | AWS access key for Transcribe/Bedrock | Yes | - |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | Yes | - |
+| `AWS_REGION` | AWS region | Yes | `us-east-1` |
+| `BEDROCK_MODEL_ID` | Claude model identifier | Yes | `us.anthropic.claude-sonnet-4-20250514-v1:0` |
+| `OPENAI_API_KEY` | OpenAI API key for GPT-4 | Yes | - |
+| `ELEVENLABS_API_KEY` | ElevenLabs API key | Yes | - |
+| `ELEVENLABS_VOICE_ID` | Vietnamese voice ID | Yes | - |
+| `COGNITO_USER_POOL_ID` | AWS Cognito user pool | Yes | - |
+| `COGNITO_CLIENT_ID` | Cognito app client ID | Yes | - |
+| `DYNAMODB_TABLE_NAME` | DynamoDB table name | Yes | `vpbank-sessions` |
+| `BROWSER_SERVICE_URL` | Browser Agent URL | No | `http://localhost:7863` |
 
-#### Step 1: Start Browser Agent Service
+### Frontend Configuration
 
-Open Terminal 1:
+Frontend automatically detects API URL based on hostname:
 
+```typescript
+// frontend/src/config.ts
+const hostname = window.location.hostname;
+
+// Remote access: use server IP/domain
+if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+  return `${protocol}//${hostname}:7860`;
+}
+
+// Local development: use localhost
+return 'http://localhost:7860';
+```
+
+### Logging Configuration
+
+```bash
+# Set log level (DEBUG, INFO, WARNING, ERROR)
+export LOG_LEVEL=DEBUG
+
+# Enable debug mode
+export DEBUG=true
+```
+
+---
+
+## Usage
+
+### Running Services
+
+**Important:** Always start services in this order:
+
+1. **Browser Agent Service** (port 7863) - Must start first
+2. **Voice Bot Service** (port 7860) - Depends on Browser Agent
+3. **Frontend** (port 5173) - Depends on Voice Bot
+
+#### Option 1: Manual Start (Recommended for Development)
+
+**Terminal 1 - Browser Agent:**
 ```bash
 python main_browser_service.py
 ```
 
-Service starts on `http://localhost:7863`
-
-You should see:
+Wait for:
 ```
 🌐 Starting Browser Agent Service...
 📡 Service runs on port 7863
-🔗 Endpoints:
-   POST   /api/execute - Execute workflow
-   GET    /api/health - Health check
-✅ Workflow initialized (model: ...)
+✅ Browser automation ready
 ```
 
-#### Step 2: Start Voice Bot Service
-
-Open Terminal 2:
-
+**Terminal 2 - Voice Bot:**
 ```bash
-# Windows PowerShell:
-python main_voice.py
-
-# Linux/macOS:
 python main_voice.py
 ```
 
-**Note:** Nếu Browser Service chạy trên port/ host khác, set environment variable:
-```bash
-# Windows PowerShell:
-$env:BROWSER_SERVICE_URL="http://localhost:7863"
-python main_voice.py
-
-# Linux/macOS:
-export BROWSER_SERVICE_URL="http://localhost:7863"
-python main_voice.py
-```
-
-Service starts on `http://localhost:7860`
-
-You should see:
+Wait for:
 ```
 🎤 Starting Voice Bot Service...
 📡 Service runs on port 7860
-🚀 Voice bot ready - workflow will execute directly when needed
+✅ Voice bot ready
 ```
 
-### How It Works
+**Terminal 3 - Frontend:**
+```bash
+cd frontend
+npm run dev -- --host 0.0.0.0
+```
 
-1. **Voice Bot** receives voice input from user
-2. User confirms → Voice Bot sends HTTP POST to Browser Service
-3. **Browser Service** executes multi-agent workflow → browser automation
-4. Browser Service returns result → Voice Bot notifies user via WebSocket
+Access at: `http://localhost:5173`
 
-### Important Notes
-
-1. **Service Order**: 
-   - Always start Browser Agent Service first
-   - Then start Voice Bot Service
-   - Voice Bot will push requests to Browser Service
-
-2. **Environment Variable `BROWSER_SERVICE_URL`**: 
-   - Default: `http://localhost:7863`
-   - Set this if Browser Service runs on different host/port
-
-3. **Service Health**: 
-   - Check Browser Service: `curl http://localhost:7863/api/health`
-   - Check Voice Bot: Open `http://localhost:7860` in browser
-
-### Docker Compose (Optional)
-
-Build and run all services using Docker:
+#### Option 2: Quick Start Script
 
 ```bash
+./scripts/start-dev.sh
+```
+
+This script:
+- Starts all services in correct order
+- Opens browser automatically
+- Handles process management
+
+#### Option 3: Docker Compose
+
+```bash
+# Start all services
 docker-compose up --build
-```
 
-View logs:
-```bash
+# View logs
 docker-compose logs -f
-```
 
-Stop services:
-```bash
+# Stop services
 docker-compose down
 ```
 
-## API Endpoints
+### Using the Application
+
+1. **Open Frontend**: Navigate to `http://localhost:5173`
+2. **Login**: Authenticate using AWS Cognito
+3. **Start Conversation**: Click microphone icon to begin
+4. **Speak Naturally**: Describe the form you want to fill in Vietnamese
+5. **Confirm Data**: Review extracted information
+6. **Auto-Fill**: System automatically fills the form
+7. **Verify**: Check completed form in browser
+
+### Health Checks
+
+```bash
+# Check Browser Agent
+curl http://localhost:7863/api/health
+
+# Check Voice Bot (requires browser)
+open http://localhost:7860
+
+# Check Frontend
+curl http://localhost:5173
+```
+
+### Stopping Services
+
+**Quick Stop Script:**
+```bash
+./scripts/stop.sh
+```
+
+**Manual Stop:**
+```bash
+# Find and kill processes
+lsof -ti:7860,7863,5173 | xargs kill -9
+```
+
+---
+
+## API Reference
 
 ### Browser Agent Service (Port 7863)
 
-- `POST /api/execute` - Execute workflow (takes user_message and session_id)
-- `GET /api/health` - Health check endpoint
+#### POST `/api/execute`
+
+Execute browser automation workflow.
+
+**Request:**
+```json
+{
+  "user_message": "Fill loan application form with customer data",
+  "session_id": "user-session-123"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "result": "Form filled successfully",
+  "execution_time": 12.5
+}
+```
+
+#### GET `/api/health`
+
+Health check endpoint.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "browser-agent",
+  "version": "1.0.0"
+}
+```
 
 ### Voice Bot Service (Port 7860)
 
-- `POST /offer` - WebRTC offer endpoint
-- `GET /ws` - WebSocket endpoint for transcript streaming
+#### POST `/offer`
 
-## Configuration
+WebRTC offer endpoint for audio streaming.
 
-### Environment Variables
+**Request:**
+```json
+{
+  "sdp": "v=0...",
+  "type": "offer"
+}
+```
 
-All services share the same `.env` file. Key variables:
+**Response:**
+```json
+{
+  "sdp": "v=0...",
+  "type": "answer"
+}
+```
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `AWS_ACCESS_KEY_ID` | AWS IAM user access key | Yes |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM user secret key | Yes |
-| `AWS_REGION` | AWS region (default: us-east-1) | Yes |
-| `BEDROCK_MODEL_ID` | Bedrock model identifier | Yes |
-| `OPENAI_API_KEY` | OpenAI API key | Yes |
-| `BROWSER_SERVICE_URL` | Browser Agent Service URL (microservices mode) | No (default: http://localhost:7863) |
+#### WebSocket `/ws`
 
-### Logging
+Real-time transcript streaming.
 
-Logs are output to console with structured formatting using `loguru`. Set log level via:
+**Message Format:**
+```json
+{
+  "type": "transcript",
+  "role": "user|assistant",
+  "content": "Transcript text",
+  "timestamp": "2025-01-09T12:00:00Z"
+}
+```
+
+---
+
+## Deployment
+
+### Production Deployment (AWS ECS Fargate)
+
+#### Prerequisites
+
+- AWS CLI configured
+- Docker installed
+- Terraform installed (optional)
+
+#### Step 1: Deploy Infrastructure
 
 ```bash
-export LOG_LEVEL=DEBUG  # Linux/macOS
-$env:LOG_LEVEL="DEBUG"  # Windows PowerShell
+cd infrastructure/terraform
+
+# Initialize Terraform
+terraform init
+
+# Plan deployment
+terraform plan -out=tfplan
+
+# Apply infrastructure
+terraform apply tfplan
 ```
+
+This creates:
+- VPC with public/private subnets
+- ECS Cluster and Task Definitions
+- Application Load Balancer
+- Security Groups
+- Auto-scaling policies
+
+#### Step 2: Build and Push Docker Images
+
+```bash
+./scripts/deploy-ecs-fargate.sh
+```
+
+This script:
+1. Builds Docker images
+2. Pushes to AWS ECR
+3. Updates ECS task definitions
+4. Deploys to ECS cluster
+
+#### Step 3: Configure DNS and HTTPS
+
+See `docs/HTTPS_DEPLOYMENT_GUIDE.md` for detailed instructions.
+
+### Environment-Specific Configuration
+
+**Development:**
+```bash
+export ENVIRONMENT=development
+export LOG_LEVEL=DEBUG
+```
+
+**Production:**
+```bash
+export ENVIRONMENT=production
+export LOG_LEVEL=WARNING
+```
+
+### Security Group Configuration
+
+For remote access, allow these ports:
+
+**TCP:**
+- 5173 (Frontend)
+- 7860 (Voice Bot)
+- 7863 (Browser Agent)
+- 443 (HTTPS)
+
+**UDP:**
+- 3478 (STUN)
+- 49152-65535 (WebRTC media, or restricted range)
+
+---
 
 ## Project Structure
 
 ```
-VPBankHackathon/
-├── src/                          # Backend source code
-│   ├── voice_bot.py             # Voice bot service (WebRTC/STT/TTS/LLM)
-│   ├── browser_agent.py         # Browser automation handler
-│   └── multi_agent/              # Multi-agent system
-│       └── graph/
-│           ├── builder.py        # Supervisor workflow builder
-│           └── state.py          # LangGraph state definition
-├── main_voice.py                 # Voice bot service entry point
-├── main_browser_service.py       # Browser agent service entry point (HTTP API)
-├── requirements.txt               # Python dependencies
-├── docker-compose.yml             # Docker orchestration
-├── Dockerfile                     # Docker image definition
-└── .env                           # Environment variables (not in git)
+speak-to-input/
+├── infrastructure/              # Infrastructure as Code
+│   └── terraform/              # Terraform configurations (ECS, VPC, ALB)
+├── scripts/                    # Deployment and utility scripts
+│   ├── deploy-ecs-fargate.sh  # ECS deployment script
+│   ├── start-dev.sh           # Start all services
+│   └── stop.sh                # Stop all services
+├── docs/                       # Documentation
+│   ├── requirements/          # Requirements, proposals, technical docs
+│   └── images/                # Documentation images
+├── src/                        # Backend Python source
+│   ├── voice_bot.py           # WebRTC/STT/TTS/LLM pipeline
+│   ├── browser_agent.py       # Browser automation handler
+│   ├── dynamodb_service.py    # Session storage
+│   ├── auth_service.py        # Cognito authentication
+│   ├── llm_evaluator/         # LangSmith evaluation
+│   ├── cost/                  # Cost tracking and analytics
+│   ├── monitoring/            # Monitoring and observability
+│   ├── prompts/               # LLM prompt templates
+│   ├── security/              # Security utilities (PII masking, rate limiting)
+│   └── verification/          # Verification and validation
+├── frontend/                   # React frontend
+│   ├── src/
+│   │   ├── config.ts          # Dynamic API URL configuration
+│   │   ├── pages/             # Page components
+│   │   ├── components/        # Reusable components
+│   │   └── hooks/             # React hooks
+│   ├── package.json
+│   └── vite.config.ts
+├── tests/                      # Test suites
+├── vpbank-forms/              # Form templates (5 cases)
+├── main_voice.py              # Voice Bot entry point
+├── main_browser_service.py    # Browser Agent entry point
+├── requirements.txt           # Python dependencies
+├── docker-compose.yml         # Container orchestration
+├── Dockerfile                 # Container image definition
+├── .env.example               # Environment variable template
+├── .gitignore                 # Git ignore patterns
+├── README.md                  # This file
+└── CLAUDE.md                  # Claude Code instructions
 ```
+
+---
 
 ## Technology Stack
 
 ### Backend
 
-- **Python 3.11**: Core runtime
-- **Pipecat AI 0.0.91**: Voice AI framework (WebRTC, STT, TTS)
-- **AWS Transcribe**: Speech-to-text (Vietnamese)
-- **AWS Bedrock**: Claude Sonnet 4 LLM
-- **OpenAI TTS**: Text-to-speech
-- **LangGraph 1.0.1**: Multi-agent orchestration
-- **browser-use 0.1.40**: AI-powered browser automation
-- **Playwright 1.55.0**: Browser automation runtime
-- **aiohttp 3.11.12**: Async HTTP server
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Python** | 3.11 | Core runtime |
+| **Pipecat AI** | 0.0.91 | WebRTC/Voice framework |
+| **AWS Transcribe** | - | Speech-to-text (Vietnamese) |
+| **AWS Bedrock** | - | Claude Sonnet 4 LLM |
+| **ElevenLabs** | - | Text-to-speech (Vietnamese) |
+| **browser-use** | 0.9.5 | AI browser automation |
+| **Playwright** | 1.55.0 | Browser control |
+| **OpenAI API** | - | GPT-4 for planning |
+| **LangChain** | - | LLM orchestration |
+| **LangGraph** | - | Multi-agent workflows |
+| **aiohttp** | 3.12.15 | Async HTTP server |
 
-### Communication
+### Frontend
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **React** | 19.1.1 | UI framework |
+| **Vite** | 7.1.2 | Build tool |
+| **TypeScript** | 5.8.3 | Type safety |
+| **TailwindCSS** | 4.1.13 | Styling |
+| **Pipecat React UI** | - | WebRTC components |
+
+### AWS Services
+
+- **Transcribe**: Real-time speech-to-text
+- **Bedrock**: Claude Sonnet 4 LLM inference
+- **Cognito**: User authentication
+- **DynamoDB**: Session storage
+- **ECS Fargate**: Container orchestration
+- **ALB**: Application load balancing
+- **ECR**: Container registry
+
+### Communication Protocols
 
 - **WebRTC**: Bidirectional audio streaming
-- **WebSocket**: Real-time transcript streaming
-- **HTTP REST API**: Inter-service communication
+- **WebSocket**: Real-time transcript updates
+- **HTTP REST**: Service-to-service communication
+
+---
 
 ## Development
 
-### Running Tests
+### Code Style
 
+**Python:**
 ```bash
-# Activate virtual environment first
-source venv/bin/activate  # Linux/macOS
-venv\Scripts\activate     # Windows
-
-# Run specific tests (if available)
-python -m pytest tests/
-```
-
-### Code Formatting
-
-```bash
-# Format Python code
+# Format code
 black src/
+
+# Sort imports
 isort src/
 
 # Type checking
 mypy src/
+
+# Linting
+flake8 src/
+```
+
+**TypeScript:**
+```bash
+cd frontend
+
+# Lint
+npm run lint
+
+# Type check
+npm run type-check
+
+# Format
+npm run format
+```
+
+### Running Tests
+
+```bash
+# Python tests
+pytest tests/
+
+# Frontend tests
+cd frontend
+npm test
 ```
 
 ### Debug Mode
 
-Enable debug logging:
-
 ```bash
+# Enable debug logging
 export LOG_LEVEL=DEBUG
-python main.py
+export DEBUG=true
+
+# Run with verbose output
+python main_voice.py --verbose
 ```
+
+### Development Workflow
+
+1. Create feature branch: `git checkout -b feature/my-feature`
+2. Make changes and test locally
+3. Run linters and formatters
+4. Commit with conventional commits: `feat: add new feature`
+5. Push and create pull request
+
+---
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Error: Module not found**
-- Ensure virtual environment is activated
-- Reinstall dependencies: `pip install -r requirements.txt`
+#### "Module not found" or Import Error
 
-**Error: Playwright browser not found**
+**Solution:**
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+
+# Reinstall dependencies
+pip install -r requirements.txt
+
+# Check Python version
+python --version  # Must be 3.11.x
+```
+
+#### "Playwright browser not found"
+
+**Solution:**
 ```bash
 playwright install chromium
 playwright install-deps chromium  # Linux only
 ```
 
-**Error: AWS credentials invalid**
-- Verify `.env` file has correct credentials
-- Test with: `aws sts get-caller-identity`
-- Ensure IAM user has required permissions
+#### "Network error" or "404: Not Found API"
 
-**Error: Docker Desktop not running**
-- Start Docker Desktop application
-- Or use manual setup instead
+**Causes:**
+- Voice Bot not running on port 7860
+- Browser Agent not started before Voice Bot
+- Incorrect API URL configuration
 
-**Error: Service connection failed**
-- Verify Task Queue Service is running: `curl http://localhost:7862/api/health`
-- Check `TASK_QUEUE_SERVICE_URL` environment variable is set correctly
+**Solution:**
+```bash
+# Check services are running
+curl http://localhost:7863/api/health  # Browser Agent
+curl http://localhost:7860              # Voice Bot
 
-**Error: Browser automation timeout**
-- Check form URLs are accessible
-- Verify Playwright browsers are installed
-- Review browser automation logs for details
+# Restart in correct order
+./scripts/stop.sh
+./scripts/start-dev.sh
+```
 
-## Security Considerations
+#### "WebRTC connection timeout"
+
+**Cause:** UDP ports not open for WebRTC media
+
+**Solution:**
+```bash
+# For remote access, ensure security group allows:
+# - UDP 3478 (STUN)
+# - UDP 49152-65535 (WebRTC media)
+
+# Check frontend WebSocket in browser DevTools
+```
+
+#### "Address already in use"
+
+**Solution:**
+```bash
+# Kill processes on ports
+lsof -ti:7860 | xargs kill -9
+lsof -ti:7863 | xargs kill -9
+lsof -ti:5173 | xargs kill -9
+
+# Or use stop script
+./scripts/stop.sh
+```
+
+#### Browser Automation Fails
+
+**Solutions:**
+```bash
+# Verify OpenAI API key
+echo $OPENAI_API_KEY
+
+# Check Playwright installation
+playwright install chromium
+
+# Review logs
+tail -f logs/browser_agent.log
+```
+
+### Debug Checklist
+
+- [ ] Virtual environment activated
+- [ ] All dependencies installed (`pip list`)
+- [ ] `.env` file configured with valid credentials
+- [ ] Playwright browsers installed
+- [ ] Services started in correct order
+- [ ] Ports 5173, 7860, 7863 available
+- [ ] AWS credentials valid (`aws sts get-caller-identity`)
+- [ ] OpenAI API key valid
+- [ ] Network connectivity to AWS/OpenAI
+
+---
+
+## Security
+
+### Best Practices
 
 1. **Never commit `.env` file** to version control
-2. **Rotate API keys** regularly (every 3-6 months)
-3. **Use IAM roles** in production (instead of access keys when possible)
-4. **Enable MFA** on AWS and OpenAI accounts
-5. **Set usage limits** on OpenAI API keys
-6. **Monitor costs** via AWS Cost Explorer and OpenAI usage dashboard
+2. **Rotate credentials regularly** (every 90 days)
+3. **Use IAM roles** in production (not access keys)
+4. **Enable MFA** on all AWS and API accounts
+5. **Set API usage limits** to prevent cost overruns
+6. **Monitor API usage** via CloudWatch and OpenAI dashboard
+7. **Implement rate limiting** for production endpoints
+8. **Validate all inputs** before processing
+9. **Mask PII** in logs and transcripts
 
-## Cost Estimation
+### Security Features
 
-Approximate monthly costs for moderate usage:
+- **PII Masking**: Automatic redaction of sensitive data (`src/security/pii_masking.py`)
+- **Rate Limiting**: Request throttling (`src/security/rate_limiter.py`)
+- **Input Validation**: Sanitization of user inputs
+- **Authentication**: AWS Cognito integration
+- **Session Security**: Encrypted session storage in DynamoDB
+- **HTTPS**: TLS encryption for all communications (production)
 
-- **AWS Transcribe**: ~$0.024 per minute of audio
-- **AWS Bedrock (Claude Sonnet 4)**: ~$0.003 per 1K input tokens
-- **OpenAI TTS**: $15 per 1M characters
-- **browser-use (GPT-4)**: ~$0.01-0.03 per task
+### Cost Management
 
-**Estimated monthly cost**: $50-120 for moderate usage (100 conversations/day, 100 tasks/day)
+**Estimated Monthly Costs** (moderate usage):
+
+| Service | Unit Cost | Monthly Estimate |
+|---------|-----------|------------------|
+| AWS Transcribe | $0.024/min | $20-40 |
+| AWS Bedrock (Claude) | $0.003/1K tokens | $15-30 |
+| ElevenLabs TTS | $15/1M chars | $10-20 |
+| OpenAI GPT-4 | $0.01-0.03/task | $30-60 |
+| **Total** | - | **$75-150** |
+
+**Cost Optimization:**
+- Enable LLM response caching (`src/cost/llm_cache.py`)
+- Set API usage alerts in AWS Billing
+- Monitor costs via CloudWatch dashboards
+- Use reserved capacity for predictable workloads
+
+---
 
 ## License
 
-[Specify license here]
+Copyright © 2025 VPBank Voice Agent Team
 
-## Contributing
+This project is proprietary software developed for VPBank Tech Hack 2025.
 
-[Contributing guidelines if applicable]
+---
 
 ## Support
 
-For issues and questions, please open an issue in the repository.
+For questions, issues, or feature requests:
+
+- **Issues**: [GitHub Issues](https://github.com/pipekat-lodikat/speak-to-input/issues)
+- **Documentation**: See `/docs` directory
+- **Technical Details**: See `CLAUDE.md`
+
+---
+
+**Built with ❤️ for VPBank Tech Hack 2025**

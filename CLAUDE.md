@@ -13,7 +13,7 @@ The system follows a **microservices architecture** with three independent servi
 1. **Voice Bot Service** (Port 7860)
    - Entry point: `main_voice.py`
    - Handles WebRTC audio streaming (bidirectional)
-   - Pipecat Whisper STT Service for speech-to-text (Vietnamese language)
+   - PhoWhisper STT for speech-to-text (Vietnamese language)
    - AWS Bedrock Claude Sonnet 4 for conversational AI
    - ElevenLabs for Vietnamese TTS
    - Sends HTTP POST requests to Browser Agent Service
@@ -84,7 +84,7 @@ Required variables:
 - `AWS_SECRET_ACCESS_KEY` - AWS secret key for Bedrock
 - `AWS_REGION` - Default: us-east-1
 - `BEDROCK_MODEL_ID` - Claude model: us.anthropic.claude-sonnet-4-20250514-v1:0
-- `OPENAI_API_KEY` - For Pipecat Whisper STT Service and GPT-4 browser automation
+- `OPENAI_API_KEY` - For PhoWhisper STT and GPT-4 browser automation
 - `ELEVENLABS_API_KEY` - For Vietnamese TTS
 - `ELEVENLABS_VOICE_ID` - Voice model ID
 - `BROWSER_SERVICE_URL` - Default: http://localhost:7863
@@ -145,7 +145,7 @@ docker-compose down
 
 The voice bot uses Pipecat AI framework with this pipeline:
 - SmallWebRTC Transport for bidirectional audio
-- Pipecat Whisper STT Service (Vietnamese language, OpenAI Whisper backend)
+- PhoWhisper STT (Vietnamese language)
 - AWS Bedrock Claude Sonnet 4 LLM
 - ElevenLabs TTS (Vietnamese voice)
 - Silero VAD for voice activity detection
@@ -339,13 +339,13 @@ lsof -ti:5173 | xargs kill -9
 - Python 3.11
 - Pipecat AI 0.0.91 (WebRTC/Voice framework)
 - aiohttp 3.12.15 (HTTP server)
-- Pipecat Whisper STT Service (speech-to-text for Vietnamese, OpenAI backend)
+- PhoWhisper STT (speech-to-text for Vietnamese)
 - AWS Bedrock Claude Sonnet 4 (LLM)
 - ElevenLabs (TTS)
 - browser-use 0.9.5 (AI browser automation)
 - Playwright 1.55.0 (browser control)
 - OpenAI GPT-4 (browser automation planning)
-- LangChain + LangGraph (multi-agent)
+- LangChain + LangGraph (multi-agent) - [Supervisor Pattern](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/)
 
 **Frontend:**
 - React 19.1.1

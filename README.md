@@ -10,7 +10,7 @@
 
 **Production-ready voice-powered banking form automation using AI-driven conversational interface and intelligent browser automation.**
 
-> A microservices-based system that enables users to fill Vietnamese banking forms through natural speech, leveraging WebRTC, Pipecat Whisper STT, Claude Sonnet 4, and autonomous browser agents.
+> A microservices-based system that enables users to fill Vietnamese banking forms through natural speech, leveraging WebRTC, PhoWhisper STT, Claude Sonnet 4, and autonomous browser agents.
 
 ---
 
@@ -56,7 +56,7 @@ VPBank Voice Agent is an enterprise-grade voice automation platform designed for
 ## Key Features
 
 ### Voice Interface
-- **Real-time Speech Recognition**: Vietnamese language support via Pipecat Whisper STT Service
+- **Real-time Speech Recognition**: Vietnamese language support via PhoWhisper STT
 - **Natural Language Understanding**: Powered by Claude Sonnet 4 (AWS Bedrock)
 - **Conversational AI**: Context-aware dialogue management
 - **Voice Synthesis**: High-quality Vietnamese TTS using ElevenLabs
@@ -102,8 +102,8 @@ The system follows a **microservices architecture** with three independent servi
 │                      Port 7860                                   │
 │                                                                   │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │Whisper STT   │  │Claude Sonnet4│  │ ElevenLabs   │          │
-│  │  (Pipecat)   │  │     (LLM)    │  │     (TTS)    │          │
+│  │ PhoWhisper   │  │Claude Sonnet4│  │ ElevenLabs   │          │
+│  │    (STT)     │  │     (LLM)    │  │     (TTS)    │          │
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 │                                                                   │
 │  • Audio Processing Pipeline (Pipecat AI)                        │
@@ -133,7 +133,7 @@ The system follows a **microservices architecture** with three independent servi
 1. **User → Frontend**: User initiates voice conversation via web browser
 2. **Frontend → Voice Bot**: WebRTC audio stream + WebSocket for transcripts
 3. **Voice Bot Processing**:
-   - Pipecat Whisper STT Service converts speech to text (Vietnamese)
+   - PhoWhisper STT converts speech to text (Vietnamese)
    - Claude Sonnet 4 understands intent and extracts data
    - ElevenLabs synthesizes Vietnamese voice responses
 4. **Voice Bot → Browser Agent**: HTTP POST with extracted form data
@@ -142,6 +142,25 @@ The system follows a **microservices architecture** with three independent servi
    - Playwright executes automation
    - Returns completion status
 6. **Voice Bot → User**: Voice confirmation of task completion
+
+### Multi-Agent System
+
+The system implements a **Supervisor Pattern** for multi-agent orchestration using LangGraph, enabling intelligent conversation flow and form filling coordination.
+
+**Architecture:**
+- **Supervisor Agent**: Orchestrates conversation flow and delegates tasks to specialist agents
+- **Specialist Agents**: Extract and validate specific data fields from user speech
+- **Browser Executor**: Executes automated form filling tasks using AI-powered browser automation
+
+**Key Features:**
+- **Incremental Form Filling**: Users can fill forms field-by-field through natural conversation
+- **Wizard Navigation**: Supports multi-step forms with automatic progression
+- **Session Management**: Maintains browser sessions across multiple interactions
+- **Error Recovery**: Handles validation errors and retries failed operations
+
+**Reference:**
+- Based on LangGraph [Supervisor Pattern](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/)
+- Implementation: `src/multi_agent/graph/builder.py`
 
 ---
 
@@ -301,7 +320,7 @@ AWS_REGION=us-east-1
 # AWS Bedrock Model
 BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
 
-# OpenAI API Key (for Pipecat Whisper STT Service and GPT-4 browser automation)
+# OpenAI API Key (for PhoWhisper STT and GPT-4 browser automation)
 OPENAI_API_KEY=your_openai_api_key
 
 # ElevenLabs TTS (Vietnamese Voice)
@@ -396,7 +415,7 @@ aws dynamodb create-table \
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key for Bedrock | Yes | - |
 | `AWS_REGION` | AWS region for Bedrock | Yes | `us-east-1` |
 | `BEDROCK_MODEL_ID` | Claude model identifier | Yes | `us.anthropic.claude-sonnet-4-20250514-v1:0` |
-| `OPENAI_API_KEY` | OpenAI API key for Pipecat Whisper STT Service & GPT-4 browser automation | Yes | - |
+| `OPENAI_API_KEY` | OpenAI API key for PhoWhisper STT & GPT-4 browser automation | Yes | - |
 | `ELEVENLABS_API_KEY` | ElevenLabs API key | Yes | - |
 | `ELEVENLABS_VOICE_ID` | Vietnamese voice ID | Yes | - |
 | `COGNITO_USER_POOL_ID` | AWS Cognito user pool | Yes | - |
@@ -748,14 +767,14 @@ speak-to-input/
 |------------|---------|---------|
 | **Python** | 3.11 | Core runtime |
 | **Pipecat AI** | 0.0.91 | WebRTC/Voice framework |
-| **Pipecat Whisper STT** | - | Speech-to-text service (Vietnamese) |
+| **PhoWhisper STT** | - | Speech-to-text service (Vietnamese) |
 | **AWS Bedrock** | - | Claude Sonnet 4 LLM |
 | **ElevenLabs** | - | Text-to-speech (Vietnamese) |
 | **browser-use** | 0.9.5 | AI browser automation |
 | **Playwright** | 1.55.0 | Browser control |
 | **OpenAI GPT-4** | - | Browser automation planning |
 | **LangChain** | - | LLM orchestration |
-| **LangGraph** | - | Multi-agent workflows |
+| **LangGraph** | - | Multi-agent workflows ([Supervisor Pattern](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/)) |
 | **aiohttp** | 3.12.15 | Async HTTP server |
 
 ### Frontend
@@ -770,7 +789,7 @@ speak-to-input/
 
 ### OpenAI Services (via Pipecat)
 
-- **Whisper STT Service**: Real-time speech-to-text (Pipecat wrapper)
+- **PhoWhisper STT**: Real-time speech-to-text (Vietnamese optimized)
 - **GPT-4**: Browser automation planning
 
 ### AWS Services
@@ -983,7 +1002,7 @@ tail -f logs/browser_agent.log
 
 | Service | Unit Cost | Monthly Estimate |
 |---------|-----------|------------------|
-| Pipecat Whisper STT (OpenAI) | $0.006/min | $5-10 |
+| PhoWhisper STT | $0.006/min | $5-10 |
 | AWS Bedrock (Claude) | $0.003/1K tokens | $15-30 |
 | ElevenLabs TTS | $15/1M chars | $10-20 |
 | OpenAI GPT-4 | $0.01-0.03/task | $30-60 |
@@ -1077,7 +1096,7 @@ This project was developed for **VPBank Tech Hack 2025** and builds upon several
 ### AI Services
 
 - [Anthropic Claude](https://www.anthropic.com/) - Natural language understanding
-- [Pipecat Whisper STT](https://www.pipecat.ai/) - Speech-to-text service (Vietnamese, OpenAI Whisper backend)
+- [PhoWhisper](https://github.com/VinAIResearch/PhoWhisper) - Vietnamese speech-to-text model
 - [OpenAI GPT-4](https://openai.com/) - Browser automation planning
 - [ElevenLabs](https://elevenlabs.io/) - Text-to-speech (Vietnamese)
 

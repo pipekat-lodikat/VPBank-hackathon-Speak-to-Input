@@ -13,29 +13,8 @@ from aiohttp import web
 from aiohttp.web import RouteTableDef
 from dotenv import load_dotenv
 from loguru import logger
-import sys
-import warnings
 
-# Suppress ONNX Runtime GPU warning (CPU-only system)
-os.environ['ORT_LOGGING_LEVEL'] = '3'  # ERROR level only
-os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Disable CUDA
-os.environ['OMP_NUM_THREADS'] = '1'  # Limit OpenMP threads
-
-# Suppress stderr warnings temporarily for ONNX imports
-import contextlib
-@contextlib.contextmanager
-def suppress_stderr():
-    with open(os.devnull, 'w') as devnull:
-        old_stderr = sys.stderr
-        sys.stderr = devnull
-        try:
-            yield
-        finally:
-            sys.stderr = old_stderr
-
-# Import with suppressed stderr to avoid GPU discovery warning
-with suppress_stderr():
-    from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
+from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
@@ -44,7 +23,7 @@ from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, Ice
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.aws.stt import AWSTranscribeSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.services.elevenlabs import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.transcript_processor import TranscriptProcessor
@@ -52,13 +31,6 @@ from pipecat.processors.transcript_processor import TranscriptProcessor
 load_dotenv(override=True)
 
 from src.dynamodb_service import DynamoDBService
-from src.dynamic_vad import vad_config, ConversationContext
-from src.security.pii_masking import mask_pii
-from src.security.rate_limiter import rate_limiter
-from src.monitoring.metrics import (
-    get_metrics, webrtc_connections_total, webrtc_active_connections,
-    sessions_total, auth_requests_total, track_operation
-)
 
 # Browser Agent Service URL
 BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
@@ -307,35 +279,50 @@ async def run_bot(webrtc_connection, ws_connections):
     dynamodb_service.save_session(transcript_data)
     logger.info(f"💾 Created session {session_id} in DynamoDB")
     
-    # Transcript handler
+    # Transcript handler - Capture cả user và assistant messages
     @transcript.event_handler("on_transcript_update")
     async def handle_transcript_update(processor, frame):
-        """Handle transcript updates"""
+        """Handle transcript updates - xử lý cả user và assistant messages"""
         try:
+            logger.debug(f"📋 Transcript update: {len(frame.messages)} messages")
+            
             for message in frame.messages:
+                # Log để debug
+                logger.info(f"📝 Transcript message: role={message.role}, content={message.content[:100] if message.content else 'None'}...")
+                
                 msg_dict = {
-                    "role": message.role,
+                    "role": message.role,  # Có thể là "user" hoặc "assistant"
                     "content": message.content,
                     "timestamp": message.timestamp or datetime.now().isoformat()
                 }
-                transcript_data["messages"].append(msg_dict)
-
-                # Update VAD context based on message
-                vad_config.update_context(message.content, message.role)
-
-                # Save to DynamoDB (async update)
-                dynamodb_service.save_session(transcript_data)
-
-                # Send to WebSocket clients
-                for ws in list(ws_connections):
-                    try:
-                        await ws.send_json({
-                            "type": "transcript",
-                            "message": msg_dict
-                        })
-                    except Exception as e:
-                        logger.warning(f"Failed to send transcript: {e}")
-                        ws_connections.discard(ws)
+                
+                # Kiểm tra duplicate
+                is_duplicate = any(
+                    m.get("role") == msg_dict["role"] and 
+                    m.get("content") == msg_dict["content"]
+                    for m in transcript_data["messages"]
+                )
+                
+                if not is_duplicate:
+                    transcript_data["messages"].append(msg_dict)
+                    
+                    # Save to DynamoDB (async update)
+                    dynamodb_service.save_session(transcript_data)
+                    
+                    # Send to WebSocket clients - GỬI TẤT CẢ MESSAGES (user và assistant)
+                    for ws in list(ws_connections):
+                        try:
+                            await ws.send_json({
+                                "type": "transcript",
+                                "message": msg_dict
+                            })
+                            if message.role == "assistant":
+                                logger.info(f"✅ Sent assistant message to WebSocket: {msg_dict['content'][:50]}...")
+                        except Exception as e:
+                            logger.warning(f"Failed to send transcript: {e}")
+                            ws_connections.discard(ws)
+                else:
+                    logger.debug(f"⚠️ Duplicate message skipped: {message.role}")
                 
                 # Push ngay lập tức khi user nói về form filling (incremental mode)
                 # Mỗi user message có thể là: tên, cccd, sdt, số tiền, etc. → push ngay để điền field đó
@@ -387,7 +374,7 @@ async def run_bot(webrtc_connection, ws_connections):
                     
                     logger.info(f"📤 Pushing request to Browser Service immediately...")
                     logger.info(f"   Full context ({len(all_messages)} messages) sent to Browser Service")
-                    logger.info(f"   Latest user message (masked): {mask_pii(message.content[:100])}...")
+                    logger.info(f"   Latest user message: {message.content[:100]}...")
                     logger.info(f"   Session ID: {session_id}")
                     
                     # Set processing flag (cho phép nhiều push - incremental mode)
@@ -403,19 +390,23 @@ async def run_bot(webrtc_connection, ws_connections):
                     except Exception as e:
                         logger.error(f"❌ Failed to create async task: {e}", exc_info=True)
                     
-                # Log with PII masking
-                logger.info(f"📝 [{message.role}]: {mask_pii(message.content)}")
+                logger.info(f"📝 [{message.role}]: {message.content}")
         except Exception as e:
             logger.error(f"Error handling transcript: {e}")
 
-    # Create WebRTC transport with dynamic VAD
-    initial_vad_params = vad_config.get_vad_params()
+    # Create WebRTC transport
     transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
         params=TransportParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(params=initial_vad_params),
+            vad_analyzer=SileroVADAnalyzer(
+                params=VADParams(
+                    stop_secs=5.0,  # Increase to 5 seconds to allow longer pauses
+                    start_secs=0.1,
+                    min_volume=0.6
+                )
+            ),
         ),
     )
 
@@ -635,26 +626,32 @@ async def run_bot(webrtc_connection, ws_connections):
     context_aggregator = llm.create_context_aggregator(context)
 
     # Pipeline (standard pipeline without filter)
+    # QUAN TRỌNG: transcript.assistant() phải được đặt SAU transport.output() theo tài liệu Pipecat
     pipeline = Pipeline([
         transport.input(),
         stt,
-        transcript.user(),
+        transcript.user(),              # Capture user messages từ STT
         context_aggregator.user(),
         llm,
         tts,
         transport.output(),
-        transcript.assistant(),
+        transcript.assistant(),        # Capture assistant messages từ LLM (sau transport.output theo tài liệu)
         context_aggregator.assistant(),
     ])
 
-    # Create task with dynamic VAD
-    task_vad_params = vad_config.get_vad_params()
+    # Create task
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
             allow_interruptions=True,
             enable_vad=True,
-            vad_analyzer=SileroVADAnalyzer(params=task_vad_params),
+            vad_analyzer=SileroVADAnalyzer(
+                params=VADParams(
+                    stop_secs=5.0,  # Increase to 5 seconds to allow longer pauses
+                    start_secs=0.1,
+                    min_volume=0.6
+                )
+            ),
         ),
     )
 
@@ -673,16 +670,6 @@ async def run_bot(webrtc_connection, ws_connections):
 async def login_handler(request):
     """Handle Cognito login"""
     try:
-        # Rate limiting for login attempts (prevent brute force)
-        client_ip = request.headers.get('X-Forwarded-For', request.remote)
-        if not rate_limiter.check_limit("auth_login", client_ip):
-            wait_time = rate_limiter.get_wait_time("auth_login", client_ip)
-            logger.warning(f"🚨 Login rate limit exceeded from {client_ip}")
-            return web.json_response(
-                {"success": False, "error": f"Too many login attempts. Please wait {wait_time:.0f} seconds."},
-                status=429,
-            )
-
         data = await request.json()
         username = data.get("username")
         password = data.get("password")
@@ -693,7 +680,6 @@ async def login_handler(request):
                 status=400,
             )
 
-        logger.info(f"🔐 Login attempt from IP: {client_ip}, username: {mask_pii(username)}")
         result = await auth_service.login(username, password)
         status = 200 if result["success"] else 401
         return web.json_response(result, status=status)
@@ -831,37 +817,43 @@ async def auth_options(request):
 @routes.post("/offer")
 async def handle_offer(request):
     """Handle WebRTC offer"""
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+    }
+    
     try:
-        # Rate limiting - get client IP
-        client_ip = request.headers.get('X-Forwarded-For', request.remote)
-        if not rate_limiter.check_limit("webrtc_offer", client_ip):
-            wait_time = rate_limiter.get_wait_time("webrtc_offer", client_ip)
-            logger.warning(f"🚨 Rate limit exceeded for WebRTC offer from {client_ip}")
+        logger.info("📥 Received WebRTC offer request")
+        logger.debug(f"   Request headers: {dict(request.headers)}")
+        logger.debug(f"   Request method: {request.method}")
+        
+        # Parse request body
+        try:
+            body = await request.json()
+            logger.debug(f"   Request body keys: {list(body.keys())}")
+        except Exception as e:
+            logger.error(f"❌ Failed to parse JSON: {e}")
             return web.json_response(
-                {"error": f"Rate limit exceeded. Please wait {wait_time:.1f} seconds."},
-                status=429
-            )
-
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        }
-
-        body = await request.json()
-        offer_sdp = body.get("sdp")
-        offer_type = body.get("type")
-
-        if not offer_sdp or offer_type != "offer":
-            return web.json_response(
-                {"error": "Invalid offer"},
+                {"error": "Invalid JSON in request body"},
                 status=400,
                 headers=headers
             )
-
-        # Reset VAD context for new conversation
-        vad_config.reset()
-
+        
+        offer_sdp = body.get("sdp")
+        offer_type = body.get("type")
+        
+        logger.debug(f"   Offer type: {offer_type}")
+        logger.debug(f"   SDP length: {len(offer_sdp) if offer_sdp else 0}")
+        
+        if not offer_sdp or offer_type != "offer":
+            logger.warning(f"⚠️ Invalid offer: type={offer_type}, has_sdp={bool(offer_sdp)}")
+            return web.json_response(
+                {"error": "Invalid offer: missing sdp or type is not 'offer'"},
+                status=400,
+                headers=headers
+            )
+        
         # Create WebRTC connection
         logger.info("🔧 Creating WebRTC connection...")
         webrtc_connection = SmallWebRTCConnection(ice_servers=ice_servers)
@@ -876,20 +868,21 @@ async def handle_offer(request):
         # Get answer from connection (NEW API)
         logger.info("🔧 Getting answer from WebRTC connection...")
         answer = webrtc_connection.get_answer()
-        logger.info(f"✅ Got answer")
+        logger.info(f"✅ Got answer: type={answer.get('type')}, sdp_length={len(answer.get('sdp', ''))}")
         
         # Start bot pipeline
         logger.info("🚀 Starting bot pipeline...")
         asyncio.create_task(run_bot(webrtc_connection, ws_connections))
         
-        logger.info("✅ Bot pipeline started successfully")
+        logger.info("✅ Bot pipeline started successfully, returning answer to client")
         return web.json_response(answer, headers=headers)
         
     except Exception as e:
-        logger.error(f"Error handling offer: {e}")
+        logger.error(f"❌ Error handling offer: {e}", exc_info=True)
         return web.json_response(
-            {"error": str(e)},
-            status=500
+            {"error": str(e), "type": "WebRTCConnectionError"},
+            status=500,
+            headers=headers
         )
 
 
@@ -969,11 +962,10 @@ async def websocket_handler(request):
     """WebSocket for transcript streaming"""
     ws = web.WebSocketResponse()
     await ws.prepare(request)
-
+    
     ws_connections.add(ws)
-    webrtc_active_connections.inc()
     logger.info(f"📡 WebSocket connected. Total connections: {len(ws_connections)}")
-
+    
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
@@ -982,36 +974,9 @@ async def websocket_handler(request):
         logger.error(f"WebSocket error: {e}")
     finally:
         ws_connections.discard(ws)
-        webrtc_active_connections.dec()
         logger.info(f"📡 WebSocket disconnected. Remaining: {len(ws_connections)}")
-
+    
     return ws
-
-
-@routes.get("/health")
-async def health_handler(request):
-    """Health check endpoint for ALB"""
-    return web.Response(
-        text='{"status": "healthy"}',
-        content_type='application/json',
-        status=200,
-        headers={
-            'Access-Control-Allow-Origin': '*',
-        }
-    )
-
-
-@routes.get("/metrics")
-async def metrics_handler(request):
-    """Prometheus metrics endpoint"""
-    metrics_data = get_metrics()
-    return web.Response(
-        body=metrics_data,
-        content_type='text/plain; version=0.0.4',
-        headers={
-            'Access-Control-Allow-Origin': '*',
-        }
-    )
 
 
 @routes.post("/api/auth/login")

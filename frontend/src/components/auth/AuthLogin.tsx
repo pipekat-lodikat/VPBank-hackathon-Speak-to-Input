@@ -7,7 +7,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { API_URL } from '../../config';
+import { API_ENDPOINTS } from '../../config/api';
 
 export type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -62,7 +62,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
   const formatPhoneNumber = (phone: string): string => {
     if (!phone) return phone;
-    let cleaned = phone.replace(/[\s\-()]/g, '');
+    let cleaned = phone.replace(/[\s\-\(\)]/g, '');
     if (cleaned.startsWith('+84')) {
       cleaned = '0' + cleaned.substring(3);
     }
@@ -75,7 +75,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      const response = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -118,7 +118,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/register`, {
+      const response = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -162,7 +162,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
     try {
       const response = await fetch(
-        `${API_URL}/api/auth/forgot-password`,
+        API_ENDPOINTS.AUTH.FORGOT_PASSWORD,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -207,7 +207,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
     try {
       const response = await fetch(
-        `${API_URL}/api/auth/reset-password`,
+        API_ENDPOINTS.AUTH.RESET_PASSWORD,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Clock, MessageSquare, ChevronRight, X, History } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
+import { API_ENDPOINTS } from '../config/api';
 
 interface Session {
   session_id: string;
@@ -35,7 +36,7 @@ export function SessionHistory({ isOpen, onClose }: SessionHistoryProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:7860/api/sessions?limit=50');
+      const response = await fetch(`${API_ENDPOINTS.SESSIONS.LIST}?limit=50`);
       const data = await response.json();
       if (data.success) {
         setSessions(data.sessions || []);

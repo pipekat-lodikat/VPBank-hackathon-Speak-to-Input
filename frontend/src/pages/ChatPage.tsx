@@ -15,7 +15,7 @@ import {
 import Header from "../components/Header";
 import VPBankWelcome from "../components/VPBankWelcome";
 import { useTranscripts } from "../hooks/useTranscripts";
-import { API_URL, WS_URL } from "../config";
+import { API_ENDPOINTS, WS_URL, BROWSER_SERVICE_URL } from "../config/api";
 
 type TranscriptMessage = {
   role: string;
@@ -43,26 +43,7 @@ class WebRTCClient {
 
   constructor() {
     this.pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443?transport=tcp",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-      ],
-      iceCandidatePoolSize: 10,
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
     this.pc.onconnectionstatechange = () => {
@@ -115,6 +96,9 @@ class WebRTCClient {
       const offer = await this.pc!.createOffer();
       await this.pc!.setLocalDescription(offer);
 
+      console.log("🔗 Connecting to WebRTC endpoint:", options.endpoint);
+      console.log("📤 Sending WebRTC offer...");
+      
       const response = await fetch(options.endpoint, {
         method: "POST",
         headers: {
@@ -126,13 +110,18 @@ class WebRTCClient {
         }),
       });
 
+      console.log("📥 Response status:", response.status, response.statusText);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Server error response:", errorText);
         throw new Error(
-          `Server error: ${response.status} ${response.statusText}`
+          `Server error: ${response.status} ${response.statusText}. ${errorText}`
         );
       }
 
       const answer = await response.json();
+      console.log("✅ Received WebRTC answer:", answer.type);
 
       await this.pc!.setRemoteDescription(answer);
 
@@ -182,21 +171,14 @@ class WebRTCClient {
   }
 
   toggleMute(): boolean {
-    if (!this.localStream) {
-      console.warn("Cannot toggle mute: no local stream");
-      return false;
-    }
+    if (!this.localStream) return false;
 
     const audioTrack = this.localStream.getAudioTracks()[0];
-    if (!audioTrack) {
-      console.warn("Cannot toggle mute: no audio track found");
-      return false;
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      return !audioTrack.enabled;
     }
-
-    audioTrack.enabled = !audioTrack.enabled;
-    const isMuted = !audioTrack.enabled;
-    console.log(`Microphone ${isMuted ? "muted" : "unmuted"}`);
-    return isMuted;
+    return false;
   }
 
   disconnect() {
@@ -365,7 +347,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     const fetchUserInfo = async () => {
       if (!accessToken) return;
       try {
-        const res = await fetch(`${API_URL}/api/auth/verify`, {
+        const res = await fetch(API_ENDPOINTS.AUTH.VERIFY, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: accessToken }),
@@ -403,7 +385,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         return;
       }
 
-      const ws = new WebSocket(`${WS_URL}/ws`);
+      const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         console.log("WebSocket connected for transcript streaming");
@@ -413,6 +395,13 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "transcript" && data.message) {
+            // Debug log để kiểm tra message nhận được
+            console.log("📨 Received transcript message:", {
+              role: data.message.role,
+              content: data.message.content?.substring(0, 50),
+              fullMessage: data.message
+            });
+            
             setTranscript((prev) => {
               const isDuplicate = prev.some(
                 (msg) =>
@@ -421,6 +410,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
               );
 
               if (isDuplicate) {
+                console.log("⚠️ Duplicate message detected, skipping");
                 return prev;
               }
 
@@ -441,8 +431,11 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                 data.message as TranscriptMessage,
               ];
 
+              console.log("✅ Updated transcript, total messages:", newTranscript.length, "Roles:", newTranscript.map(m => m.role));
               return newTranscript;
             });
+          } else {
+            console.log("📬 Received non-transcript message:", data.type);
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -472,6 +465,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         wsRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -528,14 +522,14 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     let timer: ReturnType<typeof setInterval> | null = null;
     const fetchLive = async () => {
       try {
-        const res = await fetch("http://localhost:7863/api/live");
+        const res = await fetch(API_ENDPOINTS.BROWSER.LIVE);
         if (!res.ok) return;
         const data = await res.json();
         if (data && typeof data.live_url === "string") {
           const url = data.live_url || null;
           setLiveUrl(url);
         }
-      } catch {
+      } catch (err) {
         // Silently fail if browser service is not available
       }
     };
@@ -620,7 +614,6 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       // Disconnect - session will be saved to DynamoDB by backend
       client.disconnect();
       setIsConnected(false);
-      setIsMuted(false); // Reset mute state on disconnect
       setError(null);
       // Keep transcript - don't clear it on disconnect
       // User can continue the same conversation by reconnecting
@@ -638,9 +631,8 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     try {
       setIsConnecting(true);
       setError(null);
-      setIsMuted(false); // Reset mute state before connecting
       await client.startBotAndConnect({
-        endpoint: `${API_URL}/offer`,
+        endpoint: API_ENDPOINTS.WEBRTC_OFFER,
         audioInput: selectedInputDevice || undefined,
         audioOutput: selectedOutputDevice || undefined,
       });
@@ -655,7 +647,6 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   };
 
   const handleToggleMute = () => {
-    if (!isConnected) return; // Prevent toggling when not connected
     const muted = client.toggleMute();
     setIsMuted(muted);
   };
@@ -1240,12 +1231,12 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                       <div className="inline-flex items-center gap-3 control-bar rounded-2xl px-3 py-2">
                         <button
                           onClick={handleToggleMute}
-                          disabled={!isConnected}
+                          disabled={!isConnected && !client.connected}
                           className={`w-10 h-10 grid place-items-center rounded-full border transition-colors ${
                             isMuted
                               ? "bg-rose-600 text-white border-rose-600"
                               : "bg-gray-800 text-white border-gray-800"
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          } disabled:opacity-50`}
                           title={isMuted ? "Unmute" : "Mute"}
                         >
                           {isMuted ? (
@@ -1324,8 +1315,18 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                               </p>
                             </div>
                           ) : (
-                            transcript.map((message, index) =>
-                              message.role === "user" ? (
+                            transcript.map((message, index) => {
+                              // Debug log để kiểm tra message được render
+                              if (message.role !== "user") {
+                                console.log("🤖 Rendering bot message:", {
+                                  index,
+                                  role: message.role,
+                                  content: message.content?.substring(0, 50),
+                                  hasContent: !!message.content
+                                });
+                              }
+                              
+                              return message.role === "user" ? (
                                 <div key={index} className="flex justify-end">
                                   <div className="max-w-[85%] bg-emerald-50 text-emerald-900 rounded-lg rounded-tr-sm px-2 py-1.5 shadow-sm whitespace-pre-wrap text-xs">
                                     {formatMessageLines(message.content).map(
@@ -1344,23 +1345,28 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                                 <div
                                   key={index}
                                   className="flex items-start gap-1.5"
+                                  style={{ display: 'flex' }} // Đảm bảo hiển thị
                                 >
                                   <div className="w-5 h-5 rounded-full grid place-items-center bg-gradient-to-br from-emerald-500 to-cyan-400 text-white shadow-sm flex-shrink-0">
                                     <Bot className="w-3 h-3" />
                                   </div>
                                   <div className="max-w-[80%] bg-white text-gray-900 rounded-lg rounded-tl-sm px-2 py-1.5 shadow-sm border border-gray-100 whitespace-pre-wrap text-xs">
-                                    {formatMessageLines(
-                                      message.content,
-                                      isLoadedFromFile
-                                    ).map((line, i) => (
-                                      <div key={i} className="mb-0.5 last:mb-0">
-                                        {line}
-                                      </div>
-                                    ))}
+                                    {message.content ? (
+                                      formatMessageLines(
+                                        message.content,
+                                        isLoadedFromFile
+                                      ).map((line, i) => (
+                                        <div key={i} className="mb-0.5 last:mb-0">
+                                          {line}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="text-gray-400 italic">Empty message</div>
+                                    )}
                                   </div>
                                 </div>
-                              )
-                            )
+                              );
+                            })
                           )}
                         </div>
                       )}

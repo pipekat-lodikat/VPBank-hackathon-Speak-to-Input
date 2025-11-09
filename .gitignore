@@ -367,3 +367,4 @@ infrastructure/terraform/.terraform.tfstate.lock.info
 
 # Duplicate env file (keep only .env and .env.example)
 env
+deploy

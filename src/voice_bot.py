@@ -26,7 +26,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, IceServer
 from pipecat.transports.base_transport import TransportParams
-from pipecat.services.openai.stt import WhisperSTTService
+from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language

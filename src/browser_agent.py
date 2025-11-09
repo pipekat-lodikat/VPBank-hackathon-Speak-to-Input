@@ -26,6 +26,11 @@ Speed optimization instructions:
 - Be extremely concise and direct in your responses
 - Get to the goal as quickly as possible
 - Use multi-action sequences whenever possible to reduce steps
+
+CRITICAL SUBMISSION RULE:
+- NEVER click submit/confirm/send buttons UNLESS the user explicitly requests it
+- Only fill forms and verify fields, then STOP
+- Submit ONLY when user message contains explicit keywords: 'submit', 'gửi', 'đăng ký', 'xác nhận', 'hoàn tất', 'nộp'
 """
 
 
@@ -249,7 +254,8 @@ class BrowserAgentHandler:
             session_data = session["session_data"]
             form_type = session_data.get("type", "loan")
             task = """
-            If a submit/send/register button exists, click it, confirm modal if needed, and wait for success. Otherwise stop after filling.
+            IMPORTANT: This is an EXPLICIT user request to submit the form.
+            Click the submit/send/register button, confirm any modal if needed, and wait for success message.
             Provide a short summary of fields filled and submit status.
             """
             agent.add_new_task(task)
@@ -271,8 +277,8 @@ class BrowserAgentHandler:
             1. Open {form_url}
             2. Fill the form with the following information:\n{fields_desc}
             3. Verify formats (phone 10 digits, valid email, DOB DD/MM/YYYY or similar)
-            4. If a submit button exists, click it; otherwise stop after filling.
-            5. Return a short summary of filled fields and submit status.
+            4. STOP after filling. DO NOT click submit button unless explicitly requested.
+            5. Return a short summary of filled fields.
             """
             agent = BrowserUseAgent(
                 task=task,
@@ -342,10 +348,13 @@ class BrowserAgentHandler:
                 "2) Fallback to placeholder text contains Vietnamese label.\n"
                 "3) As last resort, match by input/select name/id containing normalized keywords (e.g., name, phone, email, dob, amount, term).\n"
                 "4) Verify each field after filling (value or selection reflects the intended value).\n\n"
-                "STEP 3 - SUBMIT (if requested):\n"
-                "If the user instruction clearly asks to submit, click submit and confirm if needed; otherwise skip.\n\n"
+                "STEP 3 - SUBMIT CHECK:\n"
+                "⚠️ CRITICAL RULE: ONLY click submit if the USER INSTRUCTION contains explicit keywords requesting submission.\n"
+                "Examples of explicit submit requests: 'submit', 'gửi', 'đăng ký', 'xác nhận', 'hoàn tất', 'nộp'.\n"
+                "If the user instruction ONLY asks to fill fields WITHOUT these keywords, DO NOT CLICK SUBMIT.\n"
+                "Just STOP after filling and verifying.\n\n"
                 "STEP 4 - SUMMARIZE:\n"
-                "At the end, return ONLY a short plain text summary: fields filled and submit status.\n\n"
+                "At the end, return ONLY a short plain text summary: fields filled and whether form was submitted.\n\n"
                 "USER INSTRUCTION:\n"
                 f"{user_message}\n\n"
                 "IMPORTANT: Complete all steps in sequence. Do not stop after navigation. Fill the form fields based on the user instruction."

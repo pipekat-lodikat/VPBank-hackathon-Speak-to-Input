@@ -162,14 +162,21 @@ class WebRTCClient {
   }
 
   toggleMute(): boolean {
-    if (!this.localStream) return false;
+    if (!this.localStream) {
+      console.warn("Cannot toggle mute: no local stream");
+      return false;
+    }
 
     const audioTrack = this.localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      return !audioTrack.enabled;
+    if (!audioTrack) {
+      console.warn("Cannot toggle mute: no audio track found");
+      return false;
     }
-    return false;
+
+    audioTrack.enabled = !audioTrack.enabled;
+    const isMuted = !audioTrack.enabled;
+    console.log(`Microphone ${isMuted ? "muted" : "unmuted"}`);
+    return isMuted;
   }
 
   disconnect() {
@@ -594,6 +601,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       // Disconnect - session will be saved to DynamoDB by backend
       client.disconnect();
       setIsConnected(false);
+      setIsMuted(false); // Reset mute state on disconnect
       setError(null);
       // Keep transcript - don't clear it on disconnect
       // User can continue the same conversation by reconnecting
@@ -611,6 +619,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     try {
       setIsConnecting(true);
       setError(null);
+      setIsMuted(false); // Reset mute state before connecting
       await client.startBotAndConnect({
         endpoint: "http://localhost:7860/offer",
         audioInput: selectedInputDevice || undefined,
@@ -627,6 +636,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
   };
 
   const handleToggleMute = () => {
+    if (!isConnected) return; // Prevent toggling when not connected
     const muted = client.toggleMute();
     setIsMuted(muted);
   };
@@ -1211,12 +1221,12 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                       <div className="inline-flex items-center gap-3 control-bar rounded-2xl px-3 py-2">
                         <button
                           onClick={handleToggleMute}
-                          disabled={!isConnected && !client.connected}
+                          disabled={!isConnected}
                           className={`w-10 h-10 grid place-items-center rounded-full border transition-colors ${
                             isMuted
                               ? "bg-rose-600 text-white border-rose-600"
                               : "bg-gray-800 text-white border-gray-800"
-                          } disabled:opacity-50`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                           title={isMuted ? "Unmute" : "Mute"}
                         >
                           {isMuted ? (

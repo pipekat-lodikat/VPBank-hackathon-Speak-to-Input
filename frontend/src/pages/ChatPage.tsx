@@ -408,15 +408,31 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
 
   useEffect(() => {
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    let isIntentionalClose = false;
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const BASE_DELAY = 1000;
+
+    const getReconnectDelay = (attempt: number): number => {
+      // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
+      return Math.min(BASE_DELAY * Math.pow(2, attempt), 30000);
+    };
 
     const connectWebSocket = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         return;
       }
 
+      // Check if we've exceeded max attempts
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.error(`WebSocket: Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
+        return;
+      }
+
       const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
+        reconnectAttempts = 0; // Reset on successful connection
         if (import.meta.env.DEV) {
           console.log("WebSocket connected for transcript streaming");
         }
@@ -485,9 +501,34 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         console.error("WebSocket error:", error);
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         wsRef.current = null;
-        reconnectTimeout = setTimeout(connectWebSocket, 1000);
+
+        // Don't reconnect if close was intentional (user logout/navigate away)
+        if (isIntentionalClose) {
+          if (import.meta.env.DEV) {
+            console.log("WebSocket closed intentionally, not reconnecting");
+          }
+          return;
+        }
+
+        // Don't reconnect on normal closure (1000)
+        if (event.code === 1000) {
+          if (import.meta.env.DEV) {
+            console.log("WebSocket closed normally, not reconnecting");
+          }
+          return;
+        }
+
+        // Reconnect with exponential backoff
+        reconnectAttempts++;
+        const delay = getReconnectDelay(reconnectAttempts - 1);
+
+        if (import.meta.env.DEV) {
+          console.log(`WebSocket closed (code: ${event.code}), reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        }
+
+        reconnectTimeout = setTimeout(connectWebSocket, delay);
       };
 
       wsRef.current = ws;
@@ -496,6 +537,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     connectWebSocket();
 
     return () => {
+      isIntentionalClose = true;
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
@@ -504,8 +546,9 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         wsRef.current = null;
       }
     };
+    // Remove activeConversationId dependency to prevent unnecessary reconnects
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversationId]);
+  }, []);
 
   useEffect(() => {
     const getDevices = async () => {

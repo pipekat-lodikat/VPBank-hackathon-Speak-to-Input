@@ -75,8 +75,8 @@ class WebRTCClient {
     audioOutput?: string;
   }) {
     try {
-      // Recreate peer connection if it was closed
-      if (!this.pc) {
+      // Recreate peer connection if it was closed or doesn't exist
+      if (!this.pc || this.pc.signalingState === 'closed') {
         this.pc = new RTCPeerConnection({
           iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
         });
@@ -125,9 +125,11 @@ class WebRTCClient {
       const offer = await this.pc!.createOffer();
       await this.pc!.setLocalDescription(offer);
 
-      console.log("🔗 Connecting to WebRTC endpoint:", options.endpoint);
-      console.log("📤 Sending WebRTC offer...");
-      
+      if (import.meta.env.DEV) {
+        console.log("🔗 Connecting to WebRTC endpoint:", options.endpoint);
+        console.log("📤 Sending WebRTC offer...");
+      }
+
       const response = await fetch(options.endpoint, {
         method: "POST",
         headers: {
@@ -139,7 +141,9 @@ class WebRTCClient {
         }),
       });
 
-      console.log("📥 Response status:", response.status, response.statusText);
+      if (import.meta.env.DEV) {
+        console.log("📥 Response status:", response.status, response.statusText);
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -150,12 +154,17 @@ class WebRTCClient {
       }
 
       const answer = await response.json();
-      console.log("✅ Received WebRTC answer:", answer.type);
+
+      if (import.meta.env.DEV) {
+        console.log("✅ Received WebRTC answer:", answer.type);
+      }
 
       // Check if peer connection is in correct state before setting remote description
       if (this.pc?.signalingState === "have-local-offer") {
         await this.pc.setRemoteDescription(answer);
-        console.log("✅ Remote description set successfully");
+        if (import.meta.env.DEV) {
+          console.log("✅ Remote description set successfully");
+        }
       } else {
         console.error(`❌ Cannot set remote description. Signaling state: ${this.pc?.signalingState}`);
         throw new Error(`Invalid signaling state: ${this.pc?.signalingState}. Expected "have-local-offer"`);
@@ -408,7 +417,9 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
-        console.log("WebSocket connected for transcript streaming");
+        if (import.meta.env.DEV) {
+          console.log("WebSocket connected for transcript streaming");
+        }
       };
 
       ws.onmessage = (event) => {
@@ -416,12 +427,14 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
           const data = JSON.parse(event.data);
           if (data.type === "transcript" && data.message) {
             // Debug log để kiểm tra message nhận được
-            console.log("📨 Received transcript message:", {
-              role: data.message.role,
-              content: data.message.content?.substring(0, 50),
-              fullMessage: data.message
-            });
-            
+            if (import.meta.env.DEV) {
+              console.log("📨 Received transcript message:", {
+                role: data.message.role,
+                content: data.message.content?.substring(0, 50),
+                fullMessage: data.message
+              });
+            }
+
             setTranscript((prev) => {
               const isDuplicate = prev.some(
                 (msg) =>
@@ -430,7 +443,9 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
               );
 
               if (isDuplicate) {
-                console.log("⚠️ Duplicate message detected, skipping");
+                if (import.meta.env.DEV) {
+                  console.log("⚠️ Duplicate message detected, skipping");
+                }
                 return prev;
               }
 
@@ -451,11 +466,15 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                 data.message as TranscriptMessage,
               ];
 
-              console.log("✅ Updated transcript, total messages:", newTranscript.length, "Roles:", newTranscript.map(m => m.role));
+              if (import.meta.env.DEV) {
+                console.log("✅ Updated transcript, total messages:", newTranscript.length, "Roles:", newTranscript.map(m => m.role));
+              }
               return newTranscript;
             });
           } else {
-            console.log("📬 Received non-transcript message:", data.type);
+            if (import.meta.env.DEV) {
+              console.log("📬 Received non-transcript message:", data.type);
+            }
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -1337,7 +1356,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                           ) : (
                             transcript.map((message, index) => {
                               // Debug log để kiểm tra message được render
-                              if (message.role !== "user") {
+                              if (import.meta.env.DEV && message.role !== "user") {
                                 console.log("🤖 Rendering bot message:", {
                                   index,
                                   role: message.role,
@@ -1345,7 +1364,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                                   hasContent: !!message.content
                                 });
                               }
-                              
+
                               return message.role === "user" ? (
                                 <div key={index} className="flex justify-end">
                                   <div className="max-w-[85%] bg-emerald-50 text-emerald-900 rounded-lg rounded-tr-sm px-2 py-1.5 shadow-sm whitespace-pre-wrap text-xs">

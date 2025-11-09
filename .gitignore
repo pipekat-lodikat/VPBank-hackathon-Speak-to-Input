@@ -353,12 +353,17 @@ convert_waiting_sound.py
 # Playwright browsers
 .playwright/
 playwright/.cache/
-CLAUDE.md
-AGENTS.md
-DOCKER_WEBRTC.md
-IMPLEMENTATION_PLAN.md
-PROJECT_STATUS.md
-ARCHITECTURE_FLOW.md
-INCREMENTAL_FILLING_PLAN.md
-deploy
-DEPLOY_SOLUTION.md
+
+# ==========================================
+# Infrastructure & Deployment
+# ==========================================
+# Terraform state files
+infrastructure/terraform/.terraform/
+infrastructure/terraform/.terraform.lock.hcl
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.backup
+infrastructure/terraform/*.tfvars
+infrastructure/terraform/.terraform.tfstate.lock.info
+
+# Duplicate env file (keep only .env and .env.example)
+env

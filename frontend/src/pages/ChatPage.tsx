@@ -15,6 +15,7 @@ import {
 import Header from "../components/Header";
 import VPBankWelcome from "../components/VPBankWelcome";
 import { useTranscripts } from "../hooks/useTranscripts";
+import { API_URL, WS_URL } from "../config";
 
 type TranscriptMessage = {
   role: string;
@@ -42,7 +43,26 @@ class WebRTCClient {
 
   constructor() {
     this.pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        {
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+      ],
+      iceCandidatePoolSize: 10,
     });
 
     this.pc.onconnectionstatechange = () => {
@@ -345,7 +365,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     const fetchUserInfo = async () => {
       if (!accessToken) return;
       try {
-        const res = await fetch("http://localhost:7860/api/auth/verify", {
+        const res = await fetch(`${API_URL}/api/auth/verify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: accessToken }),
@@ -383,7 +403,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         return;
       }
 
-      const ws = new WebSocket("ws://localhost:7860/ws");
+      const ws = new WebSocket(`${WS_URL}/ws`);
 
       ws.onopen = () => {
         console.log("WebSocket connected for transcript streaming");
@@ -452,7 +472,6 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         wsRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -516,7 +535,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
           const url = data.live_url || null;
           setLiveUrl(url);
         }
-      } catch (err) {
+      } catch {
         // Silently fail if browser service is not available
       }
     };
@@ -621,7 +640,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       setError(null);
       setIsMuted(false); // Reset mute state before connecting
       await client.startBotAndConnect({
-        endpoint: "http://localhost:7860/offer",
+        endpoint: `${API_URL}/offer`,
         audioInput: selectedInputDevice || undefined,
         audioOutput: selectedOutputDevice || undefined,
       });

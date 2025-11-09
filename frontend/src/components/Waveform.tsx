@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './Waveform.css';
 
 interface WaveformProps {
@@ -12,48 +12,10 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
     const [levels, setLevels] = useState(Array(variant === 'bottom' ? 100 : 60).fill(0));
     const rafRef = useRef<number>(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
-    const dataArrayRef = useRef<Uint8Array | null>(null);
+    const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
     const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
-    useEffect(() => {
-        if (audioTrack && isActive) {
-            setupAudioAnalysis();
-        } else if (isActive) {
-            // Fallback animation when no audio track
-            startFallbackAnimation();
-        } else {
-            cleanup();
-        }
-
-        return cleanup;
-    }, [audioTrack, isActive]);
-
-    const setupAudioAnalysis = async () => {
-        if (!audioTrack) return;
-
-        try {
-            const context = new (window.AudioContext || (window as any).webkitAudioContext)();
-            setAudioContext(context);
-
-            const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
-            const analyser = context.createAnalyser();
-
-            analyser.fftSize = 1024;
-            analyser.smoothingTimeConstant = 0.8;
-
-            source.connect(analyser);
-
-            analyserRef.current = analyser;
-            dataArrayRef.current = new Uint8Array(analyser.fftSize);
-
-            startRealTimeAnimation();
-        } catch (error) {
-            console.error('Error setting up audio analysis:', error);
-            startFallbackAnimation();
-        }
-    };
-
-    const startRealTimeAnimation = () => {
+    const startRealTimeAnimation = useCallback(() => {
         const tick = () => {
             if (analyserRef.current && dataArrayRef.current) {
                 analyserRef.current.getByteTimeDomainData(dataArrayRef.current);
@@ -78,9 +40,9 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
         };
 
         rafRef.current = requestAnimationFrame(tick);
-    };
+    }, []);
 
-    const startFallbackAnimation = () => {
+    const startFallbackAnimation = useCallback(() => {
         const tick = () => {
             // Fallback animation (if no mic permission)
             setLevels((prev) => {
@@ -94,9 +56,9 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
         };
 
         rafRef.current = requestAnimationFrame(tick);
-    };
+    }, []);
 
-    const cleanup = () => {
+    const cleanup = useCallback(() => {
         if (rafRef.current) {
             cancelAnimationFrame(rafRef.current);
         }
@@ -106,7 +68,46 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
         if (audioContext && audioContext.state !== 'closed') {
             audioContext.close();
         }
-    };
+    }, [audioContext]);
+
+    const setupAudioAnalysis = useCallback(async () => {
+        if (!audioTrack) return;
+
+        try {
+            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+            const context = new AudioContextClass();
+            setAudioContext(context);
+
+            const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
+            const analyser = context.createAnalyser();
+
+            analyser.fftSize = 1024;
+            analyser.smoothingTimeConstant = 0.8;
+
+            source.connect(analyser);
+
+            analyserRef.current = analyser;
+            dataArrayRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize));
+
+            startRealTimeAnimation();
+        } catch (error) {
+            console.error('Error setting up audio analysis:', error);
+            startFallbackAnimation();
+        }
+    }, [audioTrack, startRealTimeAnimation, startFallbackAnimation]);
+
+    useEffect(() => {
+        if (audioTrack && isActive) {
+            queueMicrotask(() => setupAudioAnalysis());
+        } else if (isActive) {
+            // Fallback animation when no audio track
+            startFallbackAnimation();
+        } else {
+            cleanup();
+        }
+
+        return cleanup;
+    }, [audioTrack, isActive, setupAudioAnalysis, startFallbackAnimation, cleanup]);
 
     // Visual constants
     const H = variant === 'bottom' ? 40 : 60;

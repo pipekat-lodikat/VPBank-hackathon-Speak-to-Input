@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { API_URL } from '../../config';
 
 export type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -61,7 +62,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
   const formatPhoneNumber = (phone: string): string => {
     if (!phone) return phone;
-    let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+    let cleaned = phone.replace(/[\s\-()]/g, '');
     if (cleaned.startsWith('+84')) {
       cleaned = '0' + cleaned.substring(3);
     }
@@ -74,7 +75,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
     setError('');
 
     try {
-      const response = await fetch('http://localhost:7860/api/auth/login', {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -117,7 +118,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
     }
 
     try {
-      const response = await fetch('http://localhost:7860/api/auth/register', {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,7 +162,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
     try {
       const response = await fetch(
-        'http://localhost:7860/api/auth/forgot-password',
+        `${API_URL}/api/auth/forgot-password`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -206,7 +207,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
     try {
       const response = await fetch(
-        'http://localhost:7860/api/auth/reset-password',
+        `${API_URL}/api/auth/reset-password`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

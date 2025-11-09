@@ -13,8 +13,29 @@ from aiohttp import web
 from aiohttp.web import RouteTableDef
 from dotenv import load_dotenv
 from loguru import logger
+import sys
+import warnings
 
-from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
+# Suppress ONNX Runtime GPU warning (CPU-only system)
+os.environ['ORT_LOGGING_LEVEL'] = '3'  # ERROR level only
+os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Disable CUDA
+os.environ['OMP_NUM_THREADS'] = '1'  # Limit OpenMP threads
+
+# Suppress stderr warnings temporarily for ONNX imports
+import contextlib
+@contextlib.contextmanager
+def suppress_stderr():
+    with open(os.devnull, 'w') as devnull:
+        old_stderr = sys.stderr
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stderr = old_stderr
+
+# Import with suppressed stderr to avoid GPU discovery warning
+with suppress_stderr():
+    from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
@@ -23,7 +44,7 @@ from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, Ice
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.aws.stt import AWSTranscribeSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
-from pipecat.services.elevenlabs import ElevenLabsTTSService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.transcript_processor import TranscriptProcessor
@@ -31,6 +52,13 @@ from pipecat.processors.transcript_processor import TranscriptProcessor
 load_dotenv(override=True)
 
 from src.dynamodb_service import DynamoDBService
+from src.dynamic_vad import vad_config, ConversationContext
+from src.security.pii_masking import mask_pii
+from src.security.rate_limiter import rate_limiter
+from src.monitoring.metrics import (
+    get_metrics, webrtc_connections_total, webrtc_active_connections,
+    sessions_total, auth_requests_total, track_operation
+)
 
 # Browser Agent Service URL
 BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
@@ -291,10 +319,13 @@ async def run_bot(webrtc_connection, ws_connections):
                     "timestamp": message.timestamp or datetime.now().isoformat()
                 }
                 transcript_data["messages"].append(msg_dict)
-                
+
+                # Update VAD context based on message
+                vad_config.update_context(message.content, message.role)
+
                 # Save to DynamoDB (async update)
                 dynamodb_service.save_session(transcript_data)
-                
+
                 # Send to WebSocket clients
                 for ws in list(ws_connections):
                     try:
@@ -356,7 +387,7 @@ async def run_bot(webrtc_connection, ws_connections):
                     
                     logger.info(f"📤 Pushing request to Browser Service immediately...")
                     logger.info(f"   Full context ({len(all_messages)} messages) sent to Browser Service")
-                    logger.info(f"   Latest user message: {message.content[:100]}...")
+                    logger.info(f"   Latest user message (masked): {mask_pii(message.content[:100])}...")
                     logger.info(f"   Session ID: {session_id}")
                     
                     # Set processing flag (cho phép nhiều push - incremental mode)
@@ -372,23 +403,19 @@ async def run_bot(webrtc_connection, ws_connections):
                     except Exception as e:
                         logger.error(f"❌ Failed to create async task: {e}", exc_info=True)
                     
-                logger.info(f"📝 [{message.role}]: {message.content}")
+                # Log with PII masking
+                logger.info(f"📝 [{message.role}]: {mask_pii(message.content)}")
         except Exception as e:
             logger.error(f"Error handling transcript: {e}")
 
-    # Create WebRTC transport
+    # Create WebRTC transport with dynamic VAD
+    initial_vad_params = vad_config.get_vad_params()
     transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
         params=TransportParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(
-                    stop_secs=5.0,  # Increase to 5 seconds to allow longer pauses
-                    start_secs=0.1,
-                    min_volume=0.6
-                )
-            ),
+            vad_analyzer=SileroVADAnalyzer(params=initial_vad_params),
         ),
     )
 
@@ -620,19 +647,14 @@ async def run_bot(webrtc_connection, ws_connections):
         context_aggregator.assistant(),
     ])
 
-    # Create task
+    # Create task with dynamic VAD
+    task_vad_params = vad_config.get_vad_params()
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
             allow_interruptions=True,
             enable_vad=True,
-            vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(
-                    stop_secs=5.0,  # Increase to 5 seconds to allow longer pauses
-                    start_secs=0.1,
-                    min_volume=0.6
-                )
-            ),
+            vad_analyzer=SileroVADAnalyzer(params=task_vad_params),
         ),
     )
 
@@ -651,6 +673,16 @@ async def run_bot(webrtc_connection, ws_connections):
 async def login_handler(request):
     """Handle Cognito login"""
     try:
+        # Rate limiting for login attempts (prevent brute force)
+        client_ip = request.headers.get('X-Forwarded-For', request.remote)
+        if not rate_limiter.check_limit("auth_login", client_ip):
+            wait_time = rate_limiter.get_wait_time("auth_login", client_ip)
+            logger.warning(f"🚨 Login rate limit exceeded from {client_ip}")
+            return web.json_response(
+                {"success": False, "error": f"Too many login attempts. Please wait {wait_time:.0f} seconds."},
+                status=429,
+            )
+
         data = await request.json()
         username = data.get("username")
         password = data.get("password")
@@ -661,6 +693,7 @@ async def login_handler(request):
                 status=400,
             )
 
+        logger.info(f"🔐 Login attempt from IP: {client_ip}, username: {mask_pii(username)}")
         result = await auth_service.login(username, password)
         status = 200 if result["success"] else 401
         return web.json_response(result, status=status)
@@ -799,23 +832,36 @@ async def auth_options(request):
 async def handle_offer(request):
     """Handle WebRTC offer"""
     try:
+        # Rate limiting - get client IP
+        client_ip = request.headers.get('X-Forwarded-For', request.remote)
+        if not rate_limiter.check_limit("webrtc_offer", client_ip):
+            wait_time = rate_limiter.get_wait_time("webrtc_offer", client_ip)
+            logger.warning(f"🚨 Rate limit exceeded for WebRTC offer from {client_ip}")
+            return web.json_response(
+                {"error": f"Rate limit exceeded. Please wait {wait_time:.1f} seconds."},
+                status=429
+            )
+
         headers = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
         }
-        
+
         body = await request.json()
         offer_sdp = body.get("sdp")
         offer_type = body.get("type")
-        
+
         if not offer_sdp or offer_type != "offer":
             return web.json_response(
                 {"error": "Invalid offer"},
                 status=400,
                 headers=headers
             )
-        
+
+        # Reset VAD context for new conversation
+        vad_config.reset()
+
         # Create WebRTC connection
         logger.info("🔧 Creating WebRTC connection...")
         webrtc_connection = SmallWebRTCConnection(ice_servers=ice_servers)
@@ -923,10 +969,11 @@ async def websocket_handler(request):
     """WebSocket for transcript streaming"""
     ws = web.WebSocketResponse()
     await ws.prepare(request)
-    
+
     ws_connections.add(ws)
+    webrtc_active_connections.inc()
     logger.info(f"📡 WebSocket connected. Total connections: {len(ws_connections)}")
-    
+
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
@@ -935,9 +982,36 @@ async def websocket_handler(request):
         logger.error(f"WebSocket error: {e}")
     finally:
         ws_connections.discard(ws)
+        webrtc_active_connections.dec()
         logger.info(f"📡 WebSocket disconnected. Remaining: {len(ws_connections)}")
-    
+
     return ws
+
+
+@routes.get("/health")
+async def health_handler(request):
+    """Health check endpoint for ALB"""
+    return web.Response(
+        text='{"status": "healthy"}',
+        content_type='application/json',
+        status=200,
+        headers={
+            'Access-Control-Allow-Origin': '*',
+        }
+    )
+
+
+@routes.get("/metrics")
+async def metrics_handler(request):
+    """Prometheus metrics endpoint"""
+    metrics_data = get_metrics()
+    return web.Response(
+        body=metrics_data,
+        content_type='text/plain; version=0.0.4',
+        headers={
+            'Access-Control-Allow-Origin': '*',
+        }
+    )
 
 
 @routes.post("/api/auth/login")

@@ -21,14 +21,16 @@ export function TranscriptView({ isConnected }: TranscriptViewProps) {
   useEffect(() => {
     if (!isConnected) return;
 
-    // Add welcome message
-    const welcomeMsg: Message = {
-      id: '1',
-      text: 'Chào anh/chị, cảm ơn anh/chị đã liên hệ đến Công ty Mua Bán Nợ ABC. Em là Nghiêm, em có thể hỗ trợ gì cho anh/chị ạ?',
-      sender: 'bot',
-      timestamp: new Date()
-    };
-    setMessages([welcomeMsg]);
+    // Add welcome message (deferred to avoid synchronous setState in effect)
+    queueMicrotask(() => {
+      const welcomeMsg: Message = {
+        id: '1',
+        text: 'Chào anh/chị, cảm ơn anh/chị đã liên hệ đến Công ty Mua Bán Nợ ABC. Em là Nghiêm, em có thể hỗ trợ gì cho anh/chị ạ?',
+        sender: 'bot',
+        timestamp: new Date()
+      };
+      setMessages([welcomeMsg]);
+    });
   }, [isConnected]);
 
   // Auto-scroll to bottom

@@ -54,7 +54,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     if (!phone) return phone;
 
     // Remove all spaces and special characters except +
-    let cleaned = phone.replace(/[\s\-\(\)]/g, "");
+    let cleaned = phone.replace(/[\s\-()]/g, "");
 
     // Convert +84 to 0
     if (cleaned.startsWith("+84")) {

@@ -155,6 +155,67 @@ class BrowserAgentHandler:
             logger.error(f"❌ Error filling field {field_name}: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
+    async def fill_fields_parallel(self, fields: dict[str, str], session_id: str = "default") -> dict:
+        """
+        Fill multiple form fields in parallel for better performance
+
+        Args:
+            fields: Dictionary of {field_name: value}
+            session_id: Session identifier
+
+        Returns:
+            dict with success status and results
+        """
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            session_data = session["session_data"]
+
+            # Filter out already-filled fields with same values
+            fields_to_fill = {
+                k: v for k, v in fields.items()
+                if not any(f.get("field") == k and f.get("value") == v for f in session_data["fields_filled"])
+            }
+
+            if not fields_to_fill:
+                return {"success": True, "message": "All fields already filled with requested values", "skipped": True}
+
+            # Build multi-field task for parallel execution
+            fields_desc = "\n".join([f"- {k}: {v}" for k, v in fields_to_fill.items()])
+            filled_fields_info = ", ".join([f"{f['field']}={f['value']}" for f in session_data["fields_filled"]])
+
+            task = f"""
+            On the current page, fill the following fields in a single pass (use multi-action sequences):
+            {fields_desc}
+
+            Memory (already filled): {filled_fields_info if filled_fields_info else 'None'}.
+
+            Verify all fields show the exact values. Do not submit or navigate.
+            """
+
+            logger.info(f"🚀 Parallel filling {len(fields_to_fill)} fields: {list(fields_to_fill.keys())}")
+
+            agent.add_new_task(task)
+            await agent.run()
+
+            # Update session data
+            for field_name, value in fields_to_fill.items():
+                session_data["fields_filled"].append({"field": field_name, "value": value})
+
+            return {
+                "success": True,
+                "fields": fields_to_fill,
+                "fields_count": len(fields_to_fill),
+                "total_filled": len(session_data["fields_filled"]),
+                "message": f"Filled {len(fields_to_fill)} fields in parallel"
+            }
+        except Exception as e:
+            logger.error(f"❌ Error filling fields in parallel: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
     async def upsert_field_incremental(self, field_name: str, value: str, session_id: str = "default") -> dict:
         try:
             if session_id not in self.sessions:

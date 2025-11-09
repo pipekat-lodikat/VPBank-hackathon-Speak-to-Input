@@ -16,6 +16,9 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
     const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
     const startRealTimeAnimation = useCallback(() => {
+        let frameCount = 0;
+        let lastLog = Date.now();
+
         const tick = () => {
             if (analyserRef.current && dataArrayRef.current) {
                 analyserRef.current.getByteTimeDomainData(dataArrayRef.current);
@@ -28,6 +31,14 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
                 }
                 rms = Math.sqrt(rms / dataArrayRef.current.length);
                 const amp = Math.min(1, rms * 4); // scale up
+
+                // Log audio levels every 2 seconds
+                frameCount++;
+                if (Date.now() - lastLog > 2000) {
+                    console.log(`📊 [DEBUG] Audio level: ${(amp * 100).toFixed(1)}% (frames: ${frameCount})`);
+                    lastLog = Date.now();
+                    frameCount = 0;
+                }
 
                 setLevels((prev) => {
                     const next = prev.slice(1);
@@ -71,9 +82,20 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
     }, [audioContext]);
 
     const setupAudioAnalysis = useCallback(async () => {
-        if (!audioTrack) return;
+        if (!audioTrack) {
+            console.log("📊 [DEBUG] No audio track provided to Waveform");
+            return;
+        }
 
         try {
+            console.log("📊 [DEBUG] Setting up audio analysis for track:", {
+                id: audioTrack.id,
+                label: audioTrack.label,
+                enabled: audioTrack.enabled,
+                readyState: audioTrack.readyState,
+                muted: audioTrack.muted,
+            });
+
             const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
             const context = new AudioContextClass();
             setAudioContext(context);
@@ -89,9 +111,10 @@ const Waveform: React.FC<WaveformProps> = ({ audioTrack, isActive = false, class
             analyserRef.current = analyser;
             dataArrayRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize));
 
+            console.log("✅ [DEBUG] Audio analyser connected, starting animation");
             startRealTimeAnimation();
         } catch (error) {
-            console.error('Error setting up audio analysis:', error);
+            console.error('❌ [DEBUG] Error setting up audio analysis:', error);
             startFallbackAnimation();
         }
     }, [audioTrack, startRealTimeAnimation, startFallbackAnimation]);

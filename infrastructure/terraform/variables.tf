@@ -39,3 +39,55 @@ variable "browser_agent_count" {
   type        = number
   default     = 2
 }
+
+#--------------------------------------------------------------
+# Security-related Variables
+#--------------------------------------------------------------
+
+variable "security_alert_email" {
+  description = "Email address for security alerts (GuardDuty, Security Hub)"
+  type        = string
+  default     = "admin@vpbank.com"
+}
+
+variable "enable_guardduty" {
+  description = "Enable AWS GuardDuty for threat detection"
+  type        = bool
+  default     = true
+}
+
+variable "enable_security_hub" {
+  description = "Enable AWS Security Hub for compliance monitoring"
+  type        = bool
+  default     = true
+}
+
+variable "enable_config" {
+  description = "Enable AWS Config for resource compliance"
+  type        = bool
+  default     = true
+}
+
+variable "enable_vpc_flow_logs" {
+  description = "Enable VPC Flow Logs for network monitoring"
+  type        = bool
+  default     = true
+}
+
+variable "kms_key_deletion_window" {
+  description = "KMS key deletion window in days"
+  type        = number
+  default     = 30
+}
+
+variable "cognito_user_pool_id" {
+  description = "Cognito User Pool ID (for IAM policy restriction)"
+  type        = string
+  default     = ""
+}
+
+variable "bedrock_model_id" {
+  description = "AWS Bedrock model ID"
+  type        = string
+  default     = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+}

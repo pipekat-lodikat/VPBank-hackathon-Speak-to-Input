@@ -11,15 +11,20 @@ const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_BASE_URL;
   }
 
-  // In production, use same origin (CloudFront routes /api/*, /offer, /ws to ALB)
+  // In production, fail if no API URL is configured
   if (import.meta.env.PROD) {
-    if (typeof window !== 'undefined') {
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      return `${protocol}//${hostname}`;
+    console.error('VITE_API_BASE_URL environment variable is required in production');
+    // Fallback to same-origin (assumes frontend and backend on same domain)
+    return window.location.origin;
+  }
+
+  // Development: Auto-detect if accessed remotely
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // If not localhost, use same hostname with port 7860
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return `http://${hostname}:7860`;
     }
-    // Fallback to CloudFront domain if window is not available (SSR)
-    return 'https://d359aaha3l67dn.cloudfront.net';
   }
 
   // Development: Default to localhost
@@ -31,6 +36,24 @@ const getBrowserServiceUrl = (): string => {
   if (import.meta.env.VITE_BROWSER_SERVICE_URL) {
     return import.meta.env.VITE_BROWSER_SERVICE_URL;
   }
+
+  // In production, disable Browser Agent endpoint (not needed for voice chat)
+  if (import.meta.env.PROD) {
+    // Browser Agent not used in production voice chat
+    // Only needed for admin monitoring
+    return '';
+  }
+
+  // Development: Auto-detect if accessed remotely
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // If not localhost, use same hostname with port 7863
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return `http://${hostname}:7863`;
+    }
+  }
+
+  // Development: Browser Agent runs on separate port
   return 'http://localhost:7863';
 };
 

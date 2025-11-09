@@ -1,0 +1,150 @@
+{
+  "overall_accuracy": {
+    "pre_verification_accuracy": 80.0,
+    "post_verification_accuracy": 100.0,
+    "improvement": 20.0,
+    "total_forms": 3,
+    "total_fields": 15,
+    "fields_modified": 3
+  },
+  "verifications": [
+    {
+      "form_id": "form_001",
+      "form_type": "loan",
+      "total_fields": 5,
+      "verified_fields": 5,
+      "modified_fields": 0,
+      "status": "confirmed",
+      "accuracy": 100.0,
+      "field_verifications": [
+        {
+          "field_name": "customerName",
+          "expected_value": "Nguyễn Văn An",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "phoneNumber",
+          "expected_value": "0987654321",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "email",
+          "expected_value": "nguyenvanan@gmail.com",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "loanAmount",
+          "expected_value": "500000000",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "loanTerm",
+          "expected_value": "36 tháng",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "form_id": "form_002",
+      "form_type": "crm",
+      "total_fields": 5,
+      "verified_fields": 4,
+      "modified_fields": 1,
+      "status": "modified",
+      "accuracy": 80.0,
+      "field_verifications": [
+        {
+          "field_name": "customerName",
+          "expected_value": "Trần Thị Bình",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "phoneNumber",
+          "expected_value": "0912345678",
+          "user_confirmed": false,
+          "modified_value": "0909876543",
+          "confidence": 0.0
+        },
+        {
+          "field_name": "email",
+          "expected_value": "tranthib@gmail.com",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "address",
+          "expected_value": "123 Đường ABC, Hà Nội",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "idNumber",
+          "expected_value": "001234567890",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "form_id": "form_003",
+      "form_type": "hr_leave",
+      "total_fields": 5,
+      "verified_fields": 3,
+      "modified_fields": 2,
+      "status": "modified",
+      "accuracy": 60.0,
+      "field_verifications": [
+        {
+          "field_name": "employeeId",
+          "expected_value": "EMP001",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "leaveType",
+          "expected_value": "Nghỉ phép năm",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        },
+        {
+          "field_name": "startDate",
+          "expected_value": "2025-11-10",
+          "user_confirmed": false,
+          "modified_value": "2025-11-11",
+          "confidence": 0.0
+        },
+        {
+          "field_name": "endDate",
+          "expected_value": "2025-11-15",
+          "user_confirmed": false,
+          "modified_value": "2025-11-14",
+          "confidence": 0.0
+        },
+        {
+          "field_name": "reason",
+          "expected_value": "Nghỉ du lịch",
+          "user_confirmed": true,
+          "modified_value": null,
+          "confidence": 1.0
+        }
+      ]
+    }
+  ]
+}

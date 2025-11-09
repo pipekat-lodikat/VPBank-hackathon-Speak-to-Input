@@ -1,5 +1,13 @@
 # VPBank Voice Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Node Version](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-19.1.1-blue.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://www.typescriptlang.org/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 **Production-ready voice-powered banking form automation using AI-driven conversational interface and intelligent browser automation.**
 
 > A microservices-based system that enables users to fill Vietnamese banking forms through natural speech, leveraging WebRTC, AWS Transcribe, Claude Sonnet 4, and autonomous browser agents.
@@ -23,6 +31,11 @@
 - [Troubleshooting](#troubleshooting)
 - [Security](#security)
 - [License](#license)
+- [Contributing](#contributing)
+- [Code of Conduct](#code-of-conduct)
+- [Citation](#citation)
+- [Team](#team)
+- [Acknowledgments](#acknowledgments)
 
 ---
 
@@ -983,13 +996,96 @@ tail -f logs/browser_agent.log
 
 ## License
 
-Copyright © 2025 VPBank Voice Agent Team
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-This project is proprietary software developed for VPBank Tech Hack 2025.
+Copyright © 2025 Pipekat Lodikat Team
 
 ---
 
-## Support
+## Contributing
+
+We welcome contributions from the community! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
+
+### How to Contribute
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please ensure your code follows our [coding standards](CONTRIBUTING.md#coding-standards) and includes appropriate tests.
+
+---
+
+## Code of Conduct
+
+This project adheres to the Contributor Covenant [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
+
+---
+
+## Citation
+
+If you use this project in your research or work, please cite it as:
+
+```bibtex
+@software{vpbank_voice_agent_2025,
+  author = {Bùi, Hồ Ngọc Hân and Phạm, Nguyễn Hải Anh and Lê, Minh Nghĩa and Nguyễn, Đức Toàn and Danh, Hoàng Hiếu Nghị},
+  title = {VPBank Voice Agent: AI-Powered Banking Form Automation},
+  year = {2025},
+  publisher = {GitHub},
+  url = {https://github.com/pipekat-lodikat/speak-to-input}
+}
+```
+
+See [CITATION.cff](CITATION.cff) for more citation formats.
+
+---
+
+## Team
+
+**Pipekat Lodikat** - VPBank Tech Hack 2025
+
+| Name | GitHub | Role |
+|------|--------|------|
+| Bùi Hồ Ngọc Hân | [@lodi-bui](https://github.com/lodi-bui) | Core Developer |
+| Phạm Nguyễn Hải Anh | [@PNg-HA](https://github.com/PNg-HA) | Core Developer |
+| Lê Minh Nghĩa | [@minhnghia2k3](https://github.com/minhnghia2k3) | Core Developer |
+| Nguyễn Đức Toàn | [@toannd021104](https://github.com/toannd021104) | Core Developer |
+| Danh Hoàng Hiếu Nghị | [@ihatesea69](https://github.com/ihatesea69) | Core Developer |
+
+For detailed contributor information, see [AUTHORS](AUTHORS) and [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
+---
+
+## Acknowledgments
+
+This project was developed for **VPBank Tech Hack 2025** and builds upon several outstanding open-source projects:
+
+### Core Technologies
+
+- [Pipecat AI](https://www.pipecat.ai/) - Real-time voice conversation framework
+- [AWS Bedrock](https://aws.amazon.com/bedrock/) - Claude Sonnet 4 LLM access
+- [browser-use](https://github.com/browser-use/browser-use) - AI-powered browser automation
+- [Playwright](https://playwright.dev/) - Browser automation library
+- [React](https://react.dev/) - Frontend framework
+- [Vite](https://vitejs.dev/) - Build tool
+
+### AI Services
+
+- [Anthropic Claude](https://www.anthropic.com/) - Natural language understanding
+- [OpenAI GPT-4](https://openai.com/) - Browser automation planning
+- [AWS Transcribe](https://aws.amazon.com/transcribe/) - Speech-to-text (Vietnamese)
+- [ElevenLabs](https://elevenlabs.io/) - Text-to-speech (Vietnamese)
+
+### Special Thanks
+
+- AWS for Bedrock access and cloud infrastructure
+- VPBank for the Tech Hack 2025 opportunity
+- All contributors and maintainers
+- The open-source community
+
+---
 
 For questions, issues, or feature requests:
 
@@ -999,4 +1095,4 @@ For questions, issues, or feature requests:
 
 ---
 
-**Built with ❤️ for VPBank Tech Hack 2025**
+**Built with ❤️ by Pipekat Lodikat for VPBank Tech Hack 2025**

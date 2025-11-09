@@ -30,6 +30,13 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     fonts-liberation \
     libappindicator3-1 \
+    # WebRTC/OpenCV dependencies (required by Pipecat SmallWebRTC transport)
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust (required for browser-use)

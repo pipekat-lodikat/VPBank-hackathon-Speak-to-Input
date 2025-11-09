@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
 Voice Bot Service - Entry Point
 Standalone service chỉ chạy Voice Bot (WebRTC, STT, TTS, LLM)
 Giao tiếp với Browser Agent Service qua HTTP API
+
+Copyright (c) 2025 Pipekat Lodikat Team
+Licensed under the MIT License - see LICENSE file for details
 """
 import sys
 import os

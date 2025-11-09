@@ -1,0 +1,111 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "VPBank Voice Agent: AI-Powered Banking Form Automation"
+version: 1.0.0
+date-released: 2025-01-09
+authors:
+  - family-names: "Bùi"
+    given-names: "Hồ Ngọc Hân"
+    email: "buihongochan.lodi@gmail.com"
+    orcid: "https://github.com/lodi-bui"
+  - family-names: "Phạm"
+    given-names: "Nguyễn Hải Anh"
+    email: "haithe123123@gmail.com"
+    orcid: "https://github.com/PNg-HA"
+  - family-names: "Lê"
+    given-names: "Minh Nghĩa"
+    email: "nghialm2603@gmail.com"
+    orcid: "https://github.com/minhnghia2k3"
+  - family-names: "Nguyễn"
+    given-names: "Đức Toàn"
+    email: "toanndcloud@gmail.com"
+    orcid: "https://github.com/toannd021104"
+  - family-names: "Danh"
+    given-names: "Hoàng Hiếu Nghị"
+    email: "hieunghiwork123@gmail.com"
+    orcid: "https://github.com/ihatesea69"
+repository-code: "https://github.com/pipekat-lodikat/speak-to-input"
+url: "https://github.com/pipekat-lodikat/speak-to-input"
+abstract: >-
+  VPBank Voice Agent is a production-ready voice-powered banking form
+  automation system using microservices architecture. The system enables
+  users to fill Vietnamese banking forms through natural speech, leveraging
+  WebRTC for audio streaming, AWS Transcribe for speech recognition,
+  Claude Sonnet 4 for natural language understanding, and AI-powered browser
+  automation using GPT-4 and Playwright.
+keywords:
+  - voice automation
+  - AI agent
+  - banking automation
+  - speech recognition
+  - natural language processing
+  - browser automation
+  - microservices
+  - WebRTC
+  - Vietnamese language
+  - form filling
+  - conversational AI
+  - LLM
+  - Claude Sonnet
+  - GPT-4
+license: MIT
+license-url: "https://github.com/pipekat-lodikat/speak-to-input/blob/main/LICENSE"
+type: software
+preferred-citation:
+  type: software
+  title: "VPBank Voice Agent: AI-Powered Banking Form Automation"
+  authors:
+    - family-names: "Bùi"
+      given-names: "Hồ Ngọc Hân"
+      email: "buihongochan.lodi@gmail.com"
+    - family-names: "Phạm"
+      given-names: "Nguyễn Hải Anh"
+      email: "haithe123123@gmail.com"
+    - family-names: "Lê"
+      given-names: "Minh Nghĩa"
+      email: "nghialm2603@gmail.com"
+    - family-names: "Nguyễn"
+      given-names: "Đức Toàn"
+      email: "toanndcloud@gmail.com"
+    - family-names: "Danh"
+      given-names: "Hoàng Hiếu Nghị"
+      email: "hieunghiwork123@gmail.com"
+  version: 1.0.0
+  date-released: 2025-01-09
+  repository-code: "https://github.com/pipekat-lodikat/speak-to-input"
+  url: "https://github.com/pipekat-lodikat/speak-to-input"
+  license: MIT
+  abstract: >-
+    A microservices-based system that enables users to fill Vietnamese
+    banking forms through natural speech, combining WebRTC audio streaming,
+    AWS Transcribe STT, Claude Sonnet 4 LLM, ElevenLabs TTS, and autonomous
+    browser agents powered by GPT-4 and Playwright.
+references:
+  - type: software
+    title: "Pipecat AI"
+    url: "https://www.pipecat.ai/"
+    notes: "Real-time voice conversation framework"
+  - type: software
+    title: "browser-use"
+    url: "https://github.com/browser-use/browser-use"
+    notes: "AI-powered browser automation library"
+  - type: software
+    title: "Playwright"
+    url: "https://playwright.dev/"
+    notes: "Browser automation framework"
+  - type: software
+    title: "AWS Bedrock"
+    url: "https://aws.amazon.com/bedrock/"
+    notes: "Claude Sonnet 4 LLM access"
+  - type: software
+    title: "AWS Transcribe"
+    url: "https://aws.amazon.com/transcribe/"
+    notes: "Vietnamese speech-to-text service"
+  - type: software
+    title: "OpenAI GPT-4"
+    url: "https://openai.com/"
+    notes: "Browser automation planning"
+  - type: software
+    title: "ElevenLabs"
+    url: "https://elevenlabs.io/"
+    notes: "Vietnamese text-to-speech"

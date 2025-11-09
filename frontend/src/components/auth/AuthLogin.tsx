@@ -62,7 +62,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
   const formatPhoneNumber = (phone: string): string => {
     if (!phone) return phone;
-    let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+    let cleaned = phone.replace(/[\s\-()]/g, '');
     if (cleaned.startsWith('+84')) {
       cleaned = '0' + cleaned.substring(3);
     }

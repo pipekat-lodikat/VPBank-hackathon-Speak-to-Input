@@ -1,7 +1,56 @@
 {
-  "name": "pipecat-react-ui",
-  "private": true,
-  "version": "0.0.0",
+  "name": "vpbank-voice-agent-frontend",
+  "description": "VPBank Voice Agent - Frontend Web Interface for Voice-Powered Banking Form Automation",
+  "version": "1.0.0",
+  "private": false,
+  "license": "MIT",
+  "author": "Pipekat Lodikat Team <buihongochan.lodi@gmail.com>",
+  "contributors": [
+    {
+      "name": "Bùi Hồ Ngọc Hân",
+      "email": "buihongochan.lodi@gmail.com",
+      "url": "https://github.com/lodi-bui"
+    },
+    {
+      "name": "Phạm Nguyễn Hải Anh",
+      "email": "haithe123123@gmail.com",
+      "url": "https://github.com/PNg-HA"
+    },
+    {
+      "name": "Lê Minh Nghĩa",
+      "email": "nghialm2603@gmail.com",
+      "url": "https://github.com/minhnghia2k3"
+    },
+    {
+      "name": "Nguyễn Đức Toàn",
+      "email": "toanndcloud@gmail.com",
+      "url": "https://github.com/toannd021104"
+    },
+    {
+      "name": "Danh Hoàng Hiếu Nghị",
+      "email": "hieunghiwork123@gmail.com",
+      "url": "https://github.com/ihatesea69"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pipekat-lodikat/speak-to-input.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pipekat-lodikat/speak-to-input/issues"
+  },
+  "homepage": "https://github.com/pipekat-lodikat/speak-to-input#readme",
+  "keywords": [
+    "voice-agent",
+    "banking",
+    "form-automation",
+    "webrtc",
+    "speech-recognition",
+    "ai",
+    "react",
+    "typescript",
+    "vite"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

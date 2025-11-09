@@ -75,19 +75,60 @@ class WebRTCClient {
     audioOutput?: string;
   }) {
     try {
+      console.log("🎙️ [DEBUG] Starting WebRTC connection...");
+
       // Recreate peer connection if it was closed or doesn't exist
       if (!this.pc || this.pc.signalingState === 'closed') {
+        console.log("🔧 [DEBUG] Creating new RTCPeerConnection");
         this.pc = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+          ],
+          iceCandidatePoolSize: 10,
         });
 
         this.pc.onconnectionstatechange = () => {
+          const state = this.pc?.connectionState || "disconnected";
+          console.log(`🔄 [DEBUG] Connection state changed: ${state}`);
           this.connected = this.pc?.connectionState === "connected";
-          this.onStateChange?.(this.pc?.connectionState || "disconnected");
+          this.onStateChange?.(state);
+        };
+
+        this.pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log("🧊 [DEBUG] ICE candidate generated:", {
+              type: event.candidate.type,
+              protocol: event.candidate.protocol,
+              address: event.candidate.address,
+              port: event.candidate.port,
+              candidate: event.candidate.candidate,
+            });
+          } else {
+            console.log("🧊 [DEBUG] ICE gathering complete");
+          }
+        };
+
+        this.pc.onicegatheringstatechange = () => {
+          console.log("🧊 [DEBUG] ICE gathering state:", this.pc?.iceGatheringState);
+        };
+
+        this.pc.oniceconnectionstatechange = () => {
+          const state = this.pc?.iceConnectionState;
+          console.log("🧊 [DEBUG] ICE connection state:", state);
+          if (state === "failed" || state === "disconnected") {
+            console.error("❌ [DEBUG] ICE connection failed/disconnected");
+          }
+        };
+
+        this.pc.onsignalingstatechange = () => {
+          console.log("📡 [DEBUG] Signaling state:", this.pc?.signalingState);
         };
 
         this.pc.ontrack = (event) => {
           if (event.track.kind === "audio") {
+            console.log("🔊 [DEBUG] Remote audio track received");
             if (!this.remoteAudio) {
               this.remoteAudio = new Audio();
               this.remoteAudio.autoplay = true;
@@ -98,7 +139,7 @@ class WebRTCClient {
             this.remoteAudio.srcObject = remoteStream;
 
             event.track.onended = () => {
-              // Clean up handled in disconnect
+              console.log("🔇 [DEBUG] Remote audio track ended");
             };
           }
         };
@@ -111,24 +152,65 @@ class WebRTCClient {
         video: false,
       };
 
+      console.log("🎤 [DEBUG] Requesting microphone access with constraints:", constraints);
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("✅ [DEBUG] Microphone access granted");
 
       const localAudioTrack = this.localStream.getAudioTracks()[0];
       if (localAudioTrack) {
+        console.log("🎙️ [DEBUG] Local audio track:", {
+          id: localAudioTrack.id,
+          label: localAudioTrack.label,
+          enabled: localAudioTrack.enabled,
+          readyState: localAudioTrack.readyState,
+          muted: localAudioTrack.muted,
+        });
+
+        // Monitor audio track state changes
+        localAudioTrack.onmute = () => console.log("⚠️ [DEBUG] Audio track muted");
+        localAudioTrack.onunmute = () => console.log("✅ [DEBUG] Audio track unmuted");
+        localAudioTrack.onended = () => console.log("❌ [DEBUG] Audio track ended");
+
         this.onLocalAudioTrack?.(localAudioTrack);
+      } else {
+        console.error("❌ [DEBUG] No audio track found in local stream!");
       }
 
       this.localStream.getTracks().forEach((track) => {
+        console.log(`➕ [DEBUG] Adding ${track.kind} track to peer connection`);
         this.pc?.addTrack(track, this.localStream!);
       });
 
       const offer = await this.pc!.createOffer();
       await this.pc!.setLocalDescription(offer);
 
-      if (import.meta.env.DEV) {
-        console.log("🔗 Connecting to WebRTC endpoint:", options.endpoint);
-        console.log("📤 Sending WebRTC offer...");
-      }
+      console.log("🔗 [DEBUG] Connecting to WebRTC endpoint:", options.endpoint);
+      console.log("📤 [DEBUG] Sending WebRTC offer SDP:", {
+        type: offer.type,
+        sdpLength: offer.sdp?.length,
+        sdpPreview: offer.sdp?.substring(0, 200),
+      });
+
+      // Monitor connection state changes only
+      let lastState = "";
+      const monitorInterval = setInterval(() => {
+        if (!this.pc || this.pc.connectionState === "closed") {
+          clearInterval(monitorInterval);
+          return;
+        }
+        const currentState = `${this.pc.connectionState}-${this.pc.iceConnectionState}`;
+        if (currentState !== lastState) {
+          console.log("📊 [DEBUG] Connection state changed:", {
+            connectionState: this.pc.connectionState,
+            iceConnectionState: this.pc.iceConnectionState,
+          });
+          lastState = currentState;
+        }
+        // Stop monitoring once connected
+        if (this.pc.connectionState === "connected") {
+          clearInterval(monitorInterval);
+        }
+      }, 1000);
 
       const response = await fetch(options.endpoint, {
         method: "POST",
@@ -155,18 +237,25 @@ class WebRTCClient {
 
       const answer = await response.json();
 
-      if (import.meta.env.DEV) {
-        console.log("✅ Received WebRTC answer:", answer.type);
-      }
+      console.log("✅ [DEBUG] Received WebRTC answer:", {
+        type: answer.type,
+        sdpLength: answer.sdp?.length,
+        sdpPreview: answer.sdp?.substring(0, 200),
+        hasIceCandidates: answer.sdp?.includes("a=candidate"),
+      });
 
       // Check if peer connection is in correct state before setting remote description
       if (this.pc?.signalingState === "have-local-offer") {
         await this.pc.setRemoteDescription(answer);
-        if (import.meta.env.DEV) {
-          console.log("✅ Remote description set successfully");
-        }
+        console.log("✅ [DEBUG] Remote description set successfully");
+        console.log("📊 [DEBUG] Current peer connection state:", {
+          connectionState: this.pc.connectionState,
+          iceConnectionState: this.pc.iceConnectionState,
+          iceGatheringState: this.pc.iceGatheringState,
+          signalingState: this.pc.signalingState,
+        });
       } else {
-        console.error(`❌ Cannot set remote description. Signaling state: ${this.pc?.signalingState}`);
+        console.error(`❌ [DEBUG] Cannot set remote description. Signaling state: ${this.pc?.signalingState}`);
         throw new Error(`Invalid signaling state: ${this.pc?.signalingState}. Expected "have-local-offer"`);
       }
 
@@ -574,6 +663,13 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     };
   }, []);
 
+  // Cleanup WebRTC connection on unmount
+  useEffect(() => {
+    return () => {
+      client.disconnect();
+    };
+  }, [client]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -601,6 +697,9 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
 
   // Poll Browser Service live URL
   useEffect(() => {
+    // Skip if browser service URL is not configured (production)
+    if (!API_ENDPOINTS.BROWSER.LIVE) return;
+    
     let timer: ReturnType<typeof setInterval> | null = null;
     const fetchLive = async () => {
       try {
@@ -611,7 +710,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
           const url = data.live_url || null;
           setLiveUrl(url);
         }
-      } catch (err) {
+      } catch {
         // Silently fail if browser service is not available
       }
     };

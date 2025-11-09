@@ -1,12 +1,17 @@
+# -*- coding: utf-8 -*-
 """
 Voice Bot - VPBank Form Automation
 Voice interface với WebRTC, STT, TTS, và LLM
 Gửi requests đến Browser Agent Service để thực hiện automation
+
+Copyright (c) 2025 Pipekat Lodikat Team
+Licensed under the MIT License - see LICENSE file for details
 """
 import asyncio
 import os
 import json
 import time
+import uuid
 from decimal import Decimal
 from datetime import datetime
 from aiohttp import web
@@ -23,7 +28,7 @@ from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection, Ice
 from pipecat.transports.base_transport import TransportParams
 from pipecat.services.aws.stt import AWSTranscribeSTTService
 from pipecat.services.aws.llm import AWSBedrockLLMService
-from pipecat.services.elevenlabs import ElevenLabsTTSService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.transcript_processor import TranscriptProcessor
@@ -51,26 +56,87 @@ elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 
 routes = RouteTableDef()
 
+# ==================== CORS Helper Function ====================
+def get_cors_headers(request):
+    """
+    Get CORS headers with proper origin validation
+    Returns headers dict with validated origin
+    """
+    origin = request.headers.get('Origin')
+    allowed_origins = {
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:7860',
+        'http://127.0.0.1:7860',
+    }
+
+    # Add production origin from environment
+    prod_origin = os.getenv('ALLOWED_ORIGIN')
+    if prod_origin:
+        allowed_origins.add(prod_origin)
+
+    # Validate origin
+    if origin in allowed_origins:
+        return {
+            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+    else:
+        # Log unauthorized access attempt
+        if origin:
+            logger.warning(f"Blocked CORS request from unauthorized origin: {origin}")
+        # Return default allowed origin (localhost)
+        return {
+            'Access-Control-Allow-Origin': 'http://localhost:5173',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+
+#  ==================== Health Check Endpoint ====================
+@routes.get("/health")
+async def health_check(request):
+    """Health check endpoint for ALB/ECS health checks"""
+    return web.json_response({
+        "status": "healthy",
+        "service": "vpbank-voice-bot",
+        "version": "1.0.0"
+    })
+
 # WebSocket connections cho transcript streaming
 ws_connections = set()
 
 # Initialize auth service
 auth_service = CognitoAuthService()
 
-# ICE servers configuration
+# ICE servers configuration - Multiple STUN servers for redundancy
 STUN_SERVER = os.getenv("STUN_SERVER", "stun:stun.l.google.com:19302")
 TURN_SERVER = os.getenv("TURN_SERVER", "turn:openrelay.metered.ca:80")
 TURN_USERNAME = os.getenv("TURN_USERNAME", "openrelayproject")
 TURN_CREDENTIAL = os.getenv("TURN_CREDENTIAL", "openrelayproject")
 
 ice_servers = [
-    IceServer(urls=STUN_SERVER),
-    IceServer(
-        urls=TURN_SERVER,
-        username=TURN_USERNAME,
-        credential=TURN_CREDENTIAL
-    ),
+    IceServer(urls="stun:stun.l.google.com:19302"),
+    IceServer(urls="stun:stun1.l.google.com:19302"),
+    IceServer(urls="stun:stun2.l.google.com:19302"),
 ]
+
+# Add TURN servers for NAT traversal (HTTP and HTTPS)
+if TURN_SERVER:
+    ice_servers.extend([
+        IceServer(
+            urls=TURN_SERVER,
+            username=TURN_USERNAME,
+            credential=TURN_CREDENTIAL
+        ),
+        IceServer(
+            urls="turn:openrelay.metered.ca:443",  # TLS TURN for restrictive firewalls
+            username=TURN_USERNAME,
+            credential=TURN_CREDENTIAL
+        ),
+    ])
+
+logger.info(f"🌐 Configured {len(ice_servers)} ICE servers for WebRTC")
 
 
 def _to_jsonable(value):
@@ -102,7 +168,7 @@ async def push_to_browser_service(user_message: str, ws_connections: set, sessio
     logger.debug(f"   Message length: {len(user_message)} chars")
 
     # Generate request ID for correlation across services
-    request_id = generate_request_id()
+    request_id = str(uuid.uuid4())
 
     # Prepare request
     payload = {
@@ -252,6 +318,9 @@ async def run_bot(webrtc_connection, ws_connections):
     processing_task = {"active": False, "task_id": None}
     
     # Initialize services
+    # AWS Transcribe STT Service
+    # Note: AWS Transcribe automatically closes connection after 15 seconds of no audio
+    # This is normal behavior and not an error - connection will be re-established on next audio
     stt = AWSTranscribeSTTService(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
@@ -355,15 +424,22 @@ async def run_bot(webrtc_connection, ws_connections):
                     
                     # Detect form filling intent - push ngay lập tức (incremental hoặc one-shot)
                     form_keywords = [
-                        # Start form keywords
+                        # Start form keywords (including Vietnamese transcription variations)
                         "bắt đầu điền", "mở form", "tạo form", "điền đơn", "làm đơn vay",
+                        "mẫu phương", "mẫu phông", "mở phương", "mở phông",  # AWS Transcribe variations of "form"
+                        # Specific form names (Vietnamese + English)
+                        "hr", "h r", "nhân sự", "nghỉ phép", "đơn nghỉ",
+                        "crm", "c r m", "khách hàng", "customer",
+                        "loan", "đơn vay", "vay vốn", "kyc",
+                        "compliance", "tuân thủ", "aml", "báo cáo",
+                        "operations", "giao dịch", "transaction",
                         # Field keywords - MỞ RỘNG để catch nhiều hơn
-                        "vay", "khoản vay", "đơn vay", "làm đơn vay", "tạo đơn vay",
+                        "vay", "khoản vay", "làm đơn vay", "tạo đơn vay",
                         "căn cước công dân", "căn cước", "số điện thoại", "sdt", "email", "địa chỉ",
                         "số tiền", "kỳ hạn", "mục đích vay", "thu nhập", "công ty",
-                        "tên", "ngày sinh", "giới tính", "mục đích", "kỳ hạn",
+                        "tên", "ngày sinh", "giới tính", "mục đích",
                         # Common action keywords
-                        "điền", "nhập", "điền vào", "cho", "là", "là",
+                        "điền", "nhập", "điền vào", "cho", "là",
                         # Submit keywords
                         "gửi form", "gửi đơn", "submit", "xong rồi", "làm xong"
                     ]
@@ -826,23 +902,13 @@ async def reset_password_handler(request):
 @routes.options("/api/auth/reset-password")
 async def auth_options(request):
     """Handle CORS preflight for auth endpoints"""
-    return web.Response(
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        }
-    )
+    return web.Response(headers=get_cors_headers(request))
 
 
 @routes.post("/offer")
 async def handle_offer(request):
     """Handle WebRTC offer"""
-    headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-    }
+    headers = get_cors_headers(request)
     
     try:
         logger.info("📥 Received WebRTC offer request")
@@ -910,13 +976,7 @@ async def handle_offer(request):
 @routes.options("/offer")
 async def handle_offer_options(request):
     """Handle CORS preflight"""
-    return web.Response(
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        }
-    )
+    return web.Response(headers=get_cors_headers(request))
 
 
 @routes.get("/api/sessions")
@@ -1009,15 +1069,14 @@ def create_app():
     async def cors_middleware(app, handler):
         async def middleware(request):
             if request.method == "OPTIONS":
-                return web.Response(
-                    headers={
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type',
-                    }
-                )
+                cors_headers = get_cors_headers(request)
+                cors_headers['Access-Control-Max-Age'] = '3600'
+                return web.Response(headers=cors_headers)
+
             response = await handler(request)
-            response.headers['Access-Control-Allow-Origin'] = '*'
+            cors_headers = get_cors_headers(request)
+            for header, value in cors_headers.items():
+                response.headers[header] = value
             return response
         return middleware
     

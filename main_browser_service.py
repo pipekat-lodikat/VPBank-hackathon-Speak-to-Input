@@ -1,7 +1,11 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
 Browser Agent Service - Standalone HTTP/WebSocket Server
 Lắng nghe requests từ Voice Bot và thực hiện browser automation
+
+Copyright (c) 2025 Pipekat Lodikat Team
+Licensed under the MIT License - see LICENSE file for details
 """
 import asyncio
 import os

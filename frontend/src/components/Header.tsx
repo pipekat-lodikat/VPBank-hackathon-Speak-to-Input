@@ -23,7 +23,7 @@ const Header: React.FC = () => {
           <div className="flex items-center space-x-4">
             <div className="flex-shrink-0">
               <img
-                src="/logo-vpbank-2-1400x327.webp"
+                src="/LogoVPBank_Header.svg"
                 alt="VPBank Logo"
                 className="h-8 w-auto"
                 onError={handleLogoError}

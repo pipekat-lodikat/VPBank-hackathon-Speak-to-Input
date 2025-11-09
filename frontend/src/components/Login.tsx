@@ -8,6 +8,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import icon from "../icon.png";
+import { API_ENDPOINTS } from "../config/api";
 
 interface LoginProps {
   onLoginSuccess: (tokens: {
@@ -70,7 +71,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:7860/api/auth/login", {
+      const response = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -114,7 +115,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
 
     try {
-      const response = await fetch("http://localhost:7860/api/auth/register", {
+      const response = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -159,16 +160,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setForgotSuccess("");
 
     try {
-      const response = await fetch(
-        "http://localhost:7860/api/auth/forgot-password",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: forgotEmail,
-          }),
-        }
-      );
+      const response = await fetch(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: forgotEmail,
+        }),
+      });
 
       const data = await response.json();
 
@@ -205,18 +203,15 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     }
 
     try {
-      const response = await fetch(
-        "http://localhost:7860/api/auth/reset-password",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: forgotEmail,
-            code: forgotCode,
-            new_password: forgotNewPassword,
-          }),
-        }
-      );
+      const response = await fetch(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: forgotEmail,
+          code: forgotCode,
+          new_password: forgotNewPassword,
+        }),
+      });
 
       const data = await response.json();
 

@@ -30,12 +30,24 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 # Import voice bot
 from src.voice_bot import create_app
+from src.env_validator import validate_voice_bot_env, warn_optional_env_vars
 from aiohttp import web
 from loguru import logger
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Validate required environment variables
+validate_voice_bot_env()
+
+# Warn about optional environment variables
+warn_optional_env_vars([
+    "STUN_SERVER",
+    "TURN_SERVER",
+    "TURN_USERNAME",
+    "TURN_CREDENTIAL",
+], "Voice Bot Service")
 
 if __name__ == "__main__":
     # Support environment variables for deployment flexibility

@@ -16,8 +16,13 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.browser_agent import browser_agent
+from src.env_validator import validate_browser_service_env
+from src.input_validator import sanitize_user_message, validate_session_id
 
 load_dotenv(override=True)
+
+# Validate required environment variables
+validate_browser_service_env()
 
 routes = RouteTableDef()
 
@@ -46,13 +51,30 @@ async def execute_workflow(request):
         data = await request.json()
         user_message = data.get("user_message", "")
         session_id = data.get("session_id", "")
-        
+        request_id = data.get("request_id", "unknown")
+
+        logger.info(f"📝 Request ID: {request_id} - Received request from Voice Bot")
+
+        # Validate and sanitize inputs
         if not user_message:
             return web.json_response({
                 "success": False,
                 "error": "user_message is required"
             }, status=400)
-        
+
+        user_message = sanitize_user_message(user_message)
+        if not user_message:
+            return web.json_response({
+                "success": False,
+                "error": "Invalid user message"
+            }, status=400)
+
+        if session_id and not validate_session_id(session_id):
+            return web.json_response({
+                "success": False,
+                "error": "Invalid session ID format"
+            }, status=400)
+
         logger.info(f"🚀 Received workflow request for session {session_id}")
         logger.debug(f"   Message length: {len(user_message)} chars")
         
@@ -70,19 +92,21 @@ async def execute_workflow(request):
         if not final_message or final_message == "No response" or len(final_message.strip()) < 3:
             final_message = "Đã xử lý thành công"
         
-        logger.info(f"✅ Workflow completed! Result: {final_message[:200]}...")
-        
+        logger.info(f"✅ Request ID: {request_id} - Workflow completed! Result: {final_message[:200]}...")
+
         return web.json_response({
             "success": True,
             "result": final_message,
-            "session_id": session_id
+            "session_id": session_id,
+            "request_id": request_id,
         })
-        
+
     except Exception as e:
-        logger.error(f"❌ Workflow execution failed: {e}", exc_info=True)
+        logger.error(f"❌ Request ID: {request_id if 'request_id' in locals() else 'unknown'} - Workflow execution failed: {e}", exc_info=True)
         return web.json_response({
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "request_id": request_id if 'request_id' in locals() else None
         }, status=500)
 
 
@@ -122,7 +146,26 @@ def create_app():
             else:
                 response = await handler(request)
             
-            response.headers['Access-Control-Allow-Origin'] = '*'
+            # CORS: Allow only specific origins (Voice Bot and Frontend)
+            origin = request.headers.get('Origin')
+            allowed_origins = {
+                'http://localhost:7860',  # Voice Bot (local)
+                'http://127.0.0.1:7860',  # Voice Bot (loopback)
+                'http://localhost:5173',  # Frontend (local)
+                'http://127.0.0.1:5173',  # Frontend (loopback)
+            }
+
+            # Add production origin if configured
+            prod_origin = os.getenv('ALLOWED_ORIGIN')
+            if prod_origin:
+                allowed_origins.add(prod_origin)
+
+            if origin in allowed_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                logger.warning(f"Blocked CORS request from unauthorized origin: {origin}")
+                response.headers['Access-Control-Allow-Origin'] = 'http://localhost:7860'  # Default to Voice Bot
+
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
             return response

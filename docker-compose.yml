@@ -5,6 +5,9 @@ services:
     command: python main_browser_service.py
     ports:
       - "7863:7863"
+    # Load environment variables from .env file (local development only)
+    env_file:
+      - .env
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -26,6 +29,9 @@ services:
     command: python main_voice.py
     ports:
       - "7860:7860"
+    # Load environment variables from .env file (local development only)
+    env_file:
+      - .env
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}

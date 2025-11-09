@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
+        // Default target for development proxy
         target: 'http://127.0.0.1:7860',
         changeOrigin: true,
         ws: true,

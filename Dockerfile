@@ -54,8 +54,9 @@ COPY src ./src
 COPY main_voice.py .
 COPY main_browser_service.py .
 
-# Copy .env file if exists (for local testing, use Secrets Manager in production)
-COPY .env* ./
+# IMPORTANT: Do NOT copy .env files into Docker images
+# Use environment variables injection or AWS Secrets Manager in production
+# For local testing with docker-compose, mount .env as a volume instead
 
 # Create non-root user for security best practices
 RUN useradd -m -u 1000 appuser && \
@@ -76,8 +77,9 @@ ENV PYTHONUNBUFFERED=1 \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Expose ports (7860 for voice bot, 7863 for browser agent)
-EXPOSE 7860 7863
+# Expose only Voice Bot port (7860)
+# Browser Agent (7863) should be internal-only, accessed via service mesh/VPC
+EXPOSE 7860
 
 # Default command - can be overridden in ECS task definition
 CMD ["python", "main_voice.py"]

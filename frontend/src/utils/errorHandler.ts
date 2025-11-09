@@ -116,7 +116,7 @@ export const setupGlobalErrorHandlers = () => {
 /**
  * Safe console.error wrapper that filters extension errors
  */
-export const safeConsoleError = (...args: any[]) => {
+export const safeConsoleError = (...args: unknown[]) => {
   const firstArg = args[0];
 
   // Check if first argument looks like an extension error

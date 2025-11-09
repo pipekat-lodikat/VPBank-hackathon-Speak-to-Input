@@ -15,6 +15,13 @@ interface TranscriptData {
   messages: Array<{ role: string; content: string; timestamp?: string }>;
 }
 
+interface SessionApiResponse {
+  session_id: string;
+  started_at: string;
+  ended_at?: string;
+  messages?: Array<{ role: string; content: string; timestamp?: string }>;
+}
+
 export function useTranscripts() {
   const [transcripts, setTranscripts] = useState<TranscriptFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,7 +38,7 @@ export function useTranscripts() {
 
       if (result.success && result.sessions) {
         // Transform DynamoDB sessions to match interface
-        const sessions = result.sessions.map((session: any) => ({
+        const sessions = result.sessions.map((session: SessionApiResponse) => ({
           id: session.session_id,
           started_at: session.started_at,
           ended_at: session.ended_at,

@@ -1,0 +1,21 @@
+
+
+**SPEAK TO INPUT**
+
+**1. Challenge Overview**
+
+Banking operations often involve complex, multi-step service and product workflows that require processing a large amount of information. The corresponding information systems for these workflows typically contain input screens with numerous data fields. When performed manually via keyboard typing, data entry can become time-consuming and error-prone, ultimately reducing work efficiency. Reducing processing time, minimizing errors, and enhancing the user experience in data entry are critical requirements. This challenge aims to leverage the power of Generative AI (GenAI) to significantly improve and streamline the data entry process.
+The objective is to develop a simple application prototype to demonstrate the use of GenAI in enabling an alternative data entry method via voice commands:
+– Users interact with AI to command actions such as inputting, editing, or deleting content in a field/input screen.
+– Users can instruct AI to trigger functional buttons on screens or menus.
+– The AI must be capable of automatically correcting common spelling mistakes and understanding regional accents and intonations.
+
+---
+
+3. Evaluation and Measurement
+– Interface: Simple, user-friendly, and easy to interact with.
+– Features: Support essential features such as AI voice interaction, accurate speech recognition, correct execution of data entry commands, triggering UI functions, understanding regional accents, and auto-correction of common spelling mistakes.
+
+4. Deliverables
+– A simple demo application showcasing the core features to prove solution feasibility.
+– Input screens where users can interact with AI to perform data entry and functional operations. A clean, intuitive user interface.

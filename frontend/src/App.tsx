@@ -50,13 +50,6 @@ function App() {
   const [accessToken, setAccessToken] = useState<string | null>(() => readStoredToken());
   const [route, setRoute] = useState<RoutePath>(() => resolveInitialRoute(Boolean(readStoredToken())));
 
-  useEffect(() => {
-    const stored = readStoredToken();
-    if (stored) {
-      setAccessToken(stored);
-    }
-  }, []);
-
   const navigate = useCallback(
     (path: RoutePath, { replace = false }: { replace?: boolean } = {}) => {
       if (typeof window !== 'undefined') {
@@ -101,10 +94,11 @@ function App() {
   }, [accessToken, navigate]);
 
   useEffect(() => {
+    // Use queueMicrotask to defer navigation until after render
     if (accessToken && route !== '/chat') {
-      navigate('/chat', { replace: true });
+      queueMicrotask(() => navigate('/chat', { replace: true }));
     } else if (!accessToken && route === '/chat') {
-      navigate('/login', { replace: true });
+      queueMicrotask(() => navigate('/login', { replace: true }));
     }
   }, [accessToken, route, navigate]);
 

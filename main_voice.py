@@ -7,6 +7,24 @@ Giao tiếp với Browser Agent Service qua HTTP API
 import sys
 import os
 
+# Filter ONNX Runtime GPU warning (harmless on CPU-only systems)
+class FilteredStderr:
+    def __init__(self, stream):
+        self.stream = stream
+        self.buffer = ""
+
+    def write(self, text):
+        # Filter out ONNX GPU device discovery warning (with or without ANSI codes)
+        if "GPU device discovery failed" in text or "device_discovery.cc" in text or "DiscoverDevicesForPlatform" in text:
+            return len(text)  # Skip this line
+        self.stream.write(text)
+        return len(text)
+
+    def flush(self):
+        self.stream.flush()
+
+sys.stderr = FilteredStderr(sys.stderr)
+
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 

@@ -15,6 +15,7 @@ import {
 import Header from "../components/Header";
 import VPBankWelcome from "../components/VPBankWelcome";
 import { useTranscripts } from "../hooks/useTranscripts";
+import { API_ENDPOINTS, WS_URL, BROWSER_SERVICE_URL } from "../config/api";
 
 type TranscriptMessage = {
   role: string;
@@ -95,6 +96,9 @@ class WebRTCClient {
       const offer = await this.pc!.createOffer();
       await this.pc!.setLocalDescription(offer);
 
+      console.log("🔗 Connecting to WebRTC endpoint:", options.endpoint);
+      console.log("📤 Sending WebRTC offer...");
+      
       const response = await fetch(options.endpoint, {
         method: "POST",
         headers: {
@@ -106,13 +110,18 @@ class WebRTCClient {
         }),
       });
 
+      console.log("📥 Response status:", response.status, response.statusText);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Server error response:", errorText);
         throw new Error(
-          `Server error: ${response.status} ${response.statusText}`
+          `Server error: ${response.status} ${response.statusText}. ${errorText}`
         );
       }
 
       const answer = await response.json();
+      console.log("✅ Received WebRTC answer:", answer.type);
 
       await this.pc!.setRemoteDescription(answer);
 
@@ -338,7 +347,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     const fetchUserInfo = async () => {
       if (!accessToken) return;
       try {
-        const res = await fetch("http://localhost:7860/api/auth/verify", {
+        const res = await fetch(API_ENDPOINTS.AUTH.VERIFY, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: accessToken }),
@@ -376,7 +385,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         return;
       }
 
-      const ws = new WebSocket("ws://localhost:7860/ws");
+      const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         console.log("WebSocket connected for transcript streaming");
@@ -386,6 +395,13 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "transcript" && data.message) {
+            // Debug log để kiểm tra message nhận được
+            console.log("📨 Received transcript message:", {
+              role: data.message.role,
+              content: data.message.content?.substring(0, 50),
+              fullMessage: data.message
+            });
+            
             setTranscript((prev) => {
               const isDuplicate = prev.some(
                 (msg) =>
@@ -394,6 +410,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
               );
 
               if (isDuplicate) {
+                console.log("⚠️ Duplicate message detected, skipping");
                 return prev;
               }
 
@@ -414,8 +431,11 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                 data.message as TranscriptMessage,
               ];
 
+              console.log("✅ Updated transcript, total messages:", newTranscript.length, "Roles:", newTranscript.map(m => m.role));
               return newTranscript;
             });
+          } else {
+            console.log("📬 Received non-transcript message:", data.type);
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -502,7 +522,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
     let timer: ReturnType<typeof setInterval> | null = null;
     const fetchLive = async () => {
       try {
-        const res = await fetch("http://localhost:7863/api/live");
+        const res = await fetch(API_ENDPOINTS.BROWSER.LIVE);
         if (!res.ok) return;
         const data = await res.json();
         if (data && typeof data.live_url === "string") {
@@ -612,7 +632,7 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
       setIsConnecting(true);
       setError(null);
       await client.startBotAndConnect({
-        endpoint: "http://localhost:7860/offer",
+        endpoint: API_ENDPOINTS.WEBRTC_OFFER,
         audioInput: selectedInputDevice || undefined,
         audioOutput: selectedOutputDevice || undefined,
       });
@@ -1295,8 +1315,18 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                               </p>
                             </div>
                           ) : (
-                            transcript.map((message, index) =>
-                              message.role === "user" ? (
+                            transcript.map((message, index) => {
+                              // Debug log để kiểm tra message được render
+                              if (message.role !== "user") {
+                                console.log("🤖 Rendering bot message:", {
+                                  index,
+                                  role: message.role,
+                                  content: message.content?.substring(0, 50),
+                                  hasContent: !!message.content
+                                });
+                              }
+                              
+                              return message.role === "user" ? (
                                 <div key={index} className="flex justify-end">
                                   <div className="max-w-[85%] bg-emerald-50 text-emerald-900 rounded-lg rounded-tr-sm px-2 py-1.5 shadow-sm whitespace-pre-wrap text-xs">
                                     {formatMessageLines(message.content).map(
@@ -1315,23 +1345,28 @@ const ChatPage = ({ accessToken, onSignOut }: ChatPageProps) => {
                                 <div
                                   key={index}
                                   className="flex items-start gap-1.5"
+                                  style={{ display: 'flex' }} // Đảm bảo hiển thị
                                 >
                                   <div className="w-5 h-5 rounded-full grid place-items-center bg-gradient-to-br from-emerald-500 to-cyan-400 text-white shadow-sm flex-shrink-0">
                                     <Bot className="w-3 h-3" />
                                   </div>
                                   <div className="max-w-[80%] bg-white text-gray-900 rounded-lg rounded-tl-sm px-2 py-1.5 shadow-sm border border-gray-100 whitespace-pre-wrap text-xs">
-                                    {formatMessageLines(
-                                      message.content,
-                                      isLoadedFromFile
-                                    ).map((line, i) => (
-                                      <div key={i} className="mb-0.5 last:mb-0">
-                                        {line}
-                                      </div>
-                                    ))}
+                                    {message.content ? (
+                                      formatMessageLines(
+                                        message.content,
+                                        isLoadedFromFile
+                                      ).map((line, i) => (
+                                        <div key={i} className="mb-0.5 last:mb-0">
+                                          {line}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="text-gray-400 italic">Empty message</div>
+                                    )}
                                   </div>
                                 </div>
-                              )
-                            )
+                              );
+                            })
                           )}
                         </div>
                       )}

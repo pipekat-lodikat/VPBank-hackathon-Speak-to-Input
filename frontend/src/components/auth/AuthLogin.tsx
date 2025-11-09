@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { API_ENDPOINTS } from '../../config/api';
 
 export type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -74,7 +75,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
     setError('');
 
     try {
-      const response = await fetch('http://localhost:7860/api/auth/login', {
+      const response = await fetch(API_ENDPOINTS.AUTH.LOGIN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -117,7 +118,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
     }
 
     try {
-      const response = await fetch('http://localhost:7860/api/auth/register', {
+      const response = await fetch(API_ENDPOINTS.AUTH.REGISTER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,7 +162,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
     try {
       const response = await fetch(
-        'http://localhost:7860/api/auth/forgot-password',
+        API_ENDPOINTS.AUTH.FORGOT_PASSWORD,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -206,7 +207,7 @@ export function AuthLogin({ initialMode = 'login', onLoginSuccess, onChangeMode 
 
     try {
       const response = await fetch(
-        'http://localhost:7860/api/auth/reset-password',
+        API_ENDPOINTS.AUTH.RESET_PASSWORD,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

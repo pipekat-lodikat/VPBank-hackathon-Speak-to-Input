@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_ENDPOINTS } from '../config/api';
 
 interface TranscriptFile {
   id: string;
@@ -24,7 +25,7 @@ export function useTranscripts() {
     setError(null);
     try {
       // Use DynamoDB endpoint instead of file-based
-      const response = await fetch('http://localhost:7860/api/sessions?limit=50');
+      const response = await fetch(`${API_ENDPOINTS.SESSIONS.LIST}?limit=50`);
       if (!response.ok) throw new Error('Failed to load sessions');
       const result = await response.json();
 
@@ -51,7 +52,7 @@ export function useTranscripts() {
   const loadTranscript = async (sessionId: string): Promise<TranscriptData | null> => {
     try {
       // Use DynamoDB endpoint instead of file-based
-      const response = await fetch(`http://localhost:7860/api/sessions/${sessionId}`);
+      const response = await fetch(API_ENDPOINTS.SESSIONS.GET(sessionId));
       if (!response.ok) throw new Error('Failed to load session');
       const result = await response.json();
 

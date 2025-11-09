@@ -279,32 +279,50 @@ async def run_bot(webrtc_connection, ws_connections):
     dynamodb_service.save_session(transcript_data)
     logger.info(f"💾 Created session {session_id} in DynamoDB")
     
-    # Transcript handler
+    # Transcript handler - Capture cả user và assistant messages
     @transcript.event_handler("on_transcript_update")
     async def handle_transcript_update(processor, frame):
-        """Handle transcript updates"""
+        """Handle transcript updates - xử lý cả user và assistant messages"""
         try:
+            logger.debug(f"📋 Transcript update: {len(frame.messages)} messages")
+            
             for message in frame.messages:
+                # Log để debug
+                logger.info(f"📝 Transcript message: role={message.role}, content={message.content[:100] if message.content else 'None'}...")
+                
                 msg_dict = {
-                    "role": message.role,
+                    "role": message.role,  # Có thể là "user" hoặc "assistant"
                     "content": message.content,
                     "timestamp": message.timestamp or datetime.now().isoformat()
                 }
-                transcript_data["messages"].append(msg_dict)
                 
-                # Save to DynamoDB (async update)
-                dynamodb_service.save_session(transcript_data)
+                # Kiểm tra duplicate
+                is_duplicate = any(
+                    m.get("role") == msg_dict["role"] and 
+                    m.get("content") == msg_dict["content"]
+                    for m in transcript_data["messages"]
+                )
                 
-                # Send to WebSocket clients
-                for ws in list(ws_connections):
-                    try:
-                        await ws.send_json({
-                            "type": "transcript",
-                            "message": msg_dict
-                        })
-                    except Exception as e:
-                        logger.warning(f"Failed to send transcript: {e}")
-                        ws_connections.discard(ws)
+                if not is_duplicate:
+                    transcript_data["messages"].append(msg_dict)
+                    
+                    # Save to DynamoDB (async update)
+                    dynamodb_service.save_session(transcript_data)
+                    
+                    # Send to WebSocket clients - GỬI TẤT CẢ MESSAGES (user và assistant)
+                    for ws in list(ws_connections):
+                        try:
+                            await ws.send_json({
+                                "type": "transcript",
+                                "message": msg_dict
+                            })
+                            if message.role == "assistant":
+                                logger.info(f"✅ Sent assistant message to WebSocket: {msg_dict['content'][:50]}...")
+                        except Exception as e:
+                            logger.warning(f"Failed to send transcript: {e}")
+                            ws_connections.discard(ws)
+                else:
+                    logger.debug(f"⚠️ Duplicate message skipped: {message.role}")
                 
                 # Push ngay lập tức khi user nói về form filling (incremental mode)
                 # Mỗi user message có thể là: tên, cccd, sdt, số tiền, etc. → push ngay để điền field đó
@@ -608,15 +626,16 @@ async def run_bot(webrtc_connection, ws_connections):
     context_aggregator = llm.create_context_aggregator(context)
 
     # Pipeline (standard pipeline without filter)
+    # QUAN TRỌNG: transcript.assistant() phải được đặt SAU transport.output() theo tài liệu Pipecat
     pipeline = Pipeline([
         transport.input(),
         stt,
-        transcript.user(),
+        transcript.user(),              # Capture user messages từ STT
         context_aggregator.user(),
         llm,
         tts,
         transport.output(),
-        transcript.assistant(),
+        transcript.assistant(),        # Capture assistant messages từ LLM (sau transport.output theo tài liệu)
         context_aggregator.assistant(),
     ])
 
@@ -798,20 +817,39 @@ async def auth_options(request):
 @routes.post("/offer")
 async def handle_offer(request):
     """Handle WebRTC offer"""
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+    }
+    
     try:
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        }
+        logger.info("📥 Received WebRTC offer request")
+        logger.debug(f"   Request headers: {dict(request.headers)}")
+        logger.debug(f"   Request method: {request.method}")
         
-        body = await request.json()
+        # Parse request body
+        try:
+            body = await request.json()
+            logger.debug(f"   Request body keys: {list(body.keys())}")
+        except Exception as e:
+            logger.error(f"❌ Failed to parse JSON: {e}")
+            return web.json_response(
+                {"error": "Invalid JSON in request body"},
+                status=400,
+                headers=headers
+            )
+        
         offer_sdp = body.get("sdp")
         offer_type = body.get("type")
         
+        logger.debug(f"   Offer type: {offer_type}")
+        logger.debug(f"   SDP length: {len(offer_sdp) if offer_sdp else 0}")
+        
         if not offer_sdp or offer_type != "offer":
+            logger.warning(f"⚠️ Invalid offer: type={offer_type}, has_sdp={bool(offer_sdp)}")
             return web.json_response(
-                {"error": "Invalid offer"},
+                {"error": "Invalid offer: missing sdp or type is not 'offer'"},
                 status=400,
                 headers=headers
             )
@@ -830,20 +868,21 @@ async def handle_offer(request):
         # Get answer from connection (NEW API)
         logger.info("🔧 Getting answer from WebRTC connection...")
         answer = webrtc_connection.get_answer()
-        logger.info(f"✅ Got answer")
+        logger.info(f"✅ Got answer: type={answer.get('type')}, sdp_length={len(answer.get('sdp', ''))}")
         
         # Start bot pipeline
         logger.info("🚀 Starting bot pipeline...")
         asyncio.create_task(run_bot(webrtc_connection, ws_connections))
         
-        logger.info("✅ Bot pipeline started successfully")
+        logger.info("✅ Bot pipeline started successfully, returning answer to client")
         return web.json_response(answer, headers=headers)
         
     except Exception as e:
-        logger.error(f"Error handling offer: {e}")
+        logger.error(f"❌ Error handling offer: {e}", exc_info=True)
         return web.json_response(
-            {"error": str(e)},
-            status=500
+            {"error": str(e), "type": "WebRTCConnectionError"},
+            status=500,
+            headers=headers
         )
 
 

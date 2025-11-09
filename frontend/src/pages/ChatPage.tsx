@@ -15,7 +15,7 @@ import {
 import Header from "../components/Header";
 import VPBankWelcome from "../components/VPBankWelcome";
 import { useTranscripts } from "../hooks/useTranscripts";
-import { API_ENDPOINTS, WS_URL, BROWSER_SERVICE_URL } from "../config/api";
+import { API_ENDPOINTS, WS_URL } from "../config/api";
 
 type TranscriptMessage = {
   role: string;

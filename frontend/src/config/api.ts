@@ -6,10 +6,22 @@
 
 // Get API base URL from environment variable or use default
 const getApiBaseUrl = (): string => {
-  // Production: Use environment variable
+  // Production: Use environment variable or same-origin
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
+
+  // In production, use same origin (CloudFront routes /api/*, /offer, /ws to ALB)
+  if (import.meta.env.PROD) {
+    if (typeof window !== 'undefined') {
+      const protocol = window.location.protocol;
+      const hostname = window.location.hostname;
+      return `${protocol}//${hostname}`;
+    }
+    // Fallback to CloudFront domain if window is not available (SSR)
+    return 'https://d359aaha3l67dn.cloudfront.net';
+  }
+
   // Development: Default to localhost
   return 'http://localhost:7860';
 };

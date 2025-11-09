@@ -75,6 +75,35 @@ class WebRTCClient {
     audioOutput?: string;
   }) {
     try {
+      // Recreate peer connection if it was closed
+      if (!this.pc) {
+        this.pc = new RTCPeerConnection({
+          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        });
+
+        this.pc.onconnectionstatechange = () => {
+          this.connected = this.pc?.connectionState === "connected";
+          this.onStateChange?.(this.pc?.connectionState || "disconnected");
+        };
+
+        this.pc.ontrack = (event) => {
+          if (event.track.kind === "audio") {
+            if (!this.remoteAudio) {
+              this.remoteAudio = new Audio();
+              this.remoteAudio.autoplay = true;
+              document.body.appendChild(this.remoteAudio);
+            }
+
+            const remoteStream = new MediaStream([event.track]);
+            this.remoteAudio.srcObject = remoteStream;
+
+            event.track.onended = () => {
+              // Clean up handled in disconnect
+            };
+          }
+        };
+      }
+
       const constraints: MediaStreamConstraints = {
         audio: options.audioInput
           ? { deviceId: { exact: options.audioInput } }
@@ -123,7 +152,14 @@ class WebRTCClient {
       const answer = await response.json();
       console.log("✅ Received WebRTC answer:", answer.type);
 
-      await this.pc!.setRemoteDescription(answer);
+      // Check if peer connection is in correct state before setting remote description
+      if (this.pc?.signalingState === "have-local-offer") {
+        await this.pc.setRemoteDescription(answer);
+        console.log("✅ Remote description set successfully");
+      } else {
+        console.error(`❌ Cannot set remote description. Signaling state: ${this.pc?.signalingState}`);
+        throw new Error(`Invalid signaling state: ${this.pc?.signalingState}. Expected "have-local-offer"`);
+      }
 
       if (options.audioOutput && this.remoteAudio?.setSinkId) {
         try {
@@ -196,24 +232,8 @@ class WebRTCClient {
     }
     if (this.pc) {
       this.pc.close();
-      this.pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
-      this.pc.onconnectionstatechange = () => {
-        this.connected = this.pc?.connectionState === "connected";
-        this.onStateChange?.(this.pc?.connectionState || "disconnected");
-      };
-      this.pc.ontrack = (event) => {
-        if (event.track.kind === "audio") {
-          if (!this.remoteAudio) {
-            this.remoteAudio = new Audio();
-            this.remoteAudio.autoplay = true;
-            document.body.appendChild(this.remoteAudio);
-          }
-          const remoteStream = new MediaStream([event.track]);
-          this.remoteAudio.srcObject = remoteStream;
-        }
-      };
+      // Don't recreate peer connection here - will be created in startBotAndConnect
+      this.pc = null;
     }
     this.connected = false;
     this.onStateChange?.("disconnected");

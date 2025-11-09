@@ -1,17 +1,24 @@
 services:
-  # Task Queue Service (HTTP REST API)
-  task-queue:
+  # Browser Agent Service (HTTP REST API for browser automation)
+  browser-agent:
     build: .
-    command: python services/task_queue_service/main.py
+    command: python main_browser_service.py
     ports:
-      - "7862:7862"
+      - "7863:7863"
     environment:
-      - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - .:/app
     working_dir: /app
     networks:
       - vpbank-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7863/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Voice Bot Service (WebRTC + STT/TTS/LLM)
   voice-bot:
@@ -20,47 +27,56 @@ services:
     ports:
       - "7860:7860"
     environment:
-      - USE_TASK_QUEUE_API=true
-      - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
+      - BROWSER_SERVICE_URL=http://browser-agent:7863
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - AUTH_AWS_ACCESS_KEY_ID=${AUTH_AWS_ACCESS_KEY_ID}
+      - AUTH_AWS_SECRET_ACCESS_KEY=${AUTH_AWS_SECRET_ACCESS_KEY}
+      - DYNAMODB_TABLE_NAME=${DYNAMODB_TABLE_NAME}
+      - DYNAMODB_AWS_ACCESS_KEY_ID=${DYNAMODB_AWS_ACCESS_KEY_ID}
+      - DYNAMODB_AWS_SECRET_ACCESS_KEY=${DYNAMODB_AWS_SECRET_ACCESS_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - .:/app
       - ./transcripts:/app/transcripts
     working_dir: /app
     depends_on:
-      - task-queue
+      browser-agent:
+        condition: service_healthy
     networks:
       - vpbank-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Browser Worker Service (Workflow + Browser Automation)
-  browser-worker:
-    build: .
-    command: python main_worker.py
+  # Frontend Service (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
     environment:
-      - USE_TASK_QUEUE_API=true
-      - TASK_QUEUE_SERVICE_URL=http://task-queue:7862
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION}
-      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
-      - LOAN_FORM_URL=${LOAN_FORM_URL}
-      - CRM_FORM_URL=${CRM_FORM_URL}
-      - HR_FORM_URL=${HR_FORM_URL}
-      - COMPLIANCE_FORM_URL=${COMPLIANCE_FORM_URL}
-      - OPERATIONS_FORM_URL=${OPERATIONS_FORM_URL}
+      - VITE_API_URL=http://localhost:7860
     volumes:
-      - .:/app
+      - ./frontend:/app
+      - /app/node_modules
     working_dir: /app
+    command: npm run dev -- --host 0.0.0.0
     depends_on:
-      - task-queue
+      - voice-bot
     networks:
       - vpbank-network
 
 networks:
   vpbank-network:
     driver: bridge
-

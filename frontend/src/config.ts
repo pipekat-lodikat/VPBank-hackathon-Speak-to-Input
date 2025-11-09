@@ -1,8 +1,14 @@
 // Auto-detect API URL based on window location
 export const getApiUrl = (): string => {
-  // In production, use ALB directly (CloudFront only serves static files)
+  // In production, use same origin (CloudFront routes /api/*, /offer, /ws to ALB)
   if (import.meta.env.PROD) {
-    return 'http://vpbank-voice-agent-alb-1745174960.us-east-1.elb.amazonaws.com';
+    if (typeof window !== 'undefined') {
+      const protocol = window.location.protocol;
+      const hostname = window.location.hostname;
+      return `${protocol}//${hostname}`;
+    }
+    // Fallback to CloudFront domain if window is not available (SSR)
+    return 'https://d359aaha3l67dn.cloudfront.net';
   }
 
   // In development or when accessed via network, use the same hostname

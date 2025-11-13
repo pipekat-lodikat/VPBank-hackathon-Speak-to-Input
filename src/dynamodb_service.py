@@ -211,3 +211,52 @@ class DynamoDBService:
             logger.error(f"❌ Unexpected error updating session: {e}", exc_info=True)
             return False
 
+
+    def save_draft(self, draft_name: str, draft_data: dict) -> bool:
+        """
+        Save form draft to DynamoDB
+        
+        Args:
+            draft_name: Unique name for the draft
+            draft_data: Draft data including fields_filled, form_type, etc.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            item = {
+                "session_id": f"draft_{draft_name}",  # Use draft_ prefix
+                "draft_name": draft_name,
+                "created_at": draft_data.get("created_at", datetime.now(timezone.utc).isoformat()),
+                "status": "draft",
+                "form_type": draft_data.get("form_type", "unknown"),
+                "form_url": draft_data.get("form_url", ""),
+                "fields_filled": draft_data.get("fields_filled", []),
+                "session_id_original": draft_data.get("session_id", ""),
+            }
+            
+            self.table.put_item(Item=item)
+            logger.info(f"💾 Saved draft '{draft_name}' to DynamoDB")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"❌ Failed to save draft: {e}")
+            return False
+    
+    def load_draft(self, draft_name: str) -> Optional[dict]:
+        """Load form draft from DynamoDB"""
+        try:
+            response = self.table.get_item(
+                Key={"session_id": f"draft_{draft_name}"}
+            )
+            
+            if "Item" in response:
+                logger.info(f"📂 Loaded draft '{draft_name}'")
+                return response["Item"]
+            else:
+                logger.warning(f"⚠️  Draft '{draft_name}' not found")
+                return None
+                
+        except ClientError as e:
+            logger.error(f"❌ Failed to load draft: {e}")
+            return None

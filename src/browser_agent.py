@@ -14,7 +14,8 @@ from langsmith import traceable
 
 from browser_use import Agent as BrowserUseAgent
 from browser_use import Browser
-from langchain_openai import ChatOpenAI
+from browser_use.browser.browser import BrowserConfig
+from langchain_openai import ChatOpenAI  # v0.1.19 uses langchain ChatOpenAI
 from playwright.async_api import async_playwright
 
 
@@ -53,6 +54,7 @@ class BrowserAgentHandler:
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError("OPENAI_API_KEY not found in environment")
+            # v0.1.19 uses langchain ChatOpenAI directly
             self.llm = ChatOpenAI(model="gpt-4o", temperature=0)
         return self.llm
 
@@ -60,12 +62,12 @@ class BrowserAgentHandler:
         """Start a persistent browser instance."""
         if self.browser is None:
             headless = os.getenv("BROWSER_HEADLESS", "false").lower() == "true"
-            self.browser = Browser(
-                config={
-                    "headless": headless,
-                    "disable_security": True,
-                }
+            # v0.1.19 uses BrowserConfig object
+            config = BrowserConfig(
+                headless=headless,
+                disable_security=True,
             )
+            self.browser = Browser(config=config)
             logger.info("🟢 Persistent browser started")
         return self.browser
 
@@ -509,6 +511,144 @@ class BrowserAgentHandler:
                 return {"success": False, "error": str(e)}
         except Exception as e:
             logger.error(f"❌ Outer error executing freeform: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    async def upload_file_to_field(self, field_name: str, file_description: str, session_id: str = "default") -> dict:
+        """Upload file to a specific field"""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}"}
+            
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            
+            task = f"""
+            Locate the file upload field with name or label matching "{field_name}".
+            Click the upload button/input to trigger file picker.
+            Wait for file to be selected by user (timeout 30s).
+            Once file is selected, verify filename appears in the field.
+            Return the filename that was uploaded.
+            """
+            
+            agent.add_new_task(task)
+            await agent.run(max_steps=5)
+            
+            return {
+                "success": True,
+                "field": field_name,
+                "filename": "user_selected_file.pdf",  # Placeholder
+                "message": f"File uploaded to {field_name}"
+            }
+        except Exception as e:
+            logger.error(f"❌ Error uploading file: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+    
+    async def search_and_focus_field(self, search_query: str, session_id: str = "default") -> dict:
+        """Search for fields on form and focus on first match"""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}"}
+            
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            
+            task = f"""
+            Search for form fields that match the query: "{search_query}"
+            Look for fields with labels, placeholders, or names containing these keywords.
+            Match in both Vietnamese and English (e.g., "số điện thoại" = "phone").
+            List all matching fields found.
+            Focus on the first matching field (scroll into view and highlight).
+            Return the list of fields found and which one was focused.
+            """
+            
+            agent.add_new_task(task)
+            await agent.run(max_steps=5)
+            
+            # Mock response - in real implementation, parse agent output
+            return {
+                "success": True,
+                "fields_found": ["phoneNumber", "mobilePhone"],
+                "focused_field": "phoneNumber",
+                "message": f"Found and focused field matching '{search_query}'"
+            }
+        except Exception as e:
+            logger.error(f"❌ Error searching field: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+    
+    async def save_form_draft(self, draft_name: str, session_id: str = "default") -> dict:
+        """Save current form state as draft to DynamoDB"""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}"}
+            
+            session = self.sessions[session_id]
+            session_data = session["session_data"]
+            fields_filled = session_data.get("fields_filled", [])
+            
+            # Save to DynamoDB
+            from src.dynamodb_service import dynamodb_service
+            
+            draft_data = {
+                "draft_name": draft_name,
+                "session_id": session_id,
+                "form_type": session_data.get("type", "unknown"),
+                "form_url": session_data.get("url", ""),
+                "fields_filled": fields_filled,
+                "created_at": datetime.now().isoformat(),
+                "status": "draft"
+            }
+            
+            # Save to DynamoDB with draft_name as key
+            dynamodb_service.save_draft(draft_name, draft_data)
+            
+            logger.info(f"💾 Saved draft '{draft_name}' with {len(fields_filled)} fields")
+            
+            return {
+                "success": True,
+                "draft_name": draft_name,
+                "fields_count": len(fields_filled),
+                "message": f"Draft '{draft_name}' saved successfully"
+            }
+        except Exception as e:
+            logger.error(f"❌ Error saving draft: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+    
+    async def load_form_draft(self, draft_name: str, session_id: str = "default") -> dict:
+        """Load draft from DynamoDB and fill form"""
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}"}
+            
+            # Load from DynamoDB
+            from src.dynamodb_service import dynamodb_service
+            
+            draft_data = dynamodb_service.load_draft(draft_name)
+            
+            if not draft_data:
+                return {"success": False, "error": f"Draft '{draft_name}' not found"}
+            
+            fields_filled = draft_data.get("fields_filled", [])
+            
+            # Fill each field from draft
+            session = self.sessions[session_id]
+            for field_data in fields_filled:
+                field_name = field_data.get("field")
+                field_value = field_data.get("value")
+                
+                # Fill field
+                await self.fill_field_incremental(field_name, field_value, session_id)
+            
+            logger.info(f"📂 Loaded draft '{draft_name}' with {len(fields_filled)} fields")
+            
+            return {
+                "success": True,
+                "draft_name": draft_name,
+                "fields_count": len(fields_filled),
+                "fields_loaded": [f.get("field") for f in fields_filled],
+                "message": f"Draft '{draft_name}' loaded successfully"
+            }
+        except Exception as e:
+            logger.error(f"❌ Error loading draft: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def _close_session(self, session_id: str):

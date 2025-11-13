@@ -17,7 +17,7 @@ soundfile==0.13.1
 numpy==1.26.4  # Keep at 1.26.4 - numba 0.61.2 (required by pipecat-ai) doesn't support numpy 2.3+
 
 # Browser automation
-browser-use==0.9.5
+browser-use==0.1.19  # Pinned to stable version (0.9.5 has CDP timeout bug on headless Linux)
 playwright==1.55.0
 
 # LangChain ecosystem - Keep at 0.3.x for numpy 1.x compatibility

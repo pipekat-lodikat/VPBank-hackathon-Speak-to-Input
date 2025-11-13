@@ -1,0 +1,161 @@
+{
+  "timestamp": "2025-11-13T18:40:54.823798",
+  "results": {
+    "Date Parser - Slash Format (15/03/1990)": {
+      "name": "Date Parser - Slash Format (15/03/1990)",
+      "iterations": 10000,
+      "total_time_ms": 51.84996343450621,
+      "mean_ms": 0.005184996343450621,
+      "median_ms": 0.004620000254362822,
+      "min_ms": 0.004474015440791845,
+      "max_ms": 0.04349200753495097,
+      "stdev_ms": 0.002230726604790393,
+      "p95_ms": 0.007927999831736088,
+      "p99_ms": 0.014280027244240046
+    },
+    "Date Parser - Vietnamese Format": {
+      "name": "Date Parser - Vietnamese Format",
+      "iterations": 10000,
+      "total_time_ms": 88.07844697730616,
+      "mean_ms": 0.008807844697730615,
+      "median_ms": 0.00810297206044197,
+      "min_ms": 0.007724040187895298,
+      "max_ms": 0.05404697731137276,
+      "stdev_ms": 0.0029073101894309954,
+      "p95_ms": 0.013504002708941698,
+      "p99_ms": 0.02241798210889101
+    },
+    "Date Parser - Multiple Formats (5 dates)": {
+      "name": "Date Parser - Multiple Formats (5 dates)",
+      "iterations": 2000,
+      "total_time_ms": 65.53127273218706,
+      "mean_ms": 0.03276563636609353,
+      "median_ms": 0.030912982765585184,
+      "min_ms": 0.030352966859936714,
+      "max_ms": 0.0992690329439938,
+      "stdev_ms": 0.006497100191610996,
+      "p95_ms": 0.049286987632513046,
+      "p99_ms": 0.05939701804891229
+    },
+    "Field Mapper - Exact Match": {
+      "name": "Field Mapper - Exact Match",
+      "iterations": 10000,
+      "total_time_ms": 4.786154255270958,
+      "mean_ms": 0.0004786154255270958,
+      "median_ms": 0.0004459870979189873,
+      "min_ms": 0.00042299507185816765,
+      "max_ms": 0.02440001117065549,
+      "stdev_ms": 0.0004847868450189222,
+      "p95_ms": 0.0005140318535268307,
+      "p99_ms": 0.0008540228009223938
+    },
+    "Field Mapper - Fuzzy Match": {
+      "name": "Field Mapper - Fuzzy Match",
+      "iterations": 10000,
+      "total_time_ms": 4.363408195786178,
+      "mean_ms": 0.0004363408195786178,
+      "median_ms": 0.0004239846020936966,
+      "min_ms": 0.0004039611667394638,
+      "max_ms": 0.020795036107301712,
+      "stdev_ms": 0.00037074428451862014,
+      "p95_ms": 0.0004500034265220165,
+      "p99_ms": 0.0004800385795533657
+    },
+    "Field Mapper - Best Match Selection": {
+      "name": "Field Mapper - Best Match Selection",
+      "iterations": 10000,
+      "total_time_ms": 10.82276104716584,
+      "mean_ms": 0.001082276104716584,
+      "median_ms": 0.0009799841791391373,
+      "min_ms": 0.0009430223144590855,
+      "max_ms": 0.028259004466235638,
+      "stdev_ms": 0.0007215371166089199,
+      "p95_ms": 0.0017230049706995487,
+      "p99_ms": 0.0018890132196247578
+    },
+    "Field Mapper - Multiple Fields (5 fields)": {
+      "name": "Field Mapper - Multiple Fields (5 fields)",
+      "iterations": 2000,
+      "total_time_ms": 3.971310507040471,
+      "mean_ms": 0.0019856552535202354,
+      "median_ms": 0.0018110149540007114,
+      "min_ms": 0.0017550191842019558,
+      "max_ms": 0.04403700586408377,
+      "stdev_ms": 0.0016107129943930855,
+      "p95_ms": 0.0027279602363705635,
+      "p99_ms": 0.003603985533118248
+    },
+    "Pronoun Resolver - Simple Resolution": {
+      "name": "Pronoun Resolver - Simple Resolution",
+      "iterations": 10000,
+      "total_time_ms": 44.46385760093108,
+      "mean_ms": 0.004446385760093108,
+      "median_ms": 0.003851950168609619,
+      "min_ms": 0.0036939745768904686,
+      "max_ms": 0.0412260415032506,
+      "stdev_ms": 0.001966854909028823,
+      "p95_ms": 0.006971997208893299,
+      "p99_ms": 0.010707008186727762
+    },
+    "Pronoun Resolver - Extract and Update": {
+      "name": "Pronoun Resolver - Extract and Update",
+      "iterations": 10000,
+      "total_time_ms": 77.83149497117847,
+      "mean_ms": 0.007783149497117847,
+      "median_ms": 0.00576401362195611,
+      "min_ms": 0.00557600287720561,
+      "max_ms": 0.13947300612926483,
+      "stdev_ms": 0.004171080809366262,
+      "p95_ms": 0.014086021110415459,
+      "p99_ms": 0.022101972717791796
+    },
+    "Pronoun Resolver - Multiple Pronouns (3 texts)": {
+      "name": "Pronoun Resolver - Multiple Pronouns (3 texts)",
+      "iterations": 3000,
+      "total_time_ms": 40.81037238938734,
+      "mean_ms": 0.013603457463129113,
+      "median_ms": 0.011726981028914452,
+      "min_ms": 0.011445023119449615,
+      "max_ms": 0.08366297697648406,
+      "stdev_ms": 0.005100499778617833,
+      "p95_ms": 0.023066007997840643,
+      "p99_ms": 0.037048012018203735
+    },
+    "Integrated Workflow - Complete Flow": {
+      "name": "Integrated Workflow - Complete Flow",
+      "iterations": 1000,
+      "total_time_ms": 21.768523030914366,
+      "mean_ms": 0.021768523030914366,
+      "median_ms": 0.020620005670934916,
+      "min_ms": 0.02013897756114602,
+      "max_ms": 0.0667520216666162,
+      "stdev_ms": 0.004908183952747266,
+      "p95_ms": 0.03076804568991065,
+      "p99_ms": 0.04834600258618593
+    },
+    "Concurrent - Date Parsing (100 concurrent)": {
+      "name": "Concurrent - Date Parsing (100 concurrent)",
+      "iterations": 100,
+      "total_time_ms": 581.2238287180662,
+      "mean_ms": 5.812238287180662,
+      "median_ms": 5.419214488938451,
+      "min_ms": 4.609944997355342,
+      "max_ms": 12.401235988363624,
+      "stdev_ms": 1.2145165360542793,
+      "p95_ms": 8.069315983448178,
+      "p99_ms": 12.401235988363624
+    },
+    "Concurrent - Field Mapping (100 concurrent)": {
+      "name": "Concurrent - Field Mapping (100 concurrent)",
+      "iterations": 100,
+      "total_time_ms": 567.9281827178784,
+      "mean_ms": 5.679281827178784,
+      "median_ms": 5.208940012380481,
+      "min_ms": 4.352331976406276,
+      "max_ms": 15.09458402870223,
+      "stdev_ms": 1.5175998777494393,
+      "p95_ms": 7.946344965603203,
+      "p99_ms": 15.09458402870223
+    }
+  }
+}

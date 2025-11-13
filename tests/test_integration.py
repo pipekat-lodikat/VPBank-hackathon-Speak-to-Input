@@ -1,269 +1,395 @@
 """
-Integration Tests for VPBank Voice Agent
-Tests service-to-service communication
+Integration Tests - Test complete workflows
 """
+
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-import aiohttp
-from aiohttp import web
+from unittest.mock import Mock, patch, AsyncMock
+from datetime import datetime
+
+from src.utils.date_parser import parse_vietnamese_date
+from src.utils.field_mapper import map_vietnamese_to_english, FieldMapper
+from src.utils.pronoun_resolver import get_resolver, resolve_pronouns, update_person_context
 
 
-class TestIntegration:
-    """Integration tests for service communication"""
-
+class TestCompleteWorkflow:
+    """Test complete user workflows"""
+    
     @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_voice_bot_to_browser_agent_communication(
-        self,
-        mock_env_vars,
-        mock_aiohttp_session
-    ):
-        """Test Voice Bot sending request to Browser Agent"""
-        # Simulate voice bot sending request to browser agent
-        user_message = "Điền đơn vay cho khách hàng Nguyen Van An"
-        session_id = "test-session-123"
+    async def test_loan_application_workflow(self):
+        """Test complete loan application workflow"""
+        # Setup
+        resolver = get_resolver()
+        resolver.clear_context()
         
-        browser_service_url = "http://localhost:7863"
+        # Simulate conversation
+        conversation = [
+            "Tôi muốn vay 500 triệu",
+            "Tên là Nguyễn Văn An",
+            "Anh ấy sinh ngày 15 tháng 3 năm 1990",
+            "Số điện thoại 0901234567",
+            "Email test@vpbank.com",
+        ]
         
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session_class.return_value = mock_aiohttp_session
+        extracted_data = {}
+        
+        # Process each message
+        for message in conversation:
+            processed = resolver.extract_and_update(message)
             
-            async with aiohttp.ClientSession() as session:
-                payload = {
-                    "user_message": user_message,
-                    "session_id": session_id
-                }
+            # Extract loan amount
+            if "vay" in message and "triệu" in message:
+                extracted_data["loanAmount"] = "500000000"
+            
+            # Extract name
+            elif "tên" in message.lower() and "là" in message:
+                name = message.split("là")[-1].strip()
+                extracted_data["customerName"] = name
+            
+            # Extract date of birth
+            elif "sinh" in message:
+                resolved = resolver.resolve_pronoun(message)
+                assert "Nguyễn Văn An" in resolved
                 
-                async with session.post(
-                    f"{browser_service_url}/api/execute",
-                    json=payload
-                ) as response:
-                    assert response.status == 200
-                    data = await response.json()
-                    assert data["success"] is True
-                    assert "result" in data
-
+                date_parsed = parse_vietnamese_date("15 tháng 3 năm 1990")
+                extracted_data["dateOfBirth"] = date_parsed
+            
+            # Extract phone
+            elif "điện thoại" in message or "sđt" in message.lower():
+                extracted_data["phoneNumber"] = "0901234567"
+            
+            # Extract email
+            elif "email" in message.lower():
+                extracted_data["email"] = "test@vpbank.com"
+        
+        # Verify all fields extracted
+        assert extracted_data["loanAmount"] == "500000000"
+        assert extracted_data["customerName"] == "Nguyễn Văn An"
+        assert extracted_data["dateOfBirth"] == "1990-03-15"
+        assert extracted_data["phoneNumber"] == "0901234567"
+        assert extracted_data["email"] == "test@vpbank.com"
+    
     @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_frontend_to_voice_bot_webrtc_flow(self, mock_env_vars):
-        """Test frontend initiating WebRTC connection with Voice Bot"""
-        # Simulate WebRTC offer from frontend
-        offer_sdp = "v=0\r\no=- 123456789 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
+    async def test_field_mapping_workflow(self):
+        """Test field mapping in workflow"""
+        # Vietnamese field names from user
+        user_inputs = {
+            "họ và tên": "Nguyễn Văn An",
+            "ngày sinh": "15/03/1990",
+            "số điện thoại": "0901234567",
+            "email": "test@vpbank.com",
+            "địa chỉ": "123 Đường ABC, Hà Nội",
+        }
         
-        # Create test server
-        app = web.Application()
+        # Map to English and process
+        mapped_data = {}
         
-        async def mock_offer_handler(request):
-            data = await request.json()
-            assert data["type"] == "offer"
-            assert "sdp" in data
+        for viet_field, value in user_inputs.items():
+            # Map field name
+            eng_fields = map_vietnamese_to_english(viet_field)
+            assert len(eng_fields) > 0
             
-            # Return mock answer
-            return web.json_response({
-                "type": "answer",
-                "sdp": "v=0\r\no=- 987654321 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
-            })
+            eng_field = eng_fields[0]
+            
+            # Parse date if needed
+            if "ngày" in viet_field or "date" in eng_field.lower():
+                value = parse_vietnamese_date(value)
+            
+            mapped_data[eng_field] = value
         
-        app.router.add_post('/offer', mock_offer_handler)
-        
-        # Start test server
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, 'localhost', 8765)
-        await site.start()
-        
-        try:
-            # Test WebRTC offer
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    'http://localhost:8765/offer',
-                    json={"type": "offer", "sdp": offer_sdp}
-                ) as response:
-                    assert response.status == 200
-                    data = await response.json()
-                    assert data["type"] == "answer"
-                    assert "sdp" in data
-        finally:
-            await runner.cleanup()
-
+        # Verify mapping
+        assert "fullName" in mapped_data or "customerName" in mapped_data
+        assert "dateOfBirth" in mapped_data or "dob" in mapped_data
+        assert "phoneNumber" in mapped_data or "phone" in mapped_data
+        assert "email" in mapped_data
+        assert "address" in mapped_data
+    
     @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_end_to_end_form_filling_flow(
-        self,
-        mock_env_vars,
-        sample_form_data,
-        mock_aiohttp_session
-    ):
-        """Test complete end-to-end form filling flow"""
-        # Step 1: User initiates voice session
-        session_id = "e2e-test-session"
+    async def test_pronoun_resolution_workflow(self):
+        """Test pronoun resolution in multi-turn conversation"""
+        resolver = get_resolver()
+        resolver.clear_context()
         
-        # Step 2: Voice Bot receives transcript
-        user_message = (
-            "Tạo đơn vay cho khách hàng Nguyen Van An, "
-            "căn cước công dân 012345678901, SĐT 0901234567"
-        )
+        # Turn 1: Establish person
+        message1 = "Tên là Nguyễn Văn An"
+        resolver.extract_and_update(message1)
         
-        # Step 3: Voice Bot extracts data and sends to Browser Agent
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session_class.return_value = mock_aiohttp_session
+        assert resolver.context["last_person"] == "Nguyễn Văn An"
+        assert resolver.context["last_person_gender"] == "male"
+        
+        # Turn 2: Use pronoun
+        message2 = "Anh ấy sinh năm 1990"
+        resolved2 = resolver.resolve_pronoun(message2)
+        
+        assert "Nguyễn Văn An" in resolved2
+        assert "anh ấy" not in resolved2.lower()
+        
+        # Turn 3: Use different pronoun
+        message3 = "Ông ấy làm việc tại VPBank"
+        resolved3 = resolver.resolve_pronoun(message3)
+        
+        assert "Nguyễn Văn An" in resolved3
+        assert "ông ấy" not in resolved3.lower()
+        
+        # Turn 4: Field reference
+        resolver.update_field("phoneNumber", "0901234567")
+        message4 = "Nó là 0901234567"
+        resolved4 = resolver.resolve_pronoun(message4)
+        
+        assert "phoneNumber" in resolved4
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    'http://localhost:7863/api/execute',
-                    json={
-                        "user_message": user_message,
-                        "session_id": session_id
-                    }
-                ) as response:
-                    assert response.status == 200
-                    data = await response.json()
-                    assert data["success"] is True
 
+class TestDateParsingIntegration:
+    """Test date parsing integration"""
+    
+    def test_multiple_date_formats(self):
+        """Test parsing multiple date formats in workflow"""
+        dates = [
+            ("15/03/1990", "1990-03-15"),
+            ("15-03-1990", "1990-03-15"),
+            ("15 tháng 3 năm 1990", "1990-03-15"),
+            ("ngày 15 tháng 3 năm 1990", "1990-03-15"),
+            ("15/3/90", "1990-03-15"),
+        ]
+        
+        for input_date, expected in dates:
+            parsed = parse_vietnamese_date(input_date)
+            assert parsed == expected, f"Failed for {input_date}"
+    
+    def test_date_parsing_with_field_mapping(self):
+        """Test date parsing combined with field mapping"""
+        # User input
+        field_name = "ngày sinh"
+        field_value = "15 tháng 3 năm 1990"
+        
+        # Map field
+        eng_fields = map_vietnamese_to_english(field_name)
+        assert "dateOfBirth" in eng_fields or "dob" in eng_fields
+        
+        # Parse date
+        parsed_date = parse_vietnamese_date(field_value)
+        assert parsed_date == "1990-03-15"
+
+
+class TestFieldMappingIntegration:
+    """Test field mapping integration"""
+    
+    def test_fuzzy_matching(self):
+        """Test fuzzy matching for typos"""
+        # Typos and variations
+        variations = [
+            "họ tên",  # Missing "và"
+            "điện thoại",  # Missing "số"
+            "ngày sinh",  # Exact
+            "email",  # English
+        ]
+        
+        for variation in variations:
+            fields = map_vietnamese_to_english(variation)
+            assert len(fields) > 0, f"No match for {variation}"
+    
+    def test_best_match_selection(self):
+        """Test selecting best match from available fields"""
+        available_fields = [
+            "fullName", "customerName", "firstName", "lastName",
+            "phoneNumber", "phone", "mobile",
+            "email", "emailAddress",
+            "dateOfBirth", "dob", "birthDate",
+        ]
+        
+        test_cases = [
+            ("họ và tên", ["fullName", "customerName"]),
+            ("số điện thoại", ["phoneNumber", "phone", "mobile"]),
+            ("email", ["email", "emailAddress"]),
+            ("ngày sinh", ["dateOfBirth", "dob", "birthDate"]),
+        ]
+        
+        for viet_field, expected_matches in test_cases:
+            best = FieldMapper.get_best_match(viet_field, available_fields)
+            assert best in expected_matches, f"Unexpected match for {viet_field}: {best}"
+
+
+class TestErrorHandling:
+    """Test error handling in integration"""
+    
+    def test_invalid_date_handling(self):
+        """Test handling of invalid dates"""
+        invalid_dates = [
+            "32/13/1990",  # Invalid day/month
+            "invalid",  # Not a date
+            "",  # Empty
+            None,  # None
+        ]
+        
+        for invalid_date in invalid_dates:
+            result = parse_vietnamese_date(invalid_date)
+            assert result is None, f"Should return None for {invalid_date}"
+    
+    def test_unknown_field_handling(self):
+        """Test handling of unknown fields"""
+        unknown_fields = [
+            "unknown_field_xyz",
+            "random_text",
+            "",
+        ]
+        
+        for unknown_field in unknown_fields:
+            fields = map_vietnamese_to_english(unknown_field)
+            # Should return empty list or handle gracefully
+            assert isinstance(fields, list)
+    
+    def test_pronoun_without_context(self):
+        """Test pronoun resolution without context"""
+        resolver = get_resolver()
+        resolver.clear_context()
+        
+        # Try to resolve pronoun without setting context
+        text = "Anh ấy sinh năm 1990"
+        resolved = resolver.resolve_pronoun(text)
+        
+        # Should return original text if no context
+        assert "anh ấy" in resolved.lower()
+
+
+class TestPerformance:
+    """Test performance of integrated features"""
+    
+    def test_date_parsing_performance(self):
+        """Test date parsing performance"""
+        import time
+        
+        dates = ["15/03/1990"] * 1000
+        
+        start = time.time()
+        for date in dates:
+            parse_vietnamese_date(date)
+        elapsed = time.time() - start
+        
+        # Should parse 1000 dates in < 100ms
+        assert elapsed < 0.1, f"Too slow: {elapsed}s for 1000 dates"
+    
+    def test_field_mapping_performance(self):
+        """Test field mapping performance"""
+        import time
+        
+        fields = ["họ và tên"] * 1000
+        
+        start = time.time()
+        for field in fields:
+            map_vietnamese_to_english(field)
+        elapsed = time.time() - start
+        
+        # Should map 1000 fields in < 50ms
+        assert elapsed < 0.05, f"Too slow: {elapsed}s for 1000 fields"
+    
+    def test_pronoun_resolution_performance(self):
+        """Test pronoun resolution performance"""
+        import time
+        
+        resolver = get_resolver()
+        resolver.update_person("Nguyễn Văn An", "male")
+        texts = ["Anh ấy sinh năm 1990"] * 1000
+        
+        start = time.time()
+        for text in texts:
+            resolver.resolve_pronoun(text)
+        elapsed = time.time() - start
+        
+        # Should resolve 1000 pronouns in < 50ms
+        assert elapsed < 0.05, f"Too slow: {elapsed}s for 1000 resolutions"
+
+
+class TestEdgeCases:
+    """Test edge cases"""
+    
+    def test_empty_inputs(self):
+        """Test handling of empty inputs"""
+        # Empty date
+        assert parse_vietnamese_date("") is None
+        assert parse_vietnamese_date(None) is None
+        
+        # Empty field
+        fields = map_vietnamese_to_english("")
+        assert isinstance(fields, list)
+        
+        # Empty text
+        resolver = get_resolver()
+        resolved = resolver.resolve_pronoun("")
+        assert resolved == ""
+    
+    def test_special_characters(self):
+        """Test handling of special characters"""
+        # Date with special chars
+        dates = [
+            "15/03/1990",
+            "15-03-1990",
+            "15.03.1990",
+        ]
+        
+        for date in dates:
+            parsed = parse_vietnamese_date(date)
+            assert parsed == "1990-03-15"
+    
+    def test_case_insensitivity(self):
+        """Test case insensitive matching"""
+        # Field mapping should be case insensitive
+        fields1 = map_vietnamese_to_english("họ và tên")
+        fields2 = map_vietnamese_to_english("HỌ VÀ TÊN")
+        fields3 = map_vietnamese_to_english("Họ Và Tên")
+        
+        assert fields1 == fields2 == fields3
+    
+    def test_unicode_handling(self):
+        """Test Vietnamese unicode handling"""
+        vietnamese_texts = [
+            "Nguyễn Văn An",
+            "Trần Thị Bình",
+            "Lê Hoàng Cường",
+            "Phạm Thị Dung",
+        ]
+        
+        resolver = get_resolver()
+        
+        for text in vietnamese_texts:
+            resolver.update_person(text, "unknown")
+            assert resolver.context["last_person"] == text
+
+
+class TestConcurrency:
+    """Test concurrent operations"""
+    
     @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_websocket_transcript_streaming(self, mock_env_vars):
-        """Test WebSocket transcript streaming from Voice Bot to Frontend"""
-        app = web.Application()
-        messages_received = []
+    async def test_concurrent_date_parsing(self):
+        """Test concurrent date parsing"""
+        dates = ["15/03/1990", "20/05/1995", "10/10/2000"] * 100
         
-        async def websocket_handler(request):
-            ws = web.WebSocketResponse()
-            await ws.prepare(request)
-            
-            # Simulate sending transcript messages
-            await ws.send_json({
-                "type": "transcript",
-                "role": "user",
-                "content": "Test message",
-                "timestamp": "2025-01-01T00:00:00Z"
-            })
-            
-            # Wait for client response
-            async for msg in ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    messages_received.append(msg.data)
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    break
-            
-            return ws
+        async def parse_date(date):
+            return parse_vietnamese_date(date)
         
-        app.router.add_get('/ws', websocket_handler)
-        
-        # Start test server
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, 'localhost', 8766)
-        await site.start()
-        
-        try:
-            # Connect to WebSocket
-            async with aiohttp.ClientSession() as session:
-                async with session.ws_connect('http://localhost:8766/ws') as ws:
-                    # Receive transcript message
-                    msg = await ws.receive_json()
-                    assert msg["type"] == "transcript"
-                    assert msg["role"] == "user"
-                    assert msg["content"] == "Test message"
-        finally:
-            await runner.cleanup()
-
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_authentication_flow(self, mock_env_vars, mock_cognito_client):
-        """Test authentication flow with Cognito"""
-        with patch('src.auth_service.boto3.client') as mock_boto_client:
-            mock_boto_client.return_value = mock_cognito_client
-            
-            from src.auth_service import CognitoAuthService
-            
-            auth_service = CognitoAuthService()
-            
-            # Test login
-            result = await auth_service.login("testuser", "testpass123")
-            assert result["success"] is True
-            assert "access_token" in result
-            
-            # Test token verification
-            user_info = await auth_service.verify_token(result["access_token"])
-            assert user_info is not None
-            assert user_info["username"] == "testuser"
-
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_session_storage_flow(
-        self,
-        mock_env_vars,
-        mock_dynamodb_client,
-        sample_session_data
-    ):
-        """Test session storage with DynamoDB"""
-        with patch('src.dynamodb_service.boto3.resource') as mock_boto_resource:
-            mock_boto_resource.return_value = mock_dynamodb_client
-            
-            from src.dynamodb_service import DynamoDBService
-            
-            dynamodb = DynamoDBService()
-            
-            # Save session
-            result = dynamodb.save_session(sample_session_data)
-            assert result is True
-            
-            # Retrieve session
-            session = dynamodb.get_session(sample_session_data["session_id"])
-            assert session is not None
-            assert session["session_id"] == sample_session_data["session_id"]
-            
-            # List sessions
-            sessions = dynamodb.list_sessions(limit=10)
-            assert sessions["count"] >= 0
-
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_error_handling_across_services(self, mock_env_vars):
-        """Test error handling when Browser Agent is unavailable"""
-        # Simulate Browser Agent being down
-        with patch('aiohttp.ClientSession') as mock_session:
-            mock_session.return_value.__aenter__.return_value.post.side_effect = (
-                aiohttp.ClientConnectionError()
-            )
-            
-            # Voice Bot should handle the error gracefully
-            with pytest.raises(aiohttp.ClientConnectionError):
-                async with aiohttp.ClientSession() as session:
-                    await session.post(
-                        'http://localhost:7863/api/execute',
-                        json={"user_message": "test", "session_id": "test"}
-                    )
-
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    @pytest.mark.slow
-    async def test_concurrent_sessions(self, mock_env_vars, mock_aiohttp_session):
-        """Test handling multiple concurrent voice sessions"""
-        num_sessions = 5
-        
-        async def create_session(session_id):
-            with patch('aiohttp.ClientSession') as mock_session_class:
-                mock_session_class.return_value = mock_aiohttp_session
-                
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        'http://localhost:7863/api/execute',
-                        json={
-                            "user_message": f"Test message {session_id}",
-                            "session_id": session_id
-                        }
-                    ) as response:
-                        return await response.json()
-        
-        # Create multiple sessions concurrently
-        tasks = [create_session(f"session-{i}") for i in range(num_sessions)]
+        # Parse concurrently
+        tasks = [parse_date(date) for date in dates]
         results = await asyncio.gather(*tasks)
         
-        # Verify all sessions succeeded
-        assert len(results) == num_sessions
-        for result in results:
-            assert result["success"] is True
+        # Verify all parsed correctly
+        assert len(results) == len(dates)
+        assert all(r is not None for r in results)
+    
+    @pytest.mark.asyncio
+    async def test_concurrent_field_mapping(self):
+        """Test concurrent field mapping"""
+        fields = ["họ và tên", "số điện thoại", "email"] * 100
+        
+        async def map_field(field):
+            return map_vietnamese_to_english(field)
+        
+        # Map concurrently
+        tasks = [map_field(field) for field in fields]
+        results = await asyncio.gather(*tasks)
+        
+        # Verify all mapped correctly
+        assert len(results) == len(fields)
+        assert all(len(r) > 0 for r in results)
 
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

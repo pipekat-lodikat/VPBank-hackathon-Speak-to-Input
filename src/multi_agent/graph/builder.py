@@ -15,6 +15,11 @@ from .state import MultiAgentState
 # Import browser_agent from src
 from src.browser_agent import browser_agent
 
+# Import utility modules
+from src.utils.date_parser import parse_vietnamese_date
+from src.utils.field_mapper import map_vietnamese_to_english, FieldMapper
+from src.utils.pronoun_resolver import resolve_pronouns, update_person_context, update_field_context, get_resolver
+
 
 # ============================================
 # BROWSER TOOLS - Các tools để điền form
@@ -245,6 +250,245 @@ async def submit_incremental_form() -> str:
         if "missing" in error_msg.lower() or "required" in error_msg.lower():
             return f"⚠️ {error_msg} Vui lòng điền đầy đủ thông tin trước khi submit."
         return f"❌ Lỗi submit form: {error_msg}"
+
+
+# ============================================
+# NEW REQUIRED TOOLS (BTC Requirements)
+# ============================================
+
+@tool
+async def upload_file_to_field(field_name: str, file_description: str = "") -> str:
+    """
+    Upload file vào field cụ thể (CCCD scan, hợp đồng, chứng từ).
+    User sẽ chọn file từ UI, tool này trigger file picker.
+    
+    Args:
+        field_name: Tên field upload (e.g., "idCardImage", "contractFile", "attachments")
+        file_description: Mô tả file (optional, e.g., "Ảnh căn cước công dân")
+    
+    Returns:
+        Kết quả upload
+    
+    Example:
+        User: "Upload ảnh CCCD"
+        → upload_file_to_field("idCardImage", "Ảnh căn cước công dân")
+    """
+    global _current_session_id
+    logger.info(f"📎 Upload file to field: {field_name} (session_id: {_current_session_id})")
+    
+    if _current_session_id not in browser_agent.sessions:
+        return "❌ Không có active session. Hãy start form trước."
+    
+    # Call browser agent's upload method
+    result = await browser_agent.upload_file_to_field(field_name, file_description, _current_session_id)
+    
+    if result.get("success"):
+        return f"✅ Đã upload file vào field {field_name}. File: {result.get('filename', 'unknown')}"
+    else:
+        return f"❌ Lỗi upload file: {result.get('error', 'Unknown error')}"
+
+
+@tool
+async def search_field_on_form(search_query: str) -> str:
+    """
+    Tìm kiếm field trên form theo tên hoặc label (tiếng Việt hoặc tiếng Anh).
+    Sau khi tìm thấy, tự động focus vào field đó.
+    
+    Args:
+        search_query: Từ khóa tìm kiếm (e.g., "số điện thoại", "email", "địa chỉ", "phone")
+    
+    Returns:
+        Danh sách fields tìm thấy và field được focus
+    
+    Example:
+        User: "Tìm field số điện thoại"
+        → search_field_on_form("số điện thoại")
+        → Focus vào field phoneNumber
+    """
+    global _current_session_id
+    logger.info(f"🔍 Search field: {search_query} (session_id: {_current_session_id})")
+    
+    if _current_session_id not in browser_agent.sessions:
+        return "❌ Không có active session. Hãy start form trước."
+    
+    # Call browser agent's search method
+    result = await browser_agent.search_and_focus_field(search_query, _current_session_id)
+    
+    if result.get("success"):
+        fields_found = result.get("fields_found", [])
+        focused_field = result.get("focused_field", "")
+        
+        if len(fields_found) == 0:
+            return f"❌ Không tìm thấy field nào với từ khóa '{search_query}'"
+        elif len(fields_found) == 1:
+            return f"✅ Tìm thấy và focus vào field: {focused_field}"
+        else:
+            return f"✅ Tìm thấy {len(fields_found)} fields: {', '.join(fields_found)}. Đã focus vào: {focused_field}"
+    else:
+        return f"❌ Lỗi tìm kiếm: {result.get('error', 'Unknown error')}"
+
+
+@tool
+async def save_form_draft(draft_name: str = None) -> str:
+    """
+    Lưu nháp form hiện tại để tiếp tục sau.
+    Lưu tất cả fields đã điền vào DynamoDB với status="draft".
+    
+    Args:
+        draft_name: Tên bản nháp (optional, auto-generate nếu không có)
+    
+    Returns:
+        Kết quả lưu nháp
+    
+    Example:
+        User: "Lưu nháp tên là 'Đơn vay An'"
+        → save_form_draft("Đơn vay An")
+    """
+    global _current_session_id
+    logger.info(f"💾 Save draft: {draft_name} (session_id: {_current_session_id})")
+    
+    if _current_session_id not in browser_agent.sessions:
+        return "❌ Không có active session. Hãy start form trước."
+    
+    # Auto-generate draft name if not provided
+    if not draft_name:
+        from datetime import datetime
+        draft_name = f"draft_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # Call browser agent's save draft method
+    result = await browser_agent.save_form_draft(draft_name, _current_session_id)
+    
+    if result.get("success"):
+        fields_count = result.get("fields_count", 0)
+        return f"✅ Đã lưu nháp '{draft_name}' với {fields_count} fields. Bạn có thể load lại sau bằng: 'Load nháp {draft_name}'"
+    else:
+        return f"❌ Lỗi lưu nháp: {result.get('error', 'Unknown error')}"
+
+
+@tool
+async def load_form_draft(draft_name: str) -> str:
+    """
+    Load lại bản nháp đã lưu và điền vào form.
+    
+    Args:
+        draft_name: Tên bản nháp cần load
+    
+    Returns:
+        Kết quả load nháp
+    
+    Example:
+        User: "Load nháp 'Đơn vay An'"
+        → load_form_draft("Đơn vay An")
+    """
+    global _current_session_id
+    logger.info(f"📂 Load draft: {draft_name} (session_id: {_current_session_id})")
+    
+    if _current_session_id not in browser_agent.sessions:
+        return "❌ Không có active session. Hãy start form trước."
+    
+    # Call browser agent's load draft method
+    result = await browser_agent.load_form_draft(draft_name, _current_session_id)
+    
+    if result.get("success"):
+        fields_count = result.get("fields_count", 0)
+        fields_loaded = result.get("fields_loaded", [])
+        return f"✅ Đã load nháp '{draft_name}' với {fields_count} fields: {', '.join(fields_loaded)}"
+    else:
+        return f"❌ Lỗi load nháp: {result.get('error', 'Unknown error')}"
+
+
+# ============================================
+# ENHANCED TOOLS - With pronoun resolution, date parsing, field mapping
+# ============================================
+
+@tool
+async def fill_field_smart(field_description: str, field_value: str) -> str:
+    """
+    Điền field thông minh với:
+    - Tự động map tên field Việt → Anh (họ tên → fullName)
+    - Parse ngày tháng tiếng Việt (15 tháng 3 năm 1990 → 1990-03-15)
+    - Resolve đại từ (anh ấy, cô ấy, nó)
+    
+    Args:
+        field_description: Mô tả field bằng tiếng Việt hoặc Anh
+        field_value: Giá trị cần điền
+    
+    Returns:
+        Kết quả điền field
+    
+    Examples:
+        fill_field_smart("họ và tên", "Nguyễn Văn An")
+        fill_field_smart("ngày sinh", "15 tháng 3 năm 1990")
+        fill_field_smart("số điện thoại", "0901234567")
+    """
+    import os
+    global _current_session_id
+    
+    # Resolve pronouns in value
+    resolved_value = resolve_pronouns(field_value)
+    
+    # Try to parse date if it looks like a date
+    if any(keyword in field_description.lower() for keyword in ["ngày", "date", "sinh", "birth", "cấp", "issue", "hạn", "expiry"]):
+        parsed_date = parse_vietnamese_date(resolved_value)
+        if parsed_date:
+            resolved_value = parsed_date
+            logger.info(f"📅 Parsed date: {field_value} → {parsed_date}")
+    
+    # Map Vietnamese field name to English
+    english_fields = map_vietnamese_to_english(field_description.lower())
+    if english_fields:
+        field_name = english_fields[0]  # Use first match
+        logger.info(f"🗺️  Mapped field: {field_description} → {field_name}")
+    else:
+        # Use as-is if no mapping found
+        field_name = field_description
+    
+    # Update context for pronoun resolution
+    update_field_context(field_name, resolved_value)
+    
+    # Auto-start session if needed
+    if _current_session_id not in browser_agent.sessions:
+        logger.info(f"⚠️  No active session, auto-starting...")
+        form_url = os.getenv("LOAN_FORM_URL", "https://vpbank-shared-form-fastdeploy.vercel.app/")
+        start_result = await browser_agent.start_form_session(form_url, "loan", _current_session_id)
+        if not start_result.get("success"):
+            return f"❌ Không thể mở form: {start_result.get('error')}"
+    
+    # Fill field
+    result = await browser_agent.fill_field_incremental(field_name, resolved_value, _current_session_id)
+    
+    if result.get("success"):
+        return f"✅ Đã điền {field_description} ({field_name}) = {resolved_value}"
+    else:
+        return f"❌ Lỗi điền field {field_description}: {result.get('error')}"
+
+
+@tool
+async def process_user_input_smart(user_text: str) -> str:
+    """
+    Xử lý input của user thông minh:
+    - Extract tên người và cập nhật context
+    - Resolve đại từ
+    - Trả về text đã xử lý
+    
+    Args:
+        user_text: Text từ user
+    
+    Returns:
+        Text đã được xử lý
+    
+    Examples:
+        "Tên là Nguyễn Văn An" → Update context với person="Nguyễn Văn An"
+        "Anh ấy sinh năm 1990" → "Nguyễn Văn An sinh năm 1990"
+    """
+    resolver = get_resolver()
+    
+    # Extract entities and resolve pronouns
+    processed_text = resolver.extract_and_update(user_text)
+    
+    logger.info(f"🧠 Processed: '{user_text}' → '{processed_text}'")
+    
+    return processed_text
 
 
 # ============================================
@@ -828,13 +1072,23 @@ def build_supervisor_workflow(llm):
         fill_compliance_form,
         fill_operations_form,
         
-        # Incremental mode (5 tools - ƯU TIÊN DÙNG)
+        # Incremental mode (6 tools - ƯU TIÊN DÙNG)
         start_incremental_form,
         go_to_next_step,
         fill_single_field,
-        fill_multiple_fields,  # NEW: Fill nhiều fields cùng lúc
-        remove_single_field,   # NEW: Xóa 1 field cụ thể
-        submit_incremental_form
+        fill_multiple_fields,  # Fill nhiều fields cùng lúc
+        remove_single_field,   # Xóa 1 field cụ thể
+        submit_incremental_form,
+        
+        # Required features (4 tools - BTC Requirements)
+        upload_file_to_field,  # Upload file (CCCD, contracts)
+        search_field_on_form,  # Search and focus field
+        save_form_draft,       # Save draft to continue later
+        load_form_draft,       # Load saved draft
+        
+        # Enhanced tools (2 tools - Advanced features)
+        fill_field_smart,      # Smart field filling with date parsing, field mapping, pronoun resolution
+        process_user_input_smart,  # Process user input with pronoun resolution
     ]
     
     supervisor_system_prompt = """Bạn là SUPERVISOR AGENT - Phân tích message và GỌI TOOL phù hợp!
@@ -964,6 +1218,42 @@ def build_supervisor_workflow(llm):
         - Nếu user nói lại field đã điền → VẪN gọi fill_single_field() để update
         - Trước khi submit, phải đảm bảo TẤT CẢ required fields đã được điền
         - Nếu thiếu required fields → BÁO LỖI, KHÔNG submit
+
+        ENHANCED TOOLS (TÍNH NĂNG NÂNG CAO):
+        12. fill_field_smart(field_description, value) - Điền field thông minh với:
+            - Tự động map tên field Việt → Anh (họ tên → fullName, số điện thoại → phoneNumber)
+            - Parse ngày tháng tiếng Việt (15 tháng 3 năm 1990 → 1990-03-15)
+            - Resolve đại từ (anh ấy, cô ấy, nó)
+            VD: fill_field_smart("họ và tên", "Nguyễn Văn An")
+                fill_field_smart("ngày sinh", "15 tháng 3 năm 1990")
+        
+        13. process_user_input_smart(user_text) - Xử lý input thông minh:
+            - Extract tên người và cập nhật context
+            - Resolve đại từ trong câu
+            VD: "Tên là Nguyễn Văn An" → Update context
+                "Anh ấy sinh năm 1990" → "Nguyễn Văn An sinh năm 1990"
+        
+        KHI NÀO DÙNG ENHANCED TOOLS:
+        - Dùng fill_field_smart() thay vì fill_single_field() khi:
+          * User dùng tên field tiếng Việt (họ tên, số điện thoại, ngày sinh)
+          * Value là ngày tháng tiếng Việt (15 tháng 3 năm 1990)
+          * Value có đại từ (anh ấy, cô ấy, nó)
+        
+        - Dùng process_user_input_smart() khi:
+          * User nói tên người lần đầu (để lưu context)
+          * User dùng đại từ trong câu sau
+        
+        VÍ DỤ SỬ DỤNG ENHANCED TOOLS:
+        User: "Tên là Nguyễn Văn An"
+        → GỌI process_user_input_smart("Tên là Nguyễn Văn An")  # Lưu context
+        → GỌI fill_field_smart("họ và tên", "Nguyễn Văn An")
+        
+        User: "Anh ấy sinh ngày 15 tháng 3 năm 1990"
+        → GỌI process_user_input_smart("Anh ấy sinh ngày 15 tháng 3 năm 1990")  # Resolve "anh ấy"
+        → GỌI fill_field_smart("ngày sinh", "15 tháng 3 năm 1990")  # Parse date
+        
+        User: "Điền số điện thoại 0901234567"
+        → GỌI fill_field_smart("số điện thoại", "0901234567")  # Map field name
 
         PLACEHOLDER CHO FIELDS THIẾU:
         - customer_name: "Khách hàng" (nếu không có)

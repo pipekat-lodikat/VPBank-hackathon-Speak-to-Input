@@ -31,11 +31,14 @@ from pipecat.services.aws.llm import AWSBedrockLLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.transcript_processor import TranscriptProcessor
 
 load_dotenv(override=True)
 
 from src.dynamodb_service import DynamoDBService
+from src.utils.debouncer import RequestDebouncer
+from src.nlp.intent_detection import detect_intents
 
 # Browser Agent Service URL
 BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
@@ -43,10 +46,112 @@ BROWSER_SERVICE_URL = os.getenv("BROWSER_SERVICE_URL", "http://localhost:7863")
 # Initialize DynamoDB service
 dynamodb_service = DynamoDBService()
 
+# Request debouncer to rate-limit calls to Browser Agent Service
+browser_request_debouncer = RequestDebouncer(
+    delay_seconds=float(os.getenv("BROWSER_REQUEST_DEBOUNCE_SECONDS", "2.0"))
+)
+
 # Import auth service AFTER loading .env
 from .auth_service import CognitoAuthService
 
 # Environment variables
+
+class CachedAWSBedrockLLMService(AWSBedrockLLMService):
+    """AWS Bedrock LLM service with response caching and metrics."""
+
+    async def run_inference(self, context):
+        # Convert context to standard Bedrock format
+        if isinstance(context, LLMContext):
+            adapter: AWSBedrockLLMAdapter = self.get_llm_adapter()
+            params = adapter.get_llm_invocation_params(context)
+            messages = params.get("messages", [])
+            system = params.get("system")
+        else:
+            context = AWSBedrockLLMContext.upgrade_to_bedrock(context)
+            messages = getattr(context, "messages", [])
+            system = getattr(context, "system", None)
+
+        inference_config = self._build_inference_config()
+        model_id = self.model_name
+
+        cache_payload = {
+            "modelId": model_id,
+            "messages": messages,
+            "system": system,
+            "inferenceConfig": inference_config,
+        }
+
+        def _default_serializer(obj):
+            if hasattr(obj, "__dict__"):
+                return obj.__dict__
+            return str(obj)
+
+        serialized_payload = json.dumps(
+            cache_payload,
+            sort_keys=True,
+            default=_default_serializer,
+        )
+
+        temperature = 0.0
+        if isinstance(inference_config, dict):
+            try:
+                temperature = float(inference_config.get("temperature", 0.0))
+            except (TypeError, ValueError):
+                temperature = 0.0
+
+        cached_response = llm_cache.get(
+            serialized_payload,
+            model=model_id,
+            temperature=temperature,
+        )
+
+        if cached_response:
+            llm_cache_hits_total.labels(cache_type="response").inc()
+            llm_requests_total.labels(
+                provider="aws",
+                model=model_id,
+                status="cached",
+            ).inc()
+            return cached_response
+
+        llm_cache_misses_total.labels(cache_type="response").inc()
+
+        start_time = time.time()
+        try:
+            response = await super().run_inference(context)
+            duration = time.time() - start_time
+            llm_request_duration_seconds.labels(
+                provider="aws",
+                model=model_id,
+            ).observe(duration)
+            llm_requests_total.labels(
+                provider="aws",
+                model=model_id,
+                status="success",
+            ).inc()
+
+            if response:
+                llm_cache.put(
+                    serialized_payload,
+                    response,
+                    model=model_id,
+                    temperature=temperature,
+                )
+
+            return response
+        except Exception:
+            duration = time.time() - start_time
+            llm_request_duration_seconds.labels(
+                provider="aws",
+                model=model_id,
+            ).observe(duration)
+            llm_requests_total.labels(
+                provider="aws",
+                model=model_id,
+                status="failed",
+            ).inc()
+            raise
+
 aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
 aws_region = os.getenv("AWS_REGION")
@@ -316,6 +421,11 @@ async def run_bot(webrtc_connection, ws_connections):
     
     # Flag để track khi có workflow đang process
     processing_task = {"active": False, "task_id": None}
+
+    # Debouncer để giảm số lượng request tới Browser Agent (default 2s)
+    debounce_seconds = float(os.getenv("BROWSER_REQUEST_DEBOUNCE_SECONDS", "2.0"))
+    browser_request_debouncer = RequestDebouncer(delay_seconds=debounce_seconds)
+    logger.info(f"⏳ Browser request debouncer set to {debounce_seconds:.2f}s")
     
     # Initialize services
     # OpenAI Whisper STT Service for Vietnamese
@@ -465,24 +575,46 @@ async def run_bot(webrtc_connection, ws_connections):
                     
                     # Join tất cả messages
                     full_context = "\n".join(conversation_history)
+
+                    # Append structured instructions for explicit commands (clear field, navigate...)
+                    extra_instructions = detect_intents(message.content)
+                    if extra_instructions:
+                        logger.info(
+                            "🧠 Detected special intents: %s",
+                            extra_instructions
+                        )
+                        full_context = (
+                            full_context + "\n" + "\n".join(extra_instructions)
+                        )
                     
                     logger.info(f"📤 Pushing request to Browser Service immediately...")
                     logger.info(f"   Full context ({len(all_messages)} messages) sent to Browser Service")
                     logger.info(f"   Latest user message: {message.content[:100]}...")
                     logger.info(f"   Session ID: {session_id}")
                     
-                    # Set processing flag (cho phép nhiều push - incremental mode)
-                    processing_task["active"] = True
-                    processing_task["task_id"] = session_id
-                    
-                    # Push request to Browser Service (non-blocking - mỗi message push riêng)
+                    # Debounce requests để giảm số lần gọi Browser Agent liên tục
+                    async def execute_browser_request(context: str):
+                        processing_task["active"] = True
+                        processing_task["task_id"] = session_id
+                        await push_to_browser_service(
+                            context,
+                            ws_connections,
+                            session_id,
+                            processing_task
+                        )
+
                     try:
-                        task = asyncio.create_task(push_to_browser_service(
-                            full_context, ws_connections, session_id, processing_task
-                        ))
-                        logger.info(f"✅ Created async task for Browser Service request (task ID: {id(task)})")
+                        await browser_request_debouncer.debounce(
+                            task_id=f"browser-{session_id}",
+                            data=full_context,
+                            callback=execute_browser_request
+                        )
+                        logger.info(
+                            "✅ Browser request scheduled via debouncer "
+                            f"(session: {session_id})"
+                        )
                     except Exception as e:
-                        logger.error(f"❌ Failed to create async task: {e}", exc_info=True)
+                        logger.error(f"❌ Failed to debounce browser request: {e}", exc_info=True)
                     
                 logger.info(f"📝 [{message.role}]: {message.content}")
         except Exception as e:

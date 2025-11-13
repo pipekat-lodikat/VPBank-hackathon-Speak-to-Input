@@ -1,0 +1,29 @@
+# Test Dependencies for VPBank Voice Agent
+
+# Core testing framework
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+pytest-mock==3.14.0
+
+# Mocking and fixtures
+pytest-aiohttp==1.0.5
+
+# Code quality
+pytest-flake8==1.2.2
+pytest-black==0.3.12
+pytest-mypy==0.10.3
+
+# Coverage reporting
+coverage[toml]==7.6.9
+
+# Async testing helpers
+asynctest==0.13.0
+
+# HTTP testing
+responses==0.25.3
+aioresponses==0.7.6
+
+# Faker for test data
+Faker==33.1.0
+

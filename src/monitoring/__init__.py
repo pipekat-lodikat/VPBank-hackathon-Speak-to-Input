@@ -1,84 +1,91 @@
 """
-Monitoring module for VPBank Voice Agent
-Includes Prometheus metrics and distributed tracing
+Monitoring and Observability Module
 """
-from src.monitoring.metrics import (
-    # WebRTC metrics
-    webrtc_connections_total,
-    webrtc_active_connections,
-
-    # Voice processing metrics
-    voice_stt_latency,
-    voice_tts_latency,
-    voice_llm_latency,
-    voice_e2e_latency,
-
-    # Browser agent metrics
-    browser_form_fills_total,
-    browser_fill_latency,
-    browser_fields_filled,
-    browser_parallel_fills,
-
-    # Session metrics
-    sessions_total,
-    session_duration,
-    session_messages_total,
-
+from .metrics import (
+    # Service health
+    service_health,
+    service_uptime_seconds,
+    initialize_service_info,
+    get_metrics,
+    
+    # HTTP metrics
+    http_requests_total,
+    http_request_duration_seconds,
+    
+    # Voice bot metrics
+    voice_sessions_total,
+    voice_messages_total,
+    webrtc_connections_active,
+    websocket_connections_active,
+    
+    # Browser metrics
+    browser_sessions_total,
+    browser_session_duration_seconds,
+    browser_fields_filled_total,
+    browser_form_submissions_total,
+    
+    # AI/LLM metrics
+    llm_requests_total,
+    llm_request_duration_seconds,
+    llm_tokens_total,
+    llm_cost_usd_total,
+    llm_cache_hits_total,
+    llm_cache_misses_total,
+    
+    # STT/TTS metrics
+    stt_requests_total,
+    tts_requests_total,
+    
+    # Database metrics
+    database_operations_total,
+    database_operation_duration_seconds,
+    
     # Auth metrics
     auth_requests_total,
-    auth_latency,
-
-    # Rate limiting metrics
-    rate_limit_violations_total,
-
+    
     # Error metrics
     errors_total,
-
-    # AWS metrics
-    aws_api_calls_total,
-    aws_api_latency,
-
+    exceptions_total,
+    
     # Business metrics
-    forms_completed_total,
-    vad_context_changes_total,
-
+    forms_filled_total,
+    forms_submitted_total,
+    
     # Helper functions
-    get_metrics,
-    log_metrics_summary,
-    track_latency,
+    track_duration,
     track_counter,
-    track_operation,
-
-    # Registry
-    metrics_registry,
 )
 
 __all__ = [
-    "webrtc_connections_total",
-    "webrtc_active_connections",
-    "voice_stt_latency",
-    "voice_tts_latency",
-    "voice_llm_latency",
-    "voice_e2e_latency",
-    "browser_form_fills_total",
-    "browser_fill_latency",
-    "browser_fields_filled",
-    "browser_parallel_fills",
-    "sessions_total",
-    "session_duration",
-    "session_messages_total",
-    "auth_requests_total",
-    "auth_latency",
-    "rate_limit_violations_total",
-    "errors_total",
-    "aws_api_calls_total",
-    "aws_api_latency",
-    "forms_completed_total",
-    "vad_context_changes_total",
-    "get_metrics",
-    "log_metrics_summary",
-    "track_latency",
-    "track_counter",
-    "track_operation",
-    "metrics_registry",
+    'service_health',
+    'service_uptime_seconds',
+    'initialize_service_info',
+    'get_metrics',
+    'http_requests_total',
+    'http_request_duration_seconds',
+    'voice_sessions_total',
+    'voice_messages_total',
+    'webrtc_connections_active',
+    'websocket_connections_active',
+    'browser_sessions_total',
+    'browser_session_duration_seconds',
+    'browser_fields_filled_total',
+    'browser_form_submissions_total',
+    'llm_requests_total',
+    'llm_request_duration_seconds',
+    'llm_tokens_total',
+    'llm_cost_usd_total',
+    'llm_cache_hits_total',
+    'llm_cache_misses_total',
+    'stt_requests_total',
+    'tts_requests_total',
+    'database_operations_total',
+    'database_operation_duration_seconds',
+    'auth_requests_total',
+    'errors_total',
+    'exceptions_total',
+    'forms_filled_total',
+    'forms_submitted_total',
+    'track_duration',
+    'track_counter',
 ]

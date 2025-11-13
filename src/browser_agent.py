@@ -280,6 +280,81 @@ class BrowserAgentHandler:
             logger.error(f"❌ Error clearing all fields: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
+    async def focus_field_incremental(self, field_name: str, session_id: str = "default") -> dict:
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            task = f"""
+            Scroll to and focus/highlight the field with HTML name or label matching "{field_name}".
+            If inside a collapsed section, expand it first. Do not modify values.
+            Acknowledge once the field is visible and focused.
+            """
+            agent.add_new_task(task)
+            await agent.run(max_steps=3)
+            return {"success": True, "field": field_name, "message": f"Focused field {field_name}"}
+        except Exception as e:
+            logger.error(f"❌ Error focusing field {field_name}: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    async def navigate_to_section(self, section_name: str, session_id: str = "default") -> dict:
+        try:
+            if session_id not in self.sessions:
+                return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+            session = self.sessions[session_id]
+            agent = session["agent"]
+            task = f"""
+            Locate the section or accordion that corresponds to "{section_name}" (match heading, label, or aria-label ignoring accents).
+            Expand or scroll to it so it is visible and ready for input. Do not submit or modify fields.
+            Confirm the section is in view.
+            """
+            agent.add_new_task(task)
+            await agent.run(max_steps=3)
+            return {"success": True, "section": section_name, "message": f"Navigated to section {section_name}"}
+        except Exception as e:
+            logger.error(f"❌ Error navigating to section {section_name}: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    async def summarize_filled_fields(self, session_id: str = "default") -> dict:
+        if session_id not in self.sessions:
+            return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+        session = self.sessions[session_id]
+        fields = session["session_data"].get("fields_filled", [])
+
+        if not fields:
+            message = "Chưa có trường nào được điền."
+        else:
+            summary_lines = [
+                f"- {item['field']}: {item['value']}" for item in fields
+            ]
+            message = "Tôi đã điền các trường sau:\n" + "\n".join(summary_lines)
+
+        return {
+            "success": True,
+            "fields": list(fields),
+            "message": message
+        }
+
+    async def read_field_value(self, field_name: str, session_id: str = "default") -> dict:
+        if session_id not in self.sessions:
+            return {"success": False, "error": f"No active session for {session_id}. Call start_form_session() first."}
+
+        session = self.sessions[session_id]
+        fields = session["session_data"].get("fields_filled", [])
+        stored = next((f for f in fields if f.get("field") == field_name), None)
+
+        if stored:
+            message = f"Trường {field_name} hiện đang có giá trị: {stored['value']}"
+            return {"success": True, "field": field_name, "value": stored["value"], "message": message}
+
+        return {
+            "success": False,
+            "field": field_name,
+            "message": f"Chưa có giá trị nào được lưu cho trường {field_name}"
+        }
+
     def get_filled_fields(self, session_id: str = "default") -> dict:
         if session_id not in self.sessions:
             return {"success": False, "error": f"No active session for {session_id}"}

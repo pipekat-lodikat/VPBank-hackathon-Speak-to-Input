@@ -1,0 +1,73 @@
+{
+  "projectName": "speak-to-input",
+  "projectOwner": "pipekat-lodikat",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "lodi-bui",
+      "name": "Bùi Hồ Ngọc Hân",
+      "avatar_url": "https://github.com/lodi-bui.png",
+      "profile": "https://github.com/lodi-bui",
+      "contributions": [
+        "code",
+        "doc",
+        "design",
+        "ideas"
+      ]
+    },
+    {
+      "login": "PNg-HA",
+      "name": "Phạm Nguyễn Hải Anh",
+      "avatar_url": "https://github.com/PNg-HA.png",
+      "profile": "https://github.com/PNg-HA",
+      "contributions": [
+        "code",
+        "doc",
+        "infra"
+      ]
+    },
+    {
+      "login": "minhnghia2k3",
+      "name": "Lê Minh Nghĩa",
+      "avatar_url": "https://github.com/minhnghia2k3.png",
+      "profile": "https://github.com/minhnghia2k3",
+      "contributions": [
+        "code",
+        "test",
+        "bug"
+      ]
+    },
+    {
+      "login": "toannd021104",
+      "name": "Nguyễn Đức Toàn",
+      "avatar_url": "https://github.com/toannd021104.png",
+      "profile": "https://github.com/toannd021104",
+      "contributions": [
+        "code",
+        "infra",
+        "platform"
+      ]
+    },
+    {
+      "login": "ihatesea69",
+      "name": "Danh Hoàng Hiếu Nghị",
+      "avatar_url": "https://github.com/ihatesea69.png",
+      "profile": "https://github.com/ihatesea69",
+      "contributions": [
+        "code",
+        "doc",
+        "test"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "skipCi": true,
+  "badgeTemplate": "[![All Contributors](https://img.shields.io/badge/all_contributors-<%= contributors.length %>-orange.svg?style=flat-square)](#contributors)"
+}

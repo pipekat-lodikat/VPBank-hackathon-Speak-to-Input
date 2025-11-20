@@ -1,0 +1,80 @@
+# Multi-Region Deployment Configuration
+# Deploy VPBank Voice Agent across multiple AWS regions
+
+regions:
+  primary:
+    name: us-east-1
+    description: "Primary region (N. Virginia)"
+    services:
+      - voice_bot
+      - browser_agent
+      - frontend
+    features:
+      - transcribe
+      - bedrock
+      - cognito
+      - dynamodb
+    
+  secondary:
+    name: ap-southeast-1
+    description: "Singapore - Closest to Vietnam"
+    services:
+      - voice_bot
+      - browser_agent
+      - frontend
+    features:
+      - transcribe
+      - bedrock
+      - dynamodb_replica
+    
+  tertiary:
+    name: eu-west-1
+    description: "Ireland - Europe coverage"
+    services:
+      - voice_bot
+      - browser_agent
+      - frontend
+    features:
+      - transcribe
+      - bedrock
+      - dynamodb_replica
+
+# Global services (single deployment)
+global:
+  cognito:
+    region: us-east-1
+    user_pool_id: us-east-1_32mUzrElE
+    
+  dynamodb:
+    primary_region: us-east-1
+    table_name: vpbank-sessions
+    global_tables: true
+    replicas:
+      - ap-southeast-1
+      - eu-west-1
+    
+  cloudfront:
+    enabled: true
+    origins:
+      - us-east-1
+      - ap-southeast-1
+      - eu-west-1
+    geo_routing: true
+
+# Load balancing strategy
+routing:
+  strategy: latency-based
+  health_check_interval: 30
+  failover_threshold: 3
+  
+# Cost optimization
+cost:
+  auto_scaling:
+    enabled: true
+    min_instances: 1
+    max_instances: 10
+    target_cpu: 70
+  
+  spot_instances:
+    enabled: true
+    percentage: 50

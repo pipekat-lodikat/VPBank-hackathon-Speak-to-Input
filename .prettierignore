@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# Build outputs
+dist/
+build/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated files
+coverage/
+.coverage
+.pytest_cache/
+.mypy_cache/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Other
+.env
+.env.local
+*.backup
+*.bak

@@ -1,0 +1,978 @@
+openapi: 3.0.3
+info:
+  title: VPBank Voice Bot, Browser Automation & Authentication API
+  description: |
+    Two microservices for voice-driven form automation, plus Authentication APIs powered by AWS Cognito:
+
+    **Voice Bot Service (Port 7860)**
+    - WebRTC-based voice interface
+    - Speech-to-Text (AWS Transcribe)
+    - Text-to-Speech (ElevenLabs)
+    - Real-time conversation management
+    - WebSocket transcript streaming
+
+    **Browser Agent Service (Port 7863)**
+    - Multi-agent workflow execution
+    - Browser automation for form filling
+    - AWS Bedrock LLM integration
+    - Task orchestration and supervision
+
+    The Voice Bot service communicates with the Browser Agent service via HTTP API to execute automation tasks.
+
+    **Authentication Service (Cognito)**
+    - User authentication with JWT tokens
+    - User registration and profile management
+    - Password reset with email verification
+    - Token verification and validation
+
+  version: 1.0.0
+  contact:
+    name: VPBank Development Team
+    email: nghia.mle@vpbank.com.vn
+  license:
+    name: Private
+
+servers:
+  - url: http://localhost:7860
+    description: Voice Bot Service (Development)
+  - url: http://localhost:7860/api/v1
+    description: Voice Bot Service (Dev, versioned base for auth endpoints)
+  - url: http://localhost:7863
+    description: Browser Agent Service (Development)
+
+tags:
+  - name: Voice Bot
+    description: Voice interface and conversation management
+  - name: Browser Agent
+    description: Browser automation and workflow execution
+  - name: Authentication
+    description: AWS Cognito-based authentication & user management
+  - name: Health
+    description: Service health monitoring
+
+paths:
+  # ===========================
+  # Voice Bot Service (Port 7860)
+  # ===========================
+  /offer:
+    post:
+      tags:
+        - Voice Bot
+      summary: Handle WebRTC Offer
+      description: |
+        Creates a WebRTC connection for real-time voice communication.
+        - Accepts SDP offer from client
+        - Initializes WebRTC connection with ICE servers
+        - Returns SDP answer for peer connection
+        - Starts voice bot pipeline with STT, LLM, and TTS
+      operationId: handleWebRTCOffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sdp
+                - type
+              properties:
+                sdp:
+                  type: string
+                  description: Session Description Protocol offer from client
+                  example: "v=0\r\no=- 123456789 2 IN IP4 127.0.0.1\r\n..."
+                type:
+                  type: string
+                  enum: [offer]
+                  description: Must be "offer"
+            examples:
+              webrtcOffer:
+                summary: WebRTC Offer Example
+                value:
+                  sdp: "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0 1\r\n..."
+                  type: offer
+      responses:
+        "200":
+          description: WebRTC answer successfully created
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "POST, OPTIONS"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sdp:
+                    type: string
+                    description: Session Description Protocol answer
+                  type:
+                    type: string
+                    enum: [answer]
+                    description: Always "answer"
+              examples:
+                webrtcAnswer:
+                  summary: WebRTC Answer
+                  value:
+                    sdp: "v=0\r\no=- 123456789 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n..."
+                    type: answer
+        "400":
+          description: Invalid offer format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                invalidOffer:
+                  value:
+                    error: "Invalid offer"
+        "500":
+          description: Server error during WebRTC setup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                serverError:
+                  value:
+                    error: "Failed to initialize WebRTC connection"
+
+    options:
+      tags:
+        - Voice Bot
+      summary: CORS Preflight for WebRTC Offer
+      description: Handles CORS preflight requests for WebRTC offer endpoint
+      operationId: handleOfferCORS
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+                example: "*"
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                example: "POST, OPTIONS"
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                example: "Content-Type"
+
+  /ws:
+    get:
+      tags:
+        - Voice Bot
+      summary: WebSocket Transcript Stream
+      description: |
+        WebSocket endpoint for real-time transcript and event streaming.
+
+        **Server → Client Messages:**
+        - `transcript`: Real-time conversation transcript updates
+        - `task_started`: Browser automation task initiated
+        - `task_completed`: Task finished successfully
+        - `task_failed`: Task execution failed
+        - `metadata`: Session and timing information
+
+        **Message Format:**
+        All messages are JSON with a `type` field indicating the event type.
+      operationId: websocketTranscript
+      responses:
+        "101":
+          description: WebSocket connection established
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/TranscriptMessage"
+                  - $ref: "#/components/schemas/TaskStartedMessage"
+                  - $ref: "#/components/schemas/TaskCompletedMessage"
+                  - $ref: "#/components/schemas/TaskFailedMessage"
+              examples:
+                transcriptUpdate:
+                  summary: Transcript Update
+                  value:
+                    type: transcript
+                    role: user
+                    content: "Tôi muốn điền form vay tiêu dùng"
+                    timestamp: "2025-11-05T10:30:45Z"
+                taskStarted:
+                  summary: Task Started
+                  value:
+                    type: task_started
+                    message: "🔄 Đang xử lý yêu cầu..."
+                    task_id: "20251105_103045"
+                taskCompleted:
+                  summary: Task Completed
+                  value:
+                    type: task_completed
+                    result: "Đã điền form thành công"
+                    message: "✅ Đã điền form thành công"
+                taskFailed:
+                  summary: Task Failed
+                  value:
+                    type: task_failed
+                    error: "Browser not initialized"
+                    message: "❌ Lỗi khi xử lý: Browser not initialized"
+
+  # ===========================
+  # Browser Agent Service (Port 7863)
+  # ===========================
+  /api/execute:
+    post:
+      tags:
+        - Browser Agent
+      summary: Execute Multi-Agent Workflow
+      description: |
+        Executes a multi-agent workflow to process user requests and perform browser automation.
+
+        **Workflow Process:**
+        1. Supervisor agent analyzes full conversation history
+        2. Extracts form fields from all user messages
+        3. Delegates tasks to specialized agents (loan, CRM, HR, etc.)
+        4. Browser agent fills forms automatically
+        5. Returns completion status
+
+        **Input Format:**
+        The `user_message` contains the FULL conversation history as a single string,
+        with messages separated by newlines (format: "user: message\nuser: message\n...").
+        The supervisor parses ALL messages to extract ALL form fields.
+
+        **Response:**
+        Returns the final workflow result, filtered to remove JSON/technical details
+        for clean text-to-speech output.
+      operationId: executeWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_message
+              properties:
+                user_message:
+                  type: string
+                  description: |
+                    Full conversation history containing all user messages.
+                    Format: Multi-line string with "user: message" entries.
+                  example: |
+                    user: Tôi muốn mở form vay tiêu dùng
+                    user: Tên tôi là Nguyễn Văn An
+                    user: Số điện thoại của tôi là 0912345678
+                    user: Tôi cần vay 100 triệu đồng
+                session_id:
+                  type: string
+                  description: Unique session identifier for tracking
+                  example: "20251105_103045"
+            examples:
+              loanApplication:
+                summary: Loan Application Workflow
+                value:
+                  user_message: |
+                    user: Tôi muốn mở form vay tiêu dùng
+                    user: Tên tôi là Nguyễn Văn An
+                    user: Số điện thoại 0912345678
+                    user: Tôi muốn vay 100 triệu đồng
+                    user: Mục đích vay để mua xe
+                  session_id: "20251105_103045"
+              crmUpdate:
+                summary: CRM Update Workflow
+                value:
+                  user_message: |
+                    user: Cập nhật thông tin khách hàng
+                    user: Email mới là nguyenvanan@gmail.com
+                    user: Địa chỉ 123 Trần Hưng Đạo, Quận 1
+                  session_id: "20251105_103046"
+      responses:
+        "200":
+          description: Workflow executed successfully or failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                properties:
+                  success:
+                    type: boolean
+                    description: Whether workflow completed successfully
+                  result:
+                    type: string
+                    description: Human-readable result message (present if success=true)
+                  error:
+                    type: string
+                    description: Error message (present if success=false)
+                  session_id:
+                    type: string
+                    description: Session identifier that was processed
+              examples:
+                success:
+                  summary: Successful Execution
+                  value:
+                    success: true
+                    result: "Đã điền thành công form vay tiêu dùng với số tiền 100 triệu đồng"
+                    session_id: "20251105_103045"
+                failure:
+                  summary: Failed Execution
+                  value:
+                    success: false
+                    error: "Browser automation failed: Element not found"
+                    session_id: "20251105_103045"
+        "400":
+          description: Invalid request - missing required fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+              examples:
+                missingMessage:
+                  value:
+                    success: false
+                    error: "user_message is required"
+        "500":
+          description: Server error during workflow execution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+              examples:
+                workflowError:
+                  value:
+                    success: false
+                    error: "Workflow execution failed: AWS Bedrock API error"
+
+  /api/health:
+    get:
+      tags:
+        - Health
+        - Browser Agent
+      summary: Health Check
+      description: |
+        Returns the health status of the Browser Agent service.
+        Indicates whether the service is running and if the workflow has been initialized.
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                    description: Service health status
+                  service:
+                    type: string
+                    example: "browser-agent-service"
+                    description: Service identifier
+                  workflow_loaded:
+                    type: boolean
+                    description: Whether the multi-agent workflow has been initialized
+              examples:
+                healthy:
+                  value:
+                    status: healthy
+                    service: "browser-agent-service"
+                    workflow_loaded: true
+
+  # ===========================
+  # Authentication (Cognito)  — typically served under http://localhost:7860/api/v1
+  # ===========================
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: |
+        Authenticate user with AWS Cognito using username and password.
+
+        **Input:**
+        - Username (required)
+        - Password (required)
+
+        **Output:**
+        - Access token (JWT)
+        - ID token
+        - Refresh token
+        - Token expiration time
+
+        **Use case:**
+        - User login to access voice bot features
+        - Returns authentication tokens for subsequent API calls
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify:
+    post:
+      tags:
+        - Authentication
+      summary: Verify access token
+      description: |
+        Verify AWS Cognito access token and retrieve user information.
+
+        **Input:**
+        - Access token (required)
+
+        **Output:**
+        - User information (username, attributes)
+        - Verification status
+
+        **Use case:**
+        - Validate user session before allowing access to protected resources
+        - Retrieve user profile information from token
+        - Check if token is still valid and not expired
+      operationId: verifyToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRequest"
+      responses:
+        "200":
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResponse"
+        "400":
+          description: Missing token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: |
+        Register a new user with AWS Cognito.
+
+        **Input:**
+        - Username (required)
+        - Password (required)
+        - Email (required)
+        - Phone number (optional)
+        - Name (optional)
+
+        **Output:**
+        - Registration status
+        - Success/error message
+
+        **Use case:**
+        - New user self-registration
+        - Creates user account with 'user' role by default
+
+        **Important:**
+        - Employee role cannot be self-registered
+        - Contact administrator for employee account creation
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Missing required fields or registration error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Initiate forgot password flow
+      description: |
+        Send verification code to user's email for password reset.
+
+        **Input:**
+        - Email (required)
+
+        **Output:**
+        - Success/error status
+        - Confirmation message
+
+        **Use case:**
+        - User forgot password and needs to reset it
+        - System finds username by email and sends verification code
+        - Verification code will be sent to user's email address
+
+        **Flow:**
+        1. User provides email
+        2. System looks up username by email
+        3. Sends verification code via AWS Cognito
+        4. User receives code in email to use in reset-password endpoint
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "200":
+          description: Verification code sent or email not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgotPasswordResponse"
+        "400":
+          description: Missing email or user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgotPasswordResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with verification code
+      description: |
+        Confirm password reset using verification code sent to email.
+
+        **Input:**
+        - Email (required)
+        - Verification code (required)
+        - New password (required)
+
+        **Output:**
+        - Success/error status
+        - Confirmation message
+
+        **Use case:**
+        - Complete password reset flow after receiving verification code
+        - User must have valid code from forgot-password endpoint
+
+        **Flow:**
+        1. User receives verification code via email from forgot-password endpoint
+        2. User provides email, code, and new password
+        3. System validates code and resets password
+        4. User can login with new password
+
+        **Important:**
+        - Verification code expires after certain time
+        - Code is single-use only
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password reset successful or failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordResponse"
+        "400":
+          description: Missing required fields or invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    # ---- Shared / Voice Bot
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+          example: "Invalid request format"
+
+    TranscriptMessage:
+      type: object
+      required:
+        - type
+        - role
+        - content
+        - timestamp
+      properties:
+        type:
+          type: string
+          enum: [transcript]
+        role:
+          type: string
+          enum: [user, assistant]
+          description: Speaker role in the conversation
+        content:
+          type: string
+          description: Transcript text content
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp
+
+    TaskStartedMessage:
+      type: object
+      required:
+        - type
+        - message
+      properties:
+        type:
+          type: string
+          enum: [task_started]
+        message:
+          type: string
+          description: User-friendly notification message
+          example: "🔄 Đang xử lý yêu cầu..."
+        task_id:
+          type: string
+          description: Unique identifier for the task
+          example: "20251105_103045"
+
+    TaskCompletedMessage:
+      type: object
+      required:
+        - type
+        - result
+        - message
+      properties:
+        type:
+          type: string
+          enum: [task_completed]
+        result:
+          type: string
+          description: Workflow execution result
+          example: "Đã điền form thành công"
+        message:
+          type: string
+          description: User-friendly success message
+          example: "✅ Đã điền form thành công"
+
+    TaskFailedMessage:
+      type: object
+      required:
+        - type
+        - error
+        - message
+      properties:
+        type:
+          type: string
+          enum: [task_failed]
+        error:
+          type: string
+          description: Technical error details
+          example: "Browser not initialized"
+        message:
+          type: string
+          description: User-friendly error message
+          example: "❌ Lỗi khi xử lý: Browser not initialized"
+
+    # ---- Authentication Schemas
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: user123
+        password:
+          type: string
+          format: password
+          example: Password123!
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        access_token:
+          type: string
+          description: AWS Cognito access token
+        id_token:
+          type: string
+          description: AWS Cognito ID token
+        refresh_token:
+          type: string
+          description: AWS Cognito refresh token
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+        error:
+          type: string
+          description: Error code if success is false
+        message:
+          type: string
+          description: Error message if success is false
+
+    VerifyRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: Access token to verify
+
+    VerifyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        user:
+          type: object
+          properties:
+            username:
+              type: string
+            attributes:
+              type: object
+              additionalProperties:
+                type: string
+        error:
+          type: string
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - email
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        email:
+          type: string
+          format: email
+        phone_number:
+          type: string
+          description: Optional phone number
+        name:
+          type: string
+          description: Optional full name
+
+    RegisterResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+          description: Error code if success is false
+
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+
+    ForgotPasswordResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - email
+        - code
+        - new_password
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          description: Verification code sent to email
+        new_password:
+          type: string
+          format: password
+
+    ResetPasswordResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+
+  securitySchemes:
+    # Internal service traffic can be unauthenticated in dev.
+    # Add OAuth2/API Key when deploying to production.
+    none:
+      type: http
+      scheme: none
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: AWS Cognito JWT access token
+
+# Default: no global auth requirement (dev). Apply BearerAuth per endpoint if/when needed.
+security:
+  - none: []
+
+# Additional metadata
+externalDocs:
+  description: Project Documentation
+  url: https://github.com/minhnghia2k3/Speak_To_Input
+
+x-metadata:
+  architecture:
+    description: |
+      Microservices architecture with two main components:
+
+      1. **Voice Bot Service (Port 7860)**
+         - Handles WebRTC voice connections
+         - Processes speech with AWS Transcribe (STT)
+         - Generates speech with ElevenLabs (TTS)
+         - Uses AWS Bedrock Claude for conversation
+         - Streams transcripts via WebSocket
+         - Calls Browser Agent Service for automation
+
+      2. **Browser Agent Service (Port 7863)**
+         - Multi-agent workflow orchestration
+         - LangGraph-based agent coordination
+         - Specialized agents for different forms
+         - Browser automation with Playwright
+         - AWS Bedrock for intelligent form filling
+  technology_stack:
+    voice_bot:
+      - Python 3.x with aiohttp
+      - Pipecat framework for voice pipeline
+      - AWS Transcribe (Speech-to-Text)
+      - ElevenLabs (Text-to-Speech)
+      - AWS Bedrock Claude (LLM)
+      - WebRTC for real-time audio
+    browser_agent:
+      - Python 3.x with aiohttp
+      - LangGraph for agent workflows
+      - AWS Bedrock Claude Sonnet 4
+      - Playwright for browser automation
+      - Multi-agent orchestration
+  deployment:
+    development:
+      voice_bot_port: 7860
+      browser_agent_port: 7863
+      protocol: HTTP
+    production:
+      notes: |
+        - Add HTTPS/TLS encryption
+        - Implement API authentication
+        - Add rate limiting
+        - Set up monitoring and logging
+        - Configure production-grade error handling

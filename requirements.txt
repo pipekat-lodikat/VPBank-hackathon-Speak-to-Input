@@ -1,0 +1,42 @@
+python-dotenv==1.2.1
+aiohttp==3.12.15  # Keep at 3.12.15 due to browser-use dependency constraint
+loguru==0.7.3
+boto3==1.38.27  # Compatible with aiobotocore 2.23.0 (requires botocore<1.38.28)
+prometheus-client==0.21.1
+
+# OpenAI - Keep at 1.x due to browser-use dependency constraint
+openai>=1.99.2,<2.0.0
+
+# Pipecat AI - Stable versions (0.0.91 for AWS compatibility)
+pipecat-ai[webrtc,aws,silero,elevenlabs]==0.0.91
+pipecat-ai-flows==0.0.17
+
+# Audio processing
+librosa==0.11.0
+soundfile==0.13.1
+numpy==1.26.4  # Keep at 1.26.4 - numba 0.61.2 (required by pipecat-ai) doesn't support numpy 2.3+
+
+# Browser automation
+browser-use==0.1.19  # Pinned to stable version (0.9.5 has CDP timeout bug on headless Linux)
+playwright==1.55.0
+
+# LangChain ecosystem - Keep at 0.3.x for numpy 1.x compatibility
+# Note: LangChain 1.x requires numpy 2.3+ which conflicts with numba 0.61.2 (pipecat-ai dependency)
+orjson==3.11.4
+langchain==0.3.27
+langchain-core==0.3.79
+langchain-aws==0.2.27
+langchain-anthropic==0.3.3
+langchain-openai==0.3.1
+langgraph==1.0.1  # Keep at 1.0.1 - v1.0.2 requires langchain-core 1.x
+langsmith>=0.3.45
+
+# YAML support
+PyYAML==6.0.1
+
+# Retry utilities
+tenacity==9.0.0
+
+# API Documentation (Note: aiohttp-swagger3 incompatible with aiohttp 3.12.15)
+# Swagger UI will be added in future version when compatible
+

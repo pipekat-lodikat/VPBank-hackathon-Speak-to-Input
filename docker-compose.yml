@@ -1,0 +1,89 @@
+services:
+  # Browser Agent Service (HTTP REST API for browser automation)
+  browser-agent:
+    build: .
+    command: python main_browser_service.py
+    ports:
+      - "7863:7863"
+    # Load environment variables from .env file (local development only)
+    env_file:
+      - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - .:/app
+    working_dir: /app
+    networks:
+      - vpbank-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7863/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Voice Bot Service (WebRTC + STT/TTS/LLM)
+  voice-bot:
+    build: .
+    command: python main_voice.py
+    ports:
+      - "7860:7860"
+    # Load environment variables from .env file (local development only)
+    env_file:
+      - .env
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
+      - BROWSER_SERVICE_URL=http://browser-agent:7863
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - AUTH_AWS_ACCESS_KEY_ID=${AUTH_AWS_ACCESS_KEY_ID}
+      - AUTH_AWS_SECRET_ACCESS_KEY=${AUTH_AWS_SECRET_ACCESS_KEY}
+      - DYNAMODB_TABLE_NAME=${DYNAMODB_TABLE_NAME}
+      - DYNAMODB_ACCESS_KEY_ID=${DYNAMODB_ACCESS_KEY_ID}
+      - DYNAMODB_SECRET_ACCESS_KEY=${DYNAMODB_SECRET_ACCESS_KEY}
+      - DYNAMODB_REGION=${DYNAMODB_REGION:-us-east-1}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - .:/app
+      - ./transcripts:/app/transcripts
+    working_dir: /app
+    depends_on:
+      browser-agent:
+        condition: service_healthy
+    networks:
+      - vpbank-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:7860
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      - voice-bot
+    networks:
+      - vpbank-network
+
+networks:
+  vpbank-network:
+    driver: bridge

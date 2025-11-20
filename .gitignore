@@ -1,0 +1,386 @@
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+
+# ==========================================
+# Separate Repositories (keep local only)
+# ==========================================
+# VPBank Forms đã tách thành repos riêng
+# frontend/ - Now tracked in this repo
+#vpbank-forms/
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.pyd
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.ENV/
+virtualenv/
+.virtualenv/
+
+# ==========================================
+# Node.js & React
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# React build outputs
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+pipecat-react-ui/dist/
+pipecat-react-ui/build/
+pipecat-react-ui/.next/
+pipecat-react-ui/out/
+
+# ==========================================
+# IDE & Editors
+# ==========================================
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Claude
+.claude/
+
+# Cursor
+.cursor/
+.cursorignore
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# ==========================================
+# Project Specific
+# ==========================================
+# Logs
+logs/
+*.log
+server_console.log
+bot_console.log
+
+# Audio files (except waiting_sound.mp3)
+*.wav
+*.mp3
+!waiting_sound.mp3
+*.ogg
+*.m4a
+*.flac
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.webm
+*.mkv
+*.flv
+
+# Daily.co rooms/sessions
+room_tokens/
+daily_rooms/
+
+# AWS
+.aws/
+aws-credentials.json
+
+# Transcripts & Results
+transcripts/
+audio_outputs/
+temp_audio/
+src/output/*.json
+!src/output/.gitkeep
+
+# AI Model files
+models/
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+*.pb
+*.onnx
+*.tflite
+*.pt
+*.pth
+checkpoints/
+
+# Whisker Debugger (if temporary files)
+Whisker-Debugger/node_modules/
+Whisker-Debugger/whisker/ui/node_modules/
+Whisker-Debugger/whisker/ui/dist/
+Whisker-Debugger/whisker/ui/build/
+Whisker-Debugger/**/__pycache__/
+
+# ==========================================
+# Testing & Coverage
+# ==========================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+cover/
+test-results/
+junit.xml
+verification_report.json
+*_report.json
+
+# ==========================================
+# Documentation
+# ==========================================
+docs/_build/
+site/
+mkdocs_build/
+
+# ==========================================
+# OS Files
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.stackdump
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ==========================================
+# Temporary Files
+# ==========================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+~*
+tmp/
+temp/
+cache/
+
+# ==========================================
+# Database
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+
+# ==========================================
+# Archives (usually not needed in repo)
+# ==========================================
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# ==========================================
+# Jupyter Notebooks
+# ==========================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ==========================================
+# Docker (if you add later)
+# ==========================================
+.dockerignore
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# ==========================================
+# Monitoring & Analytics
+# ==========================================
+wandb/
+mlruns/
+tensorboard/
+
+# ==========================================
+# Security - Additional Patterns
+# ==========================================
+*api_key*
+*secret*
+*token*
+*credential*
+*password*
+.secrets/
+
+# ==========================================
+# Package Managers
+# ==========================================
+# Poetry
+poetry.lock
+.poetry/
+
+# Pipenv
+Pipfile.lock
+.pipenv/
+
+# PDM
+.pdm.toml
+__pypackages__/
+
+# ==========================================
+# Type Checking
+# ==========================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ==========================================
+# Build Artifacts
+# ==========================================
+*.pyc
+*.pyo
+*.whl
+*.manifest
+*.spec
+
+# ==========================================
+# Reference & Old Files
+# ==========================================
+ref/
+ref_*/
+reference/
+*_old/
+*_backup/
+.cleanup_backup*/
+*.backup.*
+
+# Old documentation (Word files)
+*.docx
+*.doc
+
+# Test audio/video
+Test_Audio_Sound/
+test_audio/
+
+# Old code directories
+pipecat-react-ui/
+ref_old_pipecat/
+
+# Utility scripts
+convert_waiting_sound.py
+
+# ==========================================
+# Browser Automation
+# ==========================================
+# Playwright browsers
+.playwright/
+playwright/.cache/
+
+# ==========================================
+# Infrastructure & Deployment
+# ==========================================
+# Terraform state files
+infrastructure/terraform/.terraform/
+infrastructure/terraform/.terraform.lock.hcl
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.backup
+infrastructure/terraform/*.tfvars
+infrastructure/terraform/.terraform.tfstate.lock.info
+
+# Duplicate env file (keep only .env and .env.example)
+env
+deploy
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform-ecs/.terraform/
+
+# Large binaries
+*.tgz
+*.tar.gz
+ngrok-*

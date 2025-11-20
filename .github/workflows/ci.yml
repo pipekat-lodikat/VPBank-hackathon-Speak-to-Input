@@ -1,0 +1,317 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # ==================== Linting & Code Quality ====================
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+          pip install -r requirements.txt
+      
+      - name: Run flake8
+        run: flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+      
+      - name: Check code formatting with black
+        run: black --check src/
+      
+      - name: Check import sorting with isort
+        run: isort --check-only src/
+      
+      - name: Type check with mypy
+        run: mypy src/ --ignore-missing-imports
+        continue-on-error: true  # Type checking is advisory
+
+  # ==================== Unit Tests ====================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+      
+      - name: Install Playwright browsers
+        run: playwright install chromium
+      
+      - name: Run unit tests with coverage
+        env:
+          AWS_ACCESS_KEY_ID: test_key
+          AWS_SECRET_ACCESS_KEY: test_secret
+          OPENAI_API_KEY: test_key
+          ELEVENLABS_API_KEY: test_key
+          ELEVENLABS_VOICE_ID: test_voice
+          COGNITO_USER_POOL_ID: test_pool
+          COGNITO_CLIENT_ID: test_client
+          DYNAMODB_TABLE_NAME: test-table
+        run: |
+          pytest tests/ \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -v
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+      
+      - name: Archive coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # ==================== Frontend Build & Test ====================
+  frontend:
+    name: Frontend Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Lint frontend code
+        working-directory: frontend
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+      
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
+        continue-on-error: true
+      
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+  # ==================== Security Scanning ====================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
+      - name: Run Bandit security linter
+        run: |
+          pip install bandit
+          bandit -r src/ -f json -o bandit-report.json
+        continue-on-error: true
+      
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ==================== Docker Build ====================
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, frontend]
+    if: github.event_name == 'push'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        if: github.ref == 'refs/heads/main'
+      
+      - name: Build Voice Bot image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.voice
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/vpbank-voice-bot:latest
+            ${{ secrets.DOCKER_USERNAME }}/vpbank-voice-bot:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build Browser Agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.browser
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/vpbank-browser-agent:latest
+            ${{ secrets.DOCKER_USERNAME }}/vpbank-browser-agent:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./Dockerfile.frontend
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/vpbank-frontend:latest
+            ${{ secrets.DOCKER_USERNAME }}/vpbank-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==================== Deployment (Production) ====================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://voice.vpbank.com
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Deploy to ECS
+        run: |
+          # Update ECS service with new task definition
+          aws ecs update-service \
+            --cluster vpbank-voice-agent-cluster \
+            --service voice-bot-service \
+            --force-new-deployment \
+            --region us-east-1
+          
+          aws ecs update-service \
+            --cluster vpbank-voice-agent-cluster \
+            --service browser-agent-service \
+            --force-new-deployment \
+            --region us-east-1
+          
+          aws ecs update-service \
+            --cluster vpbank-voice-agent-cluster \
+            --service frontend-service \
+            --force-new-deployment \
+            --region us-east-1
+      
+      - name: Wait for deployment to complete
+        run: |
+          aws ecs wait services-stable \
+            --cluster vpbank-voice-agent-cluster \
+            --services voice-bot-service browser-agent-service frontend-service \
+            --region us-east-1
+      
+      - name: Notify deployment success
+        run: echo "✅ Deployment completed successfully!"
+
+  # ==================== Notification ====================
+  notify:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    needs: [test, frontend, security, docker]
+    if: always()
+    
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            CI/CD Pipeline: ${{ job.status }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+

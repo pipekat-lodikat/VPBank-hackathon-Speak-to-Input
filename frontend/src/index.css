@@ -1,0 +1,193 @@
+@import "tailwindcss";
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: rgb(243 244 246);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(156 163 175);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128);
+}
+
+/* Loading animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Force WebGL canvas of Plasma to be transparent */
+.plasma-wrap canvas {
+  background-color: transparent !important;
+}
+
+/* Global page theme per design */
+body {
+  /* Subtle brand-tinted gradient using the updated colors */
+  background: linear-gradient(90deg, #0EA96D1A 0%, #0EA96D0D 100%);
+  color: #2E3A35;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+/* VPBank brand colors */
+:root {
+  --vp-red: #E31F26;   /* VPBank Red */
+  --vp-green: #0EA96D; /* Updated Green */
+  --vp-blue: #0EA96D;  /* Updated Blue (same as green per request) */
+}
+
+/* Sections */
+.voice-section {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #D8EAE5;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.voice-circle {
+  border-radius: 9999px; /* force circle */
+}
+
+.chat-section {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #DDE8E4;
+  border-radius: 16px;
+}
+
+.control-bar {
+  background: rgba(250, 252, 251, 0.9);
+  border-top: 1px solid #E2ECE8;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* Soft buttons */
+.btn-soft {
+  border-radius: 12px;
+  border: 1px solid #CFE7DA;
+  background-color: #E6F5EF;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.btn-soft:hover {
+  background-color: #D3F0E3;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Brand helpers */
+.chip-selected {
+  background-color: var(--vp-green);
+  color: #fff;
+}
+
+.vp-gradient {
+  background: linear-gradient(135deg, var(--vp-green) 0%, var(--vp-blue) 100%);
+}
+
+/* Conversation history sidebar */
+.history-sidebar {
+  background: rgba(249, 250, 251, 0.98);
+  backdrop-filter: blur(8px);
+}
+
+.history-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+  border: none;
+}
+
+.history-item:hover {
+  background: rgba(0, 0, 0, 0.03);
+  transform: translateX(1px);
+}
+
+.history-item.active {
+  background: rgba(251, 234, 88, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Animations */
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.new-conversation {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(251, 234, 88, 0.3), inset 3px 0 0 #fbea58;
+}
+
+/* Settings dropdown animation */
+.settings-dropdown {
+  animation: bounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

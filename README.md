@@ -113,7 +113,7 @@ The system consists of three main components working together:
 2. **Smart Turn** - Conversation turn management
 3. **Fine-tuned PhoWhisper (STT)** - Vietnamese speech-to-text
 4. **LLLM (Claude Sonnet 4)** - Intent understanding and data extraction
-8. **ElevenLabs (TTS)** - Vietnamese voice synthesis
+5. **ElevenLabs (TTS)** - Vietnamese voice synthesis
 
 #### **LangGraph Workflow - Multi-Agent Banking Operations**
 

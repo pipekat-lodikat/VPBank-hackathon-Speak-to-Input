@@ -45,11 +45,11 @@ VPBank Voice Agent is an enterprise-grade voice automation platform designed for
 
 | Use Case | Description | Form URL |
 |----------|-------------|----------|
-| **Loan Origination & KYC** | Customer onboarding and loan application processing | [Case 1](https://vpbank-shared-form-fastdeploy.vercel.app/) |
-| **CRM Updates** | Customer relationship management data entry | [Case 2](https://case2-ten.vercel.app/) |
-| **HR Workflows** | Employee data management and HR operations | [Case 3](https://case3-seven.vercel.app/) |
-| **Compliance Reporting** | Regulatory compliance form submission | [Case 4](https://case4-beta.vercel.app/) |
-| **Operations Validation** | Operational data verification and validation | [Case 5](https://case5-chi.vercel.app/) |
+| **Loan Origination & KYC** | Customer onboarding and loan application processing | [Case 1](https://case1-three.vercel.app/) |
+| **CRM Updates** | Customer relationship management data entry | [Case 2](https://case2-theta.vercel.app/) |
+| **HR Workflows** | Employee data management and HR operations | [Case 3](https://case3-orcin.vercel.app/) |
+| **Compliance Reporting** | Regulatory compliance form submission | [Case 4](https://case4-omega.vercel.app/) |
+| **Operations Validation** | Operational data verification and validation | [Case 5](https://case5-hazel.vercel.app/) |
 
 ---
 
@@ -341,11 +341,11 @@ DYNAMODB_REGION=us-east-1
 BROWSER_SERVICE_URL=http://localhost:7863
 
 # Form URLs (defaults provided)
-LOAN_FORM_URL=https://vpbank-shared-form-fastdeploy.vercel.app/
-CRM_FORM_URL=https://case2-ten.vercel.app/
-HR_FORM_URL=https://case3-seven.vercel.app/
-COMPLIANCE_FORM_URL=https://case4-beta.vercel.app/
-OPERATIONS_FORM_URL=https://case5-chi.vercel.app/
+LOAN_FORM_URL=https://case1-three.vercel.app/
+CRM_FORM_URL=https://case2-theta.vercel.app/
+HR_FORM_URL=https://case3-orcin.vercel.app/
+COMPLIANCE_FORM_URL=https://case4-omega.vercel.app/
+OPERATIONS_FORM_URL=https://case5-hazel.vercel.app/
 ```
 
 ### Step 5: AWS Setup
